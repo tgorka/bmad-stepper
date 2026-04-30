@@ -1,0 +1,25 @@
+_bmad-output/planning-artifacts/product-brief-bmad-stepper-cc.md
+  6ee65218c9d18859 1-97
+_bmad-output/planning-artifacts/product-brief-bmad-stepper-cc-distillate.md
+  6ee65218c9d18859 1-262
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "0d0a65e1a537bfb4d2c6176bfe014c2cb271b3d3",
+  "prompts": {
+    "6ee65218c9d18859": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2dd5737d-3b13-4f27-af11-bb555d09fd39",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 372,
+      "total_deletions": 13,
+      "accepted_lines": 359,
+      "overriden_lines": 0
+    }
+  }
+}
