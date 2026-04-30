@@ -1,0 +1,22 @@
+{
+  "name": "bmad-stepper",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "bun test --pass-with-no-tests",
+    "test:watch": "bun test --watch --pass-with-no-tests",
+    "check": "biome ci . && bun test --pass-with-no-tests"
+  },
+  "dependencies": {
+    "zod": "4.4.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.15",
+    "@changesets/cli": "^2.31.0",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
