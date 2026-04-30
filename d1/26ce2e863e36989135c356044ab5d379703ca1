@@ -1,0 +1,37 @@
+_bmad-output/implementation-artifacts/1-4-file-lock-with-heartbeat.md
+  4f74eec1333ea527 1-784
+src/lock/lock.test.ts
+  4f74eec1333ea527 1-510
+src/lock/integration/sub-second-mtime.test.ts
+  4f74eec1333ea527 1-200
+src/lock/integration/concurrent-acquire.test.ts
+  4f74eec1333ea527 1-139
+src/lock/lock.ts
+  4f74eec1333ea527 1-404
+src/lock/integration/heartbeat-loss.test.ts
+  4f74eec1333ea527 1-123
+_bmad-output/implementation-artifacts/sprint-status.yaml
+  4f74eec1333ea527 49
+src/lock/integration/stale-lock-recovery.test.ts
+  4f74eec1333ea527 1-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "d126ce2e863e36989135c356044ab5d379703ca1",
+  "prompts": {
+    "4f74eec1333ea527": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3ddf5da9-5bbb-496f-9b07-3dc9bd113757",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 1520,
+      "total_deletions": 1,
+      "accepted_lines": 2304,
+      "overriden_lines": 0
+    }
+  }
+}
