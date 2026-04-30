@@ -1,0 +1,46 @@
+last_updated: "2026-04-29"
+implementation_artifacts: docs/stories
+planning_artifacts: docs
+
+status_definitions:
+  backlog: Story has not been contexted yet.
+  ready-for-dev: Story file exists and is ready for implementation.
+  in-progress: Story implementation is active.
+  review: Story implementation is complete and awaiting review.
+  done: Story is implemented and review/fix loop is complete.
+  optional: Optional retrospective or support activity.
+  blocked: Work stopped because safe continuation cannot be proven.
+
+development_status:
+  epic-1: done
+  1-1-define-first-run-configuration-and-prerequisite-diagnostics: done
+  1-2-specify-dry-run-step-selection-and-scoped-targeting: done
+  1-3-specify-dry-run-preview-output-and-trust-boundary: done
+  1-4-document-first-run-path-command-reference-and-core-examples: done
+  epic-1-retrospective: done
+
+  epic-2: done
+  2-1-specify-single-step-transaction-execution: done
+  2-2-specify-sequential-task-sub-agent-orchestration: done
+  2-3-validate-task-outputs-and-mutation-scope: done
+  2-4-specify-repair-limits-and-failure-reports: done
+  epic-2-retrospective: done
+
+  epic-3: done
+  3-1-define-loop-targets-and-dry-run-planning: done
+  3-2-repeat-bmad-next-within-loop-limits: done
+  3-3-report-loop-stop-conditions-and-next-actions: done
+  epic-3-retrospective: done
+
+  epic-4: done
+  4-1-treat-state-as-an-index-backed-by-artifact-evidence: done
+  4-2-detect-conflicts-and-refuse-unsafe-continuation: done
+  4-3-provide-interactive-reconcile-choices: done
+  4-4-handle-interrupted-runs-and-idempotent-re-entry: done
+  epic-4-retrospective: done
+
+  epic-5: done
+  5-1-define-config-and-state-templates: done
+  5-2-protect-project-pinned-assets-during-updates: done
+  5-3-maintain-schemas-and-run-audit-records: done
+  epic-5-retrospective: done

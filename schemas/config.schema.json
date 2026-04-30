@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/bmad-stepper/config.schema.json",
+  "title": "BMAD Stepper Config",
+  "description": "Project configuration for prompt-first BMAD Stepper. BMAD Method is a prerequisite and is not installed by Stepper.",
+  "type": "object",
+  "required": ["version", "bmad", "execution", "validation", "recovery", "state", "outputs", "reviewPolicy", "plugin"],
+  "properties": {
+    "version": { "type": "string" },
+    "bmad": {
+      "type": "object",
+      "required": ["required", "configPath"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "configPath": {
+          "type": "string",
+          "description": "Path to the target project's existing BMAD Method config, commonly _bmad/core/config.yaml."
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": {
+      "type": "object",
+      "required": ["optionalSteps", "maxRepairIterations", "maxLoopSteps", "stopOnCheckpoint", "taskExecution"],
+      "properties": {
+        "optionalSteps": {
+          "description": "Default optional-step policy. V1 commands include optional BMAD steps unless --skip-optional is requested.",
+          "enum": ["include"]
+        },
+        "maxRepairIterations": { "type": "integer", "minimum": 0 },
+        "maxLoopSteps": { "type": "integer", "minimum": 1 },
+        "stopOnCheckpoint": { "type": "boolean" },
+        "taskExecution": {
+          "description": "V1 task sub-agents execute sequentially.",
+          "enum": ["sequential"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "validation": {
+      "type": "object",
+      "required": ["taskOutputs", "mutationScope", "selfCheck", "onOutOfScopeMutation"],
+      "properties": {
+        "taskOutputs": {
+          "description": "Validation policy for declared task outputs before a step can advance.",
+          "type": "object",
+          "required": ["requireDeclaredOutputs", "requireContractMarkers"],
+          "properties": {
+            "requireDeclaredOutputs": { "type": "boolean" },
+            "requireContractMarkers": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "mutationScope": {
+          "description": "Validation policy for file changes against declared allowed paths.",
+          "enum": ["enforce-declared-paths"]
+        },
+        "selfCheck": {
+          "description": "Required task self-check fields.",
+          "type": "array",
+          "items": {
+            "enum": ["personaUsed", "inputsRead", "outputsProduced", "scopeRespected"]
+          },
+          "minItems": 4,
+          "uniqueItems": true
+        },
+        "onOutOfScopeMutation": {
+          "description": "Unexpected mutations stop or require explicit user approval.",
+          "enum": ["stop-or-confirm"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "recovery": {
+      "type": "object",
+      "description": "Prompt-first recovery behavior for conflicts, reconcile, diagnostics, and interrupted runs.",
+      "required": ["stateEvidenceComparison", "reconcileRequiresConfirmation", "interruptedRunChoices", "idempotentReentry"],
+      "properties": {
+        "stateEvidenceComparison": {
+          "description": "State must be compared with artifact evidence before downstream work is selected.",
+          "enum": ["required-before-selection"]
+        },
+        "reconcileRequiresConfirmation": {
+          "description": "State or artifact repair is never applied automatically.",
+          "type": "boolean"
+        },
+        "interruptedRunChoices": {
+          "type": "array",
+          "items": {
+            "enum": ["resume", "restart", "abandon", "reconcile"]
+          },
+          "minItems": 4,
+          "uniqueItems": true
+        },
+        "idempotentReentry": {
+          "description": "Re-entry reuses proven artifacts and retries only unproven outputs.",
+          "enum": ["reuse-proven-artifacts"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "state": {
+      "type": "object",
+      "required": ["path", "conflictPolicy"],
+      "properties": {
+        "path": { "type": "string" },
+        "conflictPolicy": {
+          "description": "State/artifact conflicts require interactive repair before continuation.",
+          "enum": ["interactive-repair"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputs": {
+      "type": "object",
+      "required": ["runsDir", "taskOutputsDir", "failureReportsDir", "loopSummariesDir", "reconcileReportsDir", "diagnosticsDir"],
+      "properties": {
+        "runsDir": { "type": "string" },
+        "taskOutputsDir": { "type": "string" },
+        "failureReportsDir": { "type": "string" },
+        "loopSummariesDir": {
+          "type": "string",
+          "description": "Directory for loop summaries and stop reports written by /bmad-loop."
+        },
+        "reconcileReportsDir": {
+          "type": "string",
+          "description": "Directory for user-confirmed reconcile reports and repair records."
+        },
+        "diagnosticsDir": {
+          "type": "string",
+          "description": "Directory for read-only diagnostic reports when conflicts or interrupted runs are inspected."
+        }
+      },
+      "additionalProperties": false
+    },
+    "reviewPolicy": {
+      "type": "object",
+      "required": ["recordReviewFixHistory", "maxReviewIterations"],
+      "properties": {
+        "recordReviewFixHistory": {
+          "description": "Run records and story artifacts preserve review/fix history.",
+          "type": "boolean"
+        },
+        "maxReviewIterations": {
+          "description": "Default review/fix iteration cap for prompt-first records.",
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "plugin": {
+      "type": "object",
+      "description": "Project-pinned Stepper behavior and update protection for command specs, schemas, templates, and docs.",
+      "required": ["pinnedVersion", "updatePolicy", "assetUpdate"],
+      "properties": {
+        "pinnedVersion": {
+          "type": "string",
+          "description": "Stepper version this project expects. Commands should explain when global plugin behavior differs from this project pin."
+        },
+        "updatePolicy": {
+          "description": "Default policy for project asset updates.",
+          "enum": ["ask", "never", "auto-global-only"]
+        },
+        "assetUpdate": {
+          "type": "object",
+          "required": [
+            "detectLocalChanges",
+            "distinguishChangeSources",
+            "changePlanRequired",
+            "overwriteRequiresConfirmation",
+            "recordDecisions"
+          ],
+          "properties": {
+            "detectLocalChanges": {
+              "description": "Detect project-local edits before any Stepper asset is overwritten.",
+              "type": "boolean"
+            },
+            "distinguishChangeSources": {
+              "description": "Classify differences as upstream plugin changes, project-local changes, or both.",
+              "type": "boolean"
+            },
+            "changePlanRequired": {
+              "description": "Show the planned asset changes before mutation.",
+              "type": "boolean"
+            },
+            "overwriteRequiresConfirmation": {
+              "description": "Require explicit user confirmation before overwriting project-pinned assets.",
+              "type": "boolean"
+            },
+            "recordDecisions": {
+              "description": "Update decisions captured for audit.",
+              "type": "array",
+              "items": {
+                "enum": ["accept", "defer", "reject"]
+              },
+              "minItems": 3,
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

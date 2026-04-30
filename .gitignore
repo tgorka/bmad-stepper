@@ -1,0 +1,18 @@
+# OS and editor
+.DS_Store
+.idea/
+.vscode/
+
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+
+# BMAD Stepper runtime output
+.bmad-stepper/runs/
+.bmad-stepper/*.lock
+
+# Environment and local overrides
+.env
+.env.*
+*.local

@@ -1,0 +1,83 @@
+version: 0.1.0
+
+bmad:
+  # BMAD Method is required and must already be installed in the target project.
+  # Stepper diagnoses missing prerequisites; it does not install BMAD.
+  required: true
+  configPath: _bmad/core/config.yaml
+
+execution:
+  # Optional BMAD steps run by default unless a command passes --skip-optional.
+  optionalSteps: include
+  maxRepairIterations: 3
+  maxLoopSteps: 20
+  stopOnCheckpoint: true
+  # V1 task sub-agents execute sequentially.
+  taskExecution: sequential
+
+validation:
+  taskOutputs:
+    # Task records must prove every declared output exists before state can advance.
+    requireDeclaredOutputs: true
+    # Required sections, frontmatter, and contract markers are validation inputs.
+    requireContractMarkers: true
+  mutationScope: enforce-declared-paths
+  selfCheck:
+    - personaUsed
+    - inputsRead
+    - outputsProduced
+    - scopeRespected
+  # Unexpected file mutations stop execution or require explicit user approval.
+  onOutOfScopeMutation: stop-or-confirm
+
+recovery:
+  # State/artifact evidence must be compared before downstream work is selected.
+  stateEvidenceComparison: required-before-selection
+  # Reconcile can suggest repair paths, but mutations require user confirmation.
+  reconcileRequiresConfirmation: true
+  interruptedRunChoices:
+    - resume
+    - restart
+    - abandon
+    - reconcile
+  # Re-entry reuses proven artifacts and retries only missing or invalid outputs.
+  idempotentReentry: reuse-proven-artifacts
+
+state:
+  # State is an index. Artifacts and frontmatter remain completion evidence.
+  path: .bmad-stepper/state.yaml
+  conflictPolicy: interactive-repair
+
+outputs:
+  runsDir: .bmad-stepper/runs
+  taskOutputsDir: .bmad-stepper/runs/{{runId}}/tasks
+  failureReportsDir: .bmad-stepper/runs/{{runId}}/failures
+  loopSummariesDir: .bmad-stepper/runs/{{loopId}}/loop
+  reconcileReportsDir: .bmad-stepper/runs/{{runId}}/reconcile
+  diagnosticsDir: .bmad-stepper/runs/{{runId}}/diagnostics
+
+reviewPolicy:
+  recordReviewFixHistory: true
+  maxReviewIterations: 3
+
+plugin:
+  # Project pin: command behavior should be interpreted against this Stepper
+  # version unless the maintainer accepts an asset update plan.
+  pinnedVersion: 0.1.0
+  updatePolicy: ask
+  assetUpdate:
+    # Before replacing command specs, schemas, templates, or docs, Stepper must
+    # detect whether this project changed the pinned asset locally.
+    detectLocalChanges: true
+    # Update plans distinguish incoming upstream plugin changes from
+    # project-local modifications.
+    distinguishChangeSources: true
+    # Present a change plan before mutating project-pinned files.
+    changePlanRequired: true
+    # Never overwrite locally changed project assets without explicit approval.
+    overwriteRequiresConfirmation: true
+    # Accepted, deferred, and rejected update items are audit decisions.
+    recordDecisions:
+      - accept
+      - defer
+      - reject
