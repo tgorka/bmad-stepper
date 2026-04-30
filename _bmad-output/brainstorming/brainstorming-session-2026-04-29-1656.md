@@ -1,14 +1,14 @@
 ---
 stepsCompleted: [1, 2, 3, 4]
 inputDocuments: []
-session_topic: 'bmad-stepper-cc — Claude Code plugin with bmad-next / bmad-loop commands'
+session_topic: 'bmad-stepper — Claude Code plugin with bmad-next / bmad-loop commands'
 session_goals: 'Design the architecture and complete feature set for a plugin that automates step-by-step execution of the BMAD-method workflow with isolated sub-agents, configurable personas, and loops driven by stop conditions.'
 selected_approach: 'ai-recommended'
 techniques_used: ['First Principles Thinking', 'Morphological Analysis', 'What If Scenarios', 'Reverse Brainstorming', 'SCAMPER Method']
 ideas_generated: 251
 context_file: ''
 key_decisions:
-  scope: 'Stepper only — bmad-stepper-cc adds only bmad-next/bmad-loop; user installs the upstream BMAD plugin separately'
+  scope: 'Stepper only — bmad-stepper adds only bmad-next/bmad-loop; user installs the upstream BMAD plugin separately'
   state_source: 'Hybrid — use whatever exists and is most recommended (artifacts + state file + frontmatter)'
   ideation_approach: 'AI-Recommended techniques'
 ---
@@ -20,7 +20,7 @@ key_decisions:
 
 ## Session Overview
 
-**Topic:** bmad-stepper-cc — Claude Code plugin with `bmad-next` and `bmad-loop` commands automating step-by-step execution of the BMAD-method workflow.
+**Topic:** bmad-stepper — Claude Code plugin with `bmad-next` and `bmad-loop` commands automating step-by-step execution of the BMAD-method workflow.
 
 **Goals:**
 - Design how `bmad-next` should "understand" workflow state and pick the next step
@@ -204,11 +204,11 @@ G. Failure mode      : halt | skip | retry-N | route-to-fixer | escalate
 100. Human-readable failure report (not stack trace)
 
 #### Plugin packaging (meta)
-101. Plugin manifest: name=`bmad-stepper-cc`, 2 skills
+101. Plugin manifest: name=`bmad-stepper`, 2 skills
 102. Plugin does not bundle BMAD skills (assume installed separately)
 103. Detection at first run: "BMAD found at X" / "BMAD not found, install with..."
 104. Compatibility matrix in README
-105. Install via `/plugin marketplace add Tgorka/bmad-stepper-cc` + project scope
+105. Install via `/plugin marketplace add Tgorka/bmad-stepper` + project scope
 106. `--upgrade` flag checks gh releases
 107. `--doctor` sanity check (BMAD installed? config valid?)
 108. Per-project (`.claude/plugins/`) or per-user
