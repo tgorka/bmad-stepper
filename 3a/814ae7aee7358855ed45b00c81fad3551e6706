@@ -1,0 +1,23 @@
+_bmad-output/planning-artifacts/epics.md
+  fb0693ed2f90daac 1-1309
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "3a814ae7aee7358855ed45b00c81fad3551e6706",
+  "prompts": {
+    "fb0693ed2f90daac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "93238bab-7363-4577-89cd-0f1f554f4d4d",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 1348,
+      "total_deletions": 39,
+      "accepted_lines": 1309,
+      "overriden_lines": 0
+    }
+  }
+}
