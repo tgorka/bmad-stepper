@@ -1,0 +1,23 @@
+_bmad-output/planning-artifacts/prd.md
+  a2a876d3e6facb22 1-804
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "b2df1c20ff64823fa528f0eb59d2d697e29a5d90",
+  "prompts": {
+    "a2a876d3e6facb22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ad156d1b-a19d-41f5-af47-41dd09a5398f",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 804,
+      "overriden_lines": 0
+    }
+  }
+}
