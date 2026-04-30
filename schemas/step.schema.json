@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/bmad-stepper/step.schema.json",
+  "title": "BMAD Step Contract",
+  "description": "Prompt-first contract for one atomic BMAD workflow step, including inputs, outputs, evidence, mutation scope, and transitions.",
+  "type": "object",
+  "required": ["id", "phase", "persona", "instructions", "optional", "inputs", "outputs", "evidence", "mutationScope", "tasks", "doneCriteria", "reviewPolicy", "reentryPolicy", "next"],
+  "properties": {
+    "id": { "type": "string" },
+    "phase": { "type": "string" },
+    "persona": { "type": "string" },
+    "instructions": {
+      "type": "string",
+      "description": "Step-level instructions loaded with the persona before any task starts."
+    },
+    "optional": { "type": "boolean" },
+    "inputs": {
+      "type": "object",
+      "description": "Required inputs that dry-run must report as present, missing, or ambiguous.",
+      "additionalProperties": true
+    },
+    "outputs": {
+      "type": "object",
+      "description": "Expected artifacts or records that may become completion evidence.",
+      "additionalProperties": true
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Evidence references Stepper must inspect before trusting state or marking this step complete.",
+      "items": {
+        "type": "object",
+        "required": ["type", "required"],
+        "properties": {
+          "type": {
+            "enum": ["artifact", "frontmatter", "task-output", "test", "review-result", "run-record", "failure-report", "repair-record", "audit-record", "checkpoint"]
+          },
+          "path": { "type": "string" },
+          "frontmatterKey": { "type": "string" },
+          "required": { "type": "boolean" },
+          "conflictBehavior": { "enum": ["block-and-reconcile", "diagnostic-only"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "mutationScope": {
+      "type": "object",
+      "description": "Declared file mutation scope for the selected step.",
+      "required": ["allowedPaths", "onUnexpectedMutation"],
+      "properties": {
+        "allowedPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "onUnexpectedMutation": { "enum": ["stop", "confirm"] }
+      },
+      "additionalProperties": false
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "persona", "instructions", "inputs", "outputs", "allowedPaths", "selfCheck", "validation", "repairPolicy"],
+        "properties": {
+          "id": { "type": "string" },
+          "persona": { "type": "string" },
+          "instructions": { "type": "string" },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "properties": {
+                "name": { "type": "string" },
+                "path": { "type": "string" },
+                "sourceTaskId": { "type": "string" },
+                "sourceOutput": { "type": "string" },
+                "required": { "type": "boolean" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "outputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "path"],
+              "properties": {
+                "name": { "type": "string" },
+                "path": { "type": "string" },
+                "requiredSections": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "requiredFrontmatter": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "downstreamInputName": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "allowedPaths": {
+            "description": "Declared mutation scope for this task.",
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "selfCheck": {
+            "type": "array",
+            "items": {
+              "enum": ["personaUsed", "inputsRead", "outputsProduced", "scopeRespected"]
+            },
+            "minItems": 4,
+            "uniqueItems": true
+          },
+          "validation": {
+            "type": "object",
+            "required": ["requireDeclaredOutputs", "requireSelfCheck", "requireScopeCompliance"],
+            "properties": {
+              "requireDeclaredOutputs": { "type": "boolean" },
+              "requireSelfCheck": { "type": "boolean" },
+              "requireScopeCompliance": { "type": "boolean" },
+              "requiredMarkers": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "additionalProperties": false
+          },
+          "repairPolicy": {
+            "type": "object",
+            "required": ["allowed", "maxAttempts"],
+            "properties": {
+              "allowed": { "type": "boolean" },
+              "maxAttempts": { "type": "integer", "minimum": 0 },
+              "failureReport": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "doneCriteria": {
+      "description": "Evidence rules that must pass before state can advance.",
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "reviewPolicy": {
+      "type": "object",
+      "required": ["required", "maxIterations"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "maxIterations": { "type": "integer", "minimum": 1 },
+        "evidence": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "reentryPolicy": {
+      "type": "object",
+      "description": "Idempotent re-entry behavior for interrupted or repeated step execution.",
+      "required": ["reuseProvenArtifacts", "retryOnlyUnprovenOutputs", "onInterruptedRun"],
+      "properties": {
+        "reuseProvenArtifacts": { "type": "boolean" },
+        "retryOnlyUnprovenOutputs": { "type": "boolean" },
+        "onInterruptedRun": {
+          "type": "array",
+          "items": { "enum": ["resume", "restart", "abandon", "reconcile"] },
+          "minItems": 4,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "next": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": false
+}

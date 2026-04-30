@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate-json:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate JSON files
+        run: |
+          python - <<'PYCODE'
+          import json
+          from pathlib import Path
+          for path in Path('.').rglob('*.json'):
+              json.loads(path.read_text())
+              print(f'valid json: {path}')
+          PYCODE
+      - name: Check prompt-first assets exist
+        run: |
+          test -f commands/bmad-next.md
+          test -f commands/bmad-loop.md
+          test -f docs/command-reference.md
+          test -f docs/examples.md
+          test -f schemas/config.schema.json
+          test -f schemas/state.schema.json
+          test -f schemas/step.schema.json
+          test -f templates/bmad-stepper.config.yaml
+          test -f templates/bmad-stepper.state.yaml

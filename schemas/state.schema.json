@@ -1,0 +1,415 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/bmad-stepper/state.schema.json",
+  "title": "BMAD Stepper State",
+  "description": "Workflow position index. State helps resume work but artifacts and frontmatter prove completion.",
+  "type": "object",
+  "required": ["version", "workflow", "evidenceIndex", "runs", "loopRuns", "conflicts", "reconcileDecisions", "failureReports", "assetUpdates", "auditRecords", "checkpoints"],
+  "properties": {
+    "version": { "type": "string" },
+    "workflow": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "phase": { "type": ["string", "null"] },
+        "epic": { "type": ["string", "integer", "null"] },
+        "story": { "type": ["string", "null"] },
+        "lastStep": {
+          "type": ["string", "null"],
+          "description": "Indexed last step. Must be checked against artifact evidence before being trusted."
+        },
+        "nextStep": {
+          "type": ["string", "null"],
+          "description": "Indexed next step hint. Dry-run selection still verifies workflow order and evidence."
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidenceIndex": {
+      "type": "array",
+      "description": "References to artifact evidence used to verify indexed workflow progress. State indexes evidence; artifacts remain the proof.",
+      "items": {
+        "type": "object",
+        "required": ["stepId", "evidenceType", "reference", "status"],
+        "properties": {
+          "stepId": { "type": "string" },
+          "evidenceType": {
+            "enum": ["artifact", "frontmatter", "task-output", "test", "review-result", "run-record", "failure-report", "repair-record"]
+          },
+          "reference": { "type": "string" },
+          "status": { "enum": ["proven", "missing", "incomplete", "conflicting", "stale"] },
+          "lastChecked": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "runs": {
+      "type": "array",
+      "description": "Recent run records. State indexes runs; detailed task outputs remain in run files.",
+      "items": {
+        "type": "object",
+        "required": ["runId", "status", "selectedStep", "inputs", "evidence"],
+        "properties": {
+          "runId": { "type": "string" },
+          "status": {
+            "enum": ["in-progress", "completed", "blocked", "failed", "interrupted", "abandoned"]
+          },
+          "selectedStep": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string" },
+              "phase": { "type": ["string", "null"] },
+              "epic": { "type": ["string", "integer", "null"] },
+              "story": { "type": ["string", "null"] },
+              "optional": { "type": ["boolean", "null"] },
+              "optionalPolicy": {
+                "enum": ["included-by-default", "skipped-by-flag", "not-optional", null]
+              }
+            },
+            "additionalProperties": false
+          },
+          "taskRecords": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["taskId", "status", "outputs", "validation"],
+              "properties": {
+                "taskId": { "type": "string" },
+                "status": {
+                  "enum": ["pending", "in-progress", "validated", "blocked", "failed"]
+                },
+                "personaUsed": { "type": ["string", "null"] },
+                "inputsRead": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "outputs": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "downstreamInputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["sourceTaskId", "sourceOutput"],
+                    "properties": {
+                      "sourceTaskId": { "type": "string" },
+                      "sourceOutput": { "type": "string" },
+                      "usedAs": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "validation": {
+                  "type": "object",
+                  "required": ["status"],
+                  "properties": {
+                    "status": { "enum": ["pending", "passed", "failed"] },
+                    "missingOutputs": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "missingMarkers": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "unexpectedMutations": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "selfCheckComplete": { "type": ["boolean", "null"] }
+                  },
+                  "additionalProperties": false
+                },
+                "repairs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["attempt", "result"],
+                    "properties": {
+                      "attempt": { "type": "integer", "minimum": 1 },
+                      "result": { "enum": ["passed", "failed"] },
+                      "changedFiles": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "inputs": {
+            "type": "array",
+            "description": "Inputs read or required by the selected step, including missing or ambiguous inputs when execution stops.",
+            "items": {
+              "type": "object",
+              "required": ["name", "status"],
+              "properties": {
+                "name": { "type": "string" },
+                "path": { "type": ["string", "null"] },
+                "status": { "enum": ["present", "missing", "ambiguous", "not-applicable"] }
+              },
+              "additionalProperties": false
+            }
+          },
+          "validationResults": {
+            "type": "array",
+            "description": "Step-level validation results, including task output validation, mutation scope, evidence checks, and review/fix checks.",
+            "items": {
+              "type": "object",
+              "required": ["check", "status"],
+              "properties": {
+                "check": { "type": "string" },
+                "status": { "enum": ["passed", "failed", "blocked", "skipped"] },
+                "details": { "type": ["string", "null"] }
+              },
+              "additionalProperties": false
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "repairs": {
+            "type": "array",
+            "description": "Run-level repair history when task validation or evidence validation required bounded repair.",
+            "items": {
+              "type": "object",
+              "required": ["attempt", "scope", "result"],
+              "properties": {
+                "attempt": { "type": "integer", "minimum": 1 },
+                "scope": { "type": "string" },
+                "result": { "enum": ["passed", "failed", "deferred"] },
+                "changedFiles": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "reentry": {
+            "type": "object",
+            "description": "Interrupted-run handling and idempotent re-entry notes.",
+            "properties": {
+              "choice": { "enum": ["resume", "restart", "abandon", "reconcile", null] },
+              "reusedEvidence": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "retriedOutputs": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "decisionRecord": { "type": ["string", "null"] }
+            },
+            "additionalProperties": false
+          },
+          "failureReport": { "type": ["string", "null"] },
+          "reviewFixIterations": {
+            "type": "array",
+            "items": { "type": "object" }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "loopRuns": {
+      "type": "array",
+      "description": "Recent loop records. Loop records summarize repeated /bmad-next transactions and final stop reports.",
+      "items": {
+        "type": "object",
+        "required": ["loopId", "target", "status", "maxSteps", "iterations", "stopReason", "recommendedNextAction"],
+        "properties": {
+          "loopId": { "type": "string" },
+          "target": {
+            "type": "object",
+            "required": ["raw", "type", "value", "resolved"],
+            "properties": {
+              "raw": { "type": "string" },
+              "type": {
+                "enum": ["next-story", "story", "story-range", "epic", "phase", "step"]
+              },
+              "value": { "type": ["string", "null"] },
+              "resolved": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          },
+          "status": {
+            "enum": ["planned", "in-progress", "completed", "blocked", "failed", "interrupted", "abandoned"]
+          },
+          "maxSteps": { "type": "integer", "minimum": 1 },
+          "optionalPolicy": {
+            "enum": ["included-by-default", "skipped-by-flag", null]
+          },
+          "iterations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["index", "status"],
+              "properties": {
+                "index": { "type": "integer", "minimum": 1 },
+                "runId": { "type": ["string", "null"] },
+                "selectedStep": { "type": ["string", "null"] },
+                "status": {
+                  "enum": ["completed", "blocked", "failed", "skipped", "interrupted", "abandoned"]
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "repairAttempts": { "type": ["integer", "null"], "minimum": 0 },
+                "failureReport": { "type": ["string", "null"] }
+              },
+              "additionalProperties": false
+            }
+          },
+          "stopReason": {
+            "enum": [
+              "target-reached",
+              "max-steps-reached",
+              "checkpoint-required",
+              "reconcile-required",
+              "conflict-detected",
+              "interrupted-run",
+              "missing-input",
+              "ambiguous-completion",
+              "validation-failed",
+              "repair-limit-reached",
+              "target-unresolved",
+              "out-of-scope-mutation",
+              "bmad-prerequisite-missing"
+            ]
+          },
+          "recommendedNextAction": { "type": "string" },
+          "summaryPath": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "description": "Blocking or diagnostic state/artifact conflicts detected before downstream continuation.",
+      "items": {
+        "type": "object",
+        "required": ["conflictId", "stepId", "status", "stateSays", "artifactsSay", "blocking", "recommendedAction"],
+        "properties": {
+          "conflictId": { "type": "string" },
+          "stepId": { "type": "string" },
+          "status": { "enum": ["open", "resolved", "diagnostic-only"] },
+          "stateSays": { "type": "string" },
+          "artifactsSay": { "type": "string" },
+          "sources": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "blocking": { "type": "boolean" },
+          "recommendedAction": { "enum": ["update-state", "trust-artifacts", "rerun-step", "skip-step", "diagnostic", "manual-repair"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "reconcileDecisions": {
+      "type": "array",
+      "description": "User-confirmed reconcile or diagnostic decisions.",
+      "items": {
+        "type": "object",
+        "required": ["decisionId", "conflictId", "choice", "confirmed", "recordPath"],
+        "properties": {
+          "decisionId": { "type": "string" },
+          "conflictId": { "type": "string" },
+          "choice": { "enum": ["update-state", "trust-artifacts", "rerun-step", "skip-step", "diagnostic"] },
+          "confirmed": { "type": "boolean" },
+          "recordPath": { "type": "string" },
+          "changedFiles": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "failureReports": {
+      "type": "array",
+      "description": "Index of failure reports written when repair limits are exhausted.",
+      "items": {
+        "type": "object",
+        "required": ["path", "runId", "taskId"],
+        "properties": {
+          "path": { "type": "string" },
+          "runId": { "type": "string" },
+          "taskId": { "type": "string" },
+          "reason": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "assetUpdates": {
+      "type": "array",
+      "description": "Audit index for project-pinned Stepper asset update plans and maintainer decisions.",
+      "items": {
+        "type": "object",
+        "required": ["updateId", "pinnedVersion", "incomingVersion", "status", "changePlan", "decisions"],
+        "properties": {
+          "updateId": { "type": "string" },
+          "pinnedVersion": { "type": "string" },
+          "incomingVersion": { "type": "string" },
+          "status": { "enum": ["planned", "applied", "partially-applied", "deferred", "rejected"] },
+          "changePlan": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "changeSource", "action"],
+              "properties": {
+                "path": { "type": "string" },
+                "changeSource": { "enum": ["upstream", "project-local", "both", "unchanged"] },
+                "action": { "enum": ["accept", "defer", "reject", "inspect"] },
+                "requiresConfirmation": { "type": "boolean" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "decision"],
+              "properties": {
+                "path": { "type": "string" },
+                "decision": { "enum": ["accept", "defer", "reject"] },
+                "confirmed": { "type": "boolean" },
+                "reason": { "type": ["string", "null"] }
+              },
+              "additionalProperties": false
+            }
+          },
+          "recordPath": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "auditRecords": {
+      "type": "array",
+      "description": "Pointers to run, task, loop, reconcile, failure, checkpoint, review/fix, or asset-update records that explain project history after interruptions.",
+      "items": {
+        "type": "object",
+        "required": ["recordId", "recordType", "path", "summary"],
+        "properties": {
+          "recordId": { "type": "string" },
+          "recordType": { "enum": ["run", "task", "loop", "reconcile", "failure", "checkpoint", "review-fix", "asset-update"] },
+          "path": { "type": "string" },
+          "summary": { "type": "string" },
+          "relatedStep": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "checkpoints": { "type": "array" }
+  },
+  "additionalProperties": false
+}

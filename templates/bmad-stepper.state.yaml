@@ -1,0 +1,42 @@
+version: 0.1.0
+# This file is an index of workflow position, not proof of completion.
+# Stepper must compare these values with artifacts and frontmatter before continuing.
+workflow:
+  id: default
+  phase: null
+  epic: null
+  story: null
+  lastStep: null
+  nextStep: null
+# Evidence references are indexes into artifacts, not proof by themselves.
+# Each reference must be rechecked before downstream work is selected.
+evidenceIndex: []
+# Example run records are intentionally omitted. Real runs should index runId,
+# status, selectedStep, inputs, taskRecords, validationResults, evidence,
+# repairs, failureReport, and reviewFixIterations. Runs may be in-progress,
+# interrupted, completed, blocked, failed, or abandoned. Detailed task outputs
+# live under outputs.taskOutputsDir.
+runs: []
+# Loop records summarize repeated /bmad-next transactions. Detailed summaries
+# and stop reports live under outputs.loopSummariesDir.
+loopRuns: []
+# Conflicts block continuation until reconcile, diagnostic review, or a
+# user-confirmed repair path resolves them.
+conflicts: []
+# Reconcile decisions record update-state, trust-artifacts, rerun-step,
+# skip-step, or diagnostic choices and whether they were confirmed.
+reconcileDecisions: []
+# Failure reports are indexed here after repair exhaustion. Reports explain
+# failed task, expected contract, actual output, repairs, changed files, and
+# recommended next action.
+failureReports: []
+# Project-pinned asset update plans are indexed here. Each update should record
+# pinned and incoming versions, local-vs-upstream change sources, confirmation
+# requirements, and accept/defer/reject decisions.
+assetUpdates: []
+# Audit records point to run, task, loop, reconcile, failure, checkpoint,
+# review/fix, and asset-update records so interrupted work remains explainable.
+auditRecords: []
+# Checkpoints include human decisions, unresolved conflicts, and interrupted
+# run choices such as resume, restart, abandon, or reconcile.
+checkpoints: []
