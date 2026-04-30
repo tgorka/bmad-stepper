@@ -1,0 +1,107 @@
+# ─── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ─── Editors / IDEs ──────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+.idea/
+*.swp
+*.swo
+*~
+.*.sw[a-p]
+.history/
+
+# ─── Node / Bun ──────────────────────────────────────────────────────────────
+node_modules/
+.pnp.*
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+# NOTE: bun.lock / bun.lockb are committed (reproducible installs).
+
+# ─── TypeScript / Build outputs ──────────────────────────────────────────────
+dist/
+build/
+out/
+*.tsbuildinfo
+.tsc-cache/
+
+# ─── Tests / Coverage ────────────────────────────────────────────────────────
+coverage/
+*.lcov
+.nyc_output/
+.bun-test-cache/
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# ─── Environment / Secrets ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+secrets/
+
+# ─── Temp / Caches ───────────────────────────────────────────────────────────
+*.tmp
+*.temp
+.tmp/
+.temp/
+.cache/
+*.bak
+*.orig
+
+# ─── Claude Code (local-only state) ──────────────────────────────────────────
+# Plugin manifest .claude-plugin/plugin.json IS committed (declares the plugin).
+# User-local Claude Code settings should NOT be committed.
+.claude/settings.local.json
+.claude/sessions/
+.claude/.tmp/
+
+# ─── BMAD personal config (per-contributor, never shared) ────────────────────
+# BMAD v6.5+ splits config into shared (config.yaml, committed) and personal
+# (config.user.yaml, gitignored). Each contributor copies the .example template
+# and personalizes it locally.
+_bmad/config.user.yaml
+
+# ─── Stepper runtime state (regenerable, project-local) ──────────────────────
+# state.yaml + run logs are derived from artifacts on disk; recompute on demand.
+_bmad-output/.stepper/
+_bmad-output/.archive/
+_bmad-output/.runs/
+
+# ─── BMAD artifacts policy ───────────────────────────────────────────────────
+# We dogfood BMAD to develop this plugin, so planning/implementation artifacts
+# ARE the spec — they stay tracked. Only runtime caches above are ignored.
+# _bmad/config.yaml                   ← committed (shared project settings)
+# _bmad/config.user.yaml.example      ← committed (onboarding template)
+# _bmad/config.user.yaml              ← gitignored (personal settings)
+# _bmad-output/brainstorming/         ← committed (design docs)
+# _bmad-output/planning-artifacts/    ← committed (PRD, architecture)
+# _bmad-output/implementation-artifacts/  ← committed (story specs)
+# _bmad-output/test-artifacts/        ← committed (test design, traceability)
+# _bmad-output/bmb-creations/         ← committed (skill/agent/module designs)
+
+# ─── Misc ────────────────────────────────────────────────────────────────────
+.release-state
+*.tgz
+.npm/
