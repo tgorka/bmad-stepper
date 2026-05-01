@@ -22,7 +22,12 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { NextArgsSchema, parseNextArgs } from "./args.ts";
+import {
+  NextArgsSchema,
+  parseNextArgs,
+  parseVerifyAndAdvanceArgs,
+  VerifyAndAdvanceArgsSchema,
+} from "./args.ts";
 
 describe("parseNextArgs — defaults", () => {
   it("returns ok=true with all defaults filled when argv is empty", () => {
@@ -328,3 +333,290 @@ function getBooleanField(
 ): boolean {
   return value[key];
 }
+
+// ─── parseVerifyAndAdvanceArgs (Story 2.6 Task 13) ─────────────────────────
+
+describe("parseVerifyAndAdvanceArgs — happy path", () => {
+  it("returns ok=true with parsed { runId, tokensIn, tokensOut } for valid argv", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc-123",
+      "--tokens-in",
+      "100",
+      "--tokens-out",
+      "200",
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual({
+      runId: "abc-123",
+      tokensIn: 100,
+      tokensOut: 200,
+    });
+  });
+
+  it("accepts a leading -- separator (Layer 1 may pass another -- after Bun's own)", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--",
+      "--run-id",
+      "abc-123",
+      "--tokens-in",
+      "100",
+      "--tokens-out",
+      "200",
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.runId).toBe("abc-123");
+    expect(result.value.tokensIn).toBe(100);
+    expect(result.value.tokensOut).toBe(200);
+  });
+
+  it("accepts zero token counts (cold-start dispatch with no tokens)", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "x",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.tokensIn).toBe(0);
+    expect(result.value.tokensOut).toBe(0);
+  });
+
+  it("VerifyAndAdvanceArgsSchema is .strict() (rejects unknown keys at the schema level)", () => {
+    // Use unknown-cast to avoid `as any` (Biome `noExplicitAny`). This
+    // exercises the schema's strict-mode unknown-key rejection.
+    const result = VerifyAndAdvanceArgsSchema.safeParse({
+      runId: "x",
+      tokensIn: 1,
+      tokensOut: 2,
+      extra: "bogus",
+    } as unknown as { runId: string; tokensIn: number; tokensOut: number });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("parseVerifyAndAdvanceArgs — missing required args", () => {
+  it("returns ok=false when --run-id is missing", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--tokens-in",
+      "100",
+      "--tokens-out",
+      "200",
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("PARSE_ERROR");
+    expect(result.error.hint).toContain("--run-id");
+    expect(result.error.hint.startsWith("Pass ")).toBe(true);
+  });
+
+  it("returns ok=false when --tokens-in is missing", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-out",
+      "200",
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.hint).toContain("--tokens-in");
+  });
+
+  it("returns ok=false when --tokens-out is missing", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "100",
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.hint).toContain("--tokens-out");
+  });
+
+  it("returns ok=false when argv is empty", () => {
+    const result = parseVerifyAndAdvanceArgs([]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // First missing (per the function's check order) is --run-id.
+    expect(result.error.hint).toContain("--run-id");
+  });
+});
+
+describe("parseVerifyAndAdvanceArgs — invalid token values", () => {
+  it("returns ok=false for non-numeric --tokens-in", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "not-a-number",
+      "--tokens-out",
+      "200",
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.hint).toContain("--tokens-in");
+    expect(result.error.hint).toContain("not-a-number");
+  });
+
+  it("returns ok=false for negative --tokens-in (Zod schema rejects negatives)", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "-5",
+      "--tokens-out",
+      "200",
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("PARSE_ERROR");
+  });
+
+  it("returns ok=false for floating-point --tokens-out (parseInt drops fractional)", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "100",
+      "--tokens-out",
+      "200.5",
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("PARSE_ERROR");
+  });
+});
+
+describe("parseVerifyAndAdvanceArgs — unknown flags", () => {
+  it("returns ok=false with PARSE_ERROR for an unknown flag", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "100",
+      "--tokens-out",
+      "200",
+      "--unknown-flag",
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("PARSE_ERROR");
+    expect(result.error.hint).toContain("--unknown-flag");
+    expect(result.error.hint.startsWith("Run ")).toBe(true);
+  });
+});
+
+describe("parseVerifyAndAdvanceArgs — --run-id missing value", () => {
+  it("returns ok=false when --run-id is followed by another flag", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "--tokens-in",
+      "100",
+      "--tokens-out",
+      "200",
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.hint.startsWith("Pass ")).toBe(true);
+  });
+});
+
+// ─── Story 3.1 — --last-attempted-json flag ───────────────────────────────
+
+describe("parseVerifyAndAdvanceArgs — Story 3.1 --last-attempted-json", () => {
+  it("happy path: parses well-formed JSON payload into args.lastAttempted", () => {
+    const payload = {
+      step: "bmad-create-architecture",
+      epic: 1,
+      story: "1.1",
+      attemptedAt: "2026-04-30T10:00:00Z",
+    };
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+      "--last-attempted-json",
+      JSON.stringify(payload),
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lastAttempted).toEqual(payload);
+    expect(result.value.runId).toBe("abc");
+  });
+
+  it("optional: returns ok=true with lastAttempted=undefined when flag is absent", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lastAttempted).toBeUndefined();
+  });
+
+  it("missing value: returns PARSE_ERROR when --last-attempted-json has no payload", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+      "--last-attempted-json",
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("PARSE_ERROR");
+    expect(result.error.hint).toContain("--last-attempted-json");
+    expect(result.error.hint.startsWith("Pass ")).toBe(true);
+  });
+
+  it("invalid JSON: returns PARSE_ERROR when payload is not valid JSON", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+      "--last-attempted-json",
+      "{not valid json",
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("PARSE_ERROR");
+    expect(result.error.message).toContain("not valid JSON");
+    expect(result.error.hint.startsWith("Pass ")).toBe(true);
+  });
+
+  it("schema mismatch: returns PARSE_ERROR when payload is missing required fields", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+      "--last-attempted-json",
+      JSON.stringify({ step: "x" }),
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("PARSE_ERROR");
+    expect(result.error.message).toContain("schema validation");
+    expect(result.error.hint.startsWith("Pass ")).toBe(true);
+  });
+});

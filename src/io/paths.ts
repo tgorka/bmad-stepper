@@ -26,6 +26,21 @@ export const STEPPER_INTERNAL_ROOT = "_bmad-output/.stepper";
 export const BMAD_OUTPUT_ROOT = "_bmad-output";
 
 /**
+ * Canonical staging directory root for sub-agent dispatch
+ * (architecture §P5 lines 864-917; Story 2.2 introduces this constant
+ * to resolve Story 2.1 dev-002 forward-dep — runVerifier's stagingRoot
+ * option can default to STAGING_PATH instead of being REQUIRED).
+ *
+ * Resolves to `_bmad-output/.stepper/staging` (under STEPPER_INTERNAL_ROOT,
+ * so any write target under `STAGING_PATH/<runId>/` is automatically inside
+ * the assertWithinScope() allowed roots).
+ *
+ * Each sub-agent dispatch creates
+ * `STAGING_PATH/<runId>/{inputs/, outputs/, dispatch-spec.json}`.
+ */
+export const STAGING_PATH = `${STEPPER_INTERNAL_ROOT}/staging`;
+
+/**
  * Returns true if `child` (already absolute and normalised) is the same
  * directory as `parent` or strictly inside it. Uses `path.relative()` so the
  * comparison handles trailing-separator differences and platform separators
