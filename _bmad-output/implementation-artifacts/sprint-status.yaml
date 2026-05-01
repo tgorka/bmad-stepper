@@ -52,7 +52,7 @@ development_status:
   1-7-cli-argument-parser: done
   1-8-snapshot-branch-sha-detection: done
   1-9-bmad-detection: done
-  1-10-dag-seed-three-tier-registry: backlog
+  1-10-dag-seed-three-tier-registry: done
   1-11-persona-resolution: backlog
   1-12-bmad-next-doctor-command: backlog
   1-13-quick-start-documentation: backlog
