@@ -1,0 +1,128 @@
+src/dispatch/promote.ts
+  e2616fc1fca66600 1-275
+src/schemas/state.test.ts
+  e2616fc1fca66600 17-22,103-182
+src/dispatch/emit.ts
+  e2616fc1fca66600 1-51
+_bmad-output/implementation-artifacts/2-5-markdown-transcript-json-run-log-writers.md
+  e2616fc1fca66600 1-952
+src/dispatch/generate-spec.test.ts
+  e2616fc1fca66600 1-479
+_bmad-output/implementation-artifacts/sprint-status.yaml
+  e2616fc1fca66600 2,38,60,62-72
+src/io/paths.ts
+  e2616fc1fca66600 29-42
+src/dispatch/staging-cleanup.ts
+  e2616fc1fca66600 1-140
+tests/fixtures/bmad-step-runner/README.md
+  e2616fc1fca66600 1-80
+src/commands/next/index.ts
+  e2616fc1fca66600 4,11-17,23,26-29,39,41-42,44-53
+_bmad-output/implementation-artifacts/2-3-generic-sub-agent-bmad-step-runner-md.md
+  e2616fc1fca66600 1-687
+src/runs/render-markdown.ts
+  e2616fc1fca66600 1-127
+src/dispatch/generate-spec.ts
+  e2616fc1fca66600 1-245
+src/runs/index.ts
+  e2616fc1fca66600 1-23
+commands/bmad-next.md
+  e2616fc1fca66600 2,7,9-291
+_bmad-output/implementation-artifacts/2-7-slash-command-for-bmad-next-layer-1-markdown.md
+  e2616fc1fca66600 1-901
+src/commands/next/run.ts
+  e2616fc1fca66600 1-1075
+src/dispatch/index.ts
+  e2616fc1fca66600 1-46
+_bmad-output/implementation-artifacts/2-8-smoke-test-for-bmad-next-happy-path.md
+  e2616fc1fca66600 1-957
+tests/fixtures/minimal-bmad-project/README.md
+  e2616fc1fca66600 1-34
+src/commands/next/verify-and-advance.test.ts
+  e2616fc1fca66600 1-1502
+_bmad-output/implementation-artifacts/3-1-record-last-attempted-last-failure-reason-on-halt.md
+  e2616fc1fca66600 1-767
+src/dispatch/emit.test.ts
+  e2616fc1fca66600 1-141
+_bmad-output/implementation-artifacts/2-4-lock-free-run-ts-for-bmad-next.md
+  e2616fc1fca66600 1-1119
+src/smoke/next.test.ts
+  e2616fc1fca66600 1-376
+src/commands/next/run.test.ts
+  e2616fc1fca66600 1-1224
+src/schemas/dispatch-protocol.test.ts
+  e2616fc1fca66600 1-275
+src/commands/next/args.test.ts
+  e2616fc1fca66600 25-30,336-622
+src/integration/no-write-outside-scope.test.ts
+  e2616fc1fca66600 1-252
+src/runs/types.ts
+  e2616fc1fca66600 1-114
+src/dispatch/types.ts
+  e2616fc1fca66600 1-60
+src/runs/build-run-log.test.ts
+  e2616fc1fca66600 1-169
+tests/fixtures/bmad-step-runner/dispatch-spec.json
+  e2616fc1fca66600 1-38
+src/runs/write-step.ts
+  e2616fc1fca66600 1-150
+agents/bmad-step-runner.md
+  e2616fc1fca66600 1-173
+_bmad-output/implementation-artifacts/2-2-dispatch-spec-generator.md
+  e2616fc1fca66600 2,54,125-142,155-156,158-160,199,201-203,232,234-236,282,284-286,304-305,307-308,341-343,345-347,366,368-370,388,395-396,398-399,404,412,416,422-436,734-741,745-844,848,850-858,860-966,971-972
+_bmad-output/implementation-artifacts/2-6-verify-and-advance-ts-with-state-hash-check.md
+  e2616fc1fca66600 1-1351
+tests/fixtures/minimal-bmad-project/_bmad/config.yaml
+  e2616fc1fca66600 1-2
+_bmad-output/implementation-artifacts/epic-2-retrospective.md
+  e2616fc1fca66600 1-290
+src/dispatch/promote.test.ts
+  e2616fc1fca66600 1-367
+src/runs/write-step.test.ts
+  e2616fc1fca66600 1-390
+src/commands/next/args.ts
+  e2616fc1fca66600 95-98,320-604
+src/commands/next/verify-and-advance.ts
+  e2616fc1fca66600 1-864
+src/integration/halt-records-state.test.ts
+  e2616fc1fca66600 1-436
+_bmad-output/implementation-artifacts/3-2-resume-flag.md
+  e2616fc1fca66600 1-688
+tests/fixtures/bmad-step-runner/inputs/topic.md
+  e2616fc1fca66600 1
+src/runs/render-markdown.test.ts
+  e2616fc1fca66600 1-222
+src/schemas/dispatch-protocol.ts
+  e2616fc1fca66600 1-74
+src/schemas/state.ts
+  e2616fc1fca66600 7-14,19-37,41,46-91,107-108
+src/dispatch/staging-cleanup.test.ts
+  e2616fc1fca66600 1-258
+src/runs/build-run-log.ts
+  e2616fc1fca66600 1-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ace32ea7a88a3371a9a09b7f03f8c93da7c01473",
+  "prompts": {
+    "e2616fc1fca66600": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b0b6f29-abd1-4f83-bd23-89b9efd33539",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 20435,
+      "total_deletions": 1744,
+      "accepted_lines": 18825,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
