@@ -1,0 +1,48 @@
+_bmad-output/implementation-artifacts/2-5-markdown-transcript-json-run-log-writers.md
+  e2616fc1fca66600 1-952
+_bmad-output/implementation-artifacts/epic-2-retrospective.md
+  e2616fc1fca66600 1-290
+_bmad-output/implementation-artifacts/sprint-status.yaml
+  e2616fc1fca66600 2,38,60,62-72
+_bmad-output/implementation-artifacts/2-6-verify-and-advance-ts-with-state-hash-check.md
+  e2616fc1fca66600 1-1351
+_bmad-output/implementation-artifacts/2-4-lock-free-run-ts-for-bmad-next.md
+  e2616fc1fca66600 1-1119
+_bmad-output/implementation-artifacts/2-3-generic-sub-agent-bmad-step-runner-md.md
+  e2616fc1fca66600 1-687
+_bmad-output/implementation-artifacts/2-2-dispatch-spec-generator.md
+  e2616fc1fca66600 2,54,125-142,155-156,158-160,199,201-203,232,234-236,282,284-286,304-305,307-308,341-343,345-347,366,368-370,388,395-396,398-399,404,412,416,422-436,734-741,745-844,848,850-858,860-966,971-972
+_bmad-output/implementation-artifacts/3-2-resume-flag.md
+  e2616fc1fca66600 1-688
+_bmad-output/implementation-artifacts/2-7-slash-command-for-bmad-next-layer-1-markdown.md
+  e2616fc1fca66600 1-901
+_bmad-output/implementation-artifacts/2-8-smoke-test-for-bmad-next-happy-path.md
+  e2616fc1fca66600 1-957
+_bmad-output/implementation-artifacts/3-1-record-last-attempted-last-failure-reason-on-halt.md
+  e2616fc1fca66600 1-767
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "8331ffb92c4561cb4b74de78a20a3b412d340feb",
+  "prompts": {
+    "e2616fc1fca66600": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b0b6f29-abd1-4f83-bd23-89b9efd33539",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 8034,
+      "total_deletions": 100,
+      "accepted_lines": 8034,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
