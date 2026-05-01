@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { PathologicalInputError } from "../errors.ts";
+import { ScopeViolationError } from "../errors.ts";
 import { atomicWrite } from "./atomic-write.ts";
 
 let tmpDir: string;
@@ -87,13 +87,13 @@ describe("atomicWrite — third write (.bak rotation kept for one cycle)", () =>
 });
 
 describe("atomicWrite — scope-violation behaviour", () => {
-  it("throws PathologicalInputError when target is outside allowed roots", async () => {
+  it("throws ScopeViolationError when target is outside allowed roots", async () => {
     expect(
       atomicWrite(
         "/etc/no-such-stepper-target-that-must-fail-scope-check",
         "evil",
       ),
-    ).rejects.toBeInstanceOf(PathologicalInputError);
+    ).rejects.toBeInstanceOf(ScopeViolationError);
   });
 
   it("does NOT create any file when scope check rejects", async () => {

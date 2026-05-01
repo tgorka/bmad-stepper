@@ -10,13 +10,16 @@
  *
  * Per the user's task instruction this file lives at
  * `src/io/no-write-outside-scope.test.ts` (not `src/integration/`).
+ *
+ * Story 1.6 Task 6.4 migrated the throw site from `PathologicalInputError`
+ * to `ScopeViolationError`; assertions track the migration.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { PathologicalInputError } from "../errors.ts";
+import { ScopeViolationError } from "../errors.ts";
 import { atomicWrite } from "./atomic-write.ts";
 
 let fauxProjectRoot: string;
@@ -69,25 +72,25 @@ describe("no-write-outside-scope — forbidden roots", () => {
   it("rejects writes outside the project root and outside os.tmpdir()", async () => {
     expect(
       atomicWrite("/etc/no-such-stepper-attempt-must-fail", "evil-contents"),
-    ).rejects.toBeInstanceOf(PathologicalInputError);
+    ).rejects.toBeInstanceOf(ScopeViolationError);
   });
 
   it("rejects writes under _bmad/ (read-only installed-files dir per AR42)", async () => {
     expect(
       atomicWrite("_bmad/config.yaml", "evil override"),
-    ).rejects.toBeInstanceOf(PathologicalInputError);
+    ).rejects.toBeInstanceOf(ScopeViolationError);
   });
 
   it("rejects writes under ~/.claude/plugins/ (tilde literal, no expansion)", async () => {
     expect(
       atomicWrite("~/.claude/plugins/x.json", "evil"),
-    ).rejects.toBeInstanceOf(PathologicalInputError);
+    ).rejects.toBeInstanceOf(ScopeViolationError);
   });
 
   it("rejects ../-traversal escapes after path.resolve()", async () => {
     expect(
       atomicWrite("_bmad-output/../../etc/passwd", "evil"),
-    ).rejects.toBeInstanceOf(PathologicalInputError);
+    ).rejects.toBeInstanceOf(ScopeViolationError);
   });
 });
 
