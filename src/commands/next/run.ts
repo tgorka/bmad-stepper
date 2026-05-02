@@ -36,13 +36,19 @@
  * value) from process-level concerns.
  *
  * **READ-ONLY FLAG ROUTING**: per the AC-2 enumeration, `--list`,
- * `--explain`, `--diff-state`, `--export-state`, `--dry-run` each emit
- * `action: "report"` with the human-readable output via the `message`
- * field. Forward-deferred surfaces (`--export-state` → Story 3.10,
- * `--diff-state` → Story 3.8, `--explain` → Story 3.6, `--watch` →
- * Story 3.9, `--upgrade` → Story 6.9, `--force-unlock` → Epic 6) emit
- * explicit `action: "halt"` or `action: "report"` stubs with hints
- * pointing at the owning story; NEVER silently ignored.
+ * `--explain`, `--diff-state`, `--export-state`, `--dry-run`, `--watch`
+ * each emit `action: "report"` with the human-readable output via the
+ * `message` field. Forward-deferred surfaces (`--upgrade` → Story 6.9,
+ * `--force-unlock` → Epic 6) emit explicit `action: "halt"` stubs with
+ * hints pointing at the owning story; NEVER silently ignored.
+ *
+ * **AR9 SPECIAL CASES**: Story 3.8 (`--export-state`) and Story 3.9
+ * (`--watch`) BYPASS the AR9 single-JSON-line wrapper per FR54 +
+ * architecture §line 524 + §line 862. The `--export-state` JSON body
+ * goes to stdout DIRECTLY; the `--watch` raw transcript content streams
+ * to stdout line-by-line via `process.stdout.write`. The
+ * `import.meta.main` block detects each flag and routes around
+ * `emitDispatchAction`. Every OTHER flag preserves AR9 strictly.
  *
  * **STAGING ORPHAN CLEANUP**: Story 2.2 ships `cleanStagingOrphans()`
  * but does NOT wire the call site. Story 2.4 owns the wiring per Story
@@ -100,9 +106,16 @@ import {
 } from "../../dispatch/index.ts";
 import { ConfigError, StepperError } from "../../errors.ts";
 import { error, info, warn } from "../../io/log.ts";
-import { resolvePersona } from "../../personas/index.ts";
+import {
+  type ResolvedPersonaWithTier,
+  resolvePersona,
+  resolvePersonaWithTier,
+} from "../../personas/index.ts";
+import { watchMostRecentRunLog } from "../../runs/watch.ts";
 import type { DispatchActionV1 } from "../../schemas/dispatch-protocol.ts";
 import type { LastAttempted, State } from "../../schemas/state.ts";
+import { diffState } from "../../state/diff.ts";
+import { exportState } from "../../state/export.ts";
 import { loadStateUnlocked } from "../../state/load.ts";
 import { getVerifierConfig } from "../../verifiers/index.ts";
 import { runDoctor } from "../doctor/run.ts";
@@ -221,6 +234,22 @@ export interface RunNextOptions {
   readonly nowIso?: string;
   /** Logger override; defaults to `{ info, warn, error, json }` from `src/io/log.ts`. */
   readonly logger?: LoggerFns;
+  /**
+   * Story 3.9: forwarded to `watchMostRecentRunLog` (overrides the default
+   * `${STEPPER_INTERNAL_ROOT}/runs` path). Tests pass tmpdir-rooted overrides.
+   */
+  readonly watchRunsRoot?: string;
+  /**
+   * Story 3.9: forwarded to `watchMostRecentRunLog` (overrides the default
+   * 250ms poll interval). Tests typically set 25ms for deterministic timing.
+   */
+  readonly watchPollMs?: number;
+  /**
+   * Story 3.9: forwarded to `watchMostRecentRunLog` as the abort signal.
+   * Tests drive the watch loop's exit deterministically via this signal
+   * (functionally equivalent to a real SIGINT delivery).
+   */
+  readonly watchSignal?: AbortSignal;
 }
 
 /**
@@ -269,6 +298,23 @@ function defaultLogger(): LoggerFns {
  * semantics but the parser is lenient. The runner enforces the
  * exclusion here. Throws `ConfigError` (code `CONFIG_ERROR`, exitCode
  * 2) with the verbatim hint per AC.
+ *
+ * **Story 3.5 (epic AC lines 803-805)**: when neither flag is supplied,
+ * the runner falls through to the project-config `personas:` defaults
+ * (Story 1.11's 4-tier `resolvePersona` cascade — Tier 1 SKILL.md
+ * frontmatter > Tier 2 project config > Tier 3 `DEFAULT_PERSONAS` >
+ * Tier 4 `_bmad/<module>/config.yaml` triggers) and the
+ * `failurePolicies` defaults (forward-deferred to Story 6.x — the
+ * v0.1 config-block at architecture §line 780 is declared but NOT
+ * yet consumed at runtime; the per-step failure-policy via
+ * `retry`/`skip`/`route-to-fixer`/`escalate` lands in Epic 5 + Story
+ * 6.1 config-loader). The `enforceMutuallyExclusiveFlags` function
+ * therefore implements ONLY the `--include-optional ⊕ --no-optional`
+ * cross-validation; the AC line 805 "no toggle" default is the
+ * absence of any branch — neither flag changes runtime behaviour
+ * beyond the optional-step inclusion filter at `pickNextStep`.
+ *
+ * Story 3.5 PRESERVES this throw verbatim; ZERO behavioural change.
  */
 function enforceMutuallyExclusiveFlags(args: NextArgs): void {
   if (args.includeOptional && args.noOptional) {
@@ -404,12 +450,57 @@ function getRequiredSections(stepName: string): readonly string[] {
 }
 
 /**
+ * Story 3.4: shared predicate for "is this step's `after[]` preconditions
+ * satisfied by the current state?". Used by:
+ *   - The explicit `--step` branch in `pickNextStep` (epic AC line 780).
+ *   - Story 3.7 (`--list`) future consumer (refactor target).
+ *
+ * v0.1 conservative direct-match rule: a step's preconditions are met
+ * when EVERY name in `node.after[]` matches `state.lastSuccessfulStep?.step`.
+ * An entry-point (empty `after[]`) is trivially met. The full
+ * transitive-closure model (walking the inverse DAG `edgesIn` from each
+ * prerequisite back to the project root) is forward-deferred to Story 3.6
+ * (`--explain` reasoning trace) and Story 3.7 (`--list`).
+ *
+ * **Note**: `state.completedSteps` is NOT declared on `StateV1Schema`
+ * (verified via `src/schemas/state.ts:92-119`). Story 1.5 declared
+ * `lastSuccessfulStep` + `lastAttempted` + `lastFailureReason` only.
+ * The simpler `node.after.every(p => p === lastSuccessfulStep.step)`
+ * rule covers the common case where the user just completed step X
+ * and wants to skip ahead to step Y (Y has `after: ["X"]`). When a
+ * step has multiple prerequisites (e.g., a synthesis step waiting on
+ * 2 parallel branches), v0.1 conservatively rejects the precondition
+ * unless the single most-recently-completed step is a prerequisite
+ * AND the rest were already in the chain (which v0.1 cannot verify
+ * without the transitive closure walk).
+ *
+ * Returns `true` when the preconditions are met, `false` otherwise.
+ * Pure / synchronous; no I/O.
+ */
+function isPreconditionMet(node: DagNode, state: State): boolean {
+  if (node.after.length === 0) return true;
+  const lastStepName = state.lastSuccessfulStep?.step;
+  if (lastStepName === undefined) return false;
+  return node.after.every((p) => p === lastStepName);
+}
+
+/**
  * Resolve the next step from the DAG given the current state + filter
  * args. v0.1 inline implementation per architecture §A.D7 + Story 2.4
- * Task 7.3:
+ * Task 7.3 + Story 3.4 Tasks 5-9:
+ *
+ *   - **Story 3.4 (epic AC line 784)**: when `args.step` is explicit AND
+ *     any of `--epic`/`--story`/`--phase` is set with a non-empty value,
+ *     emit a single warning to stderr via `log.warn(...)` BEFORE the
+ *     explicit-`--step` branch returns. Empty-string flag values do NOT
+ *     trigger the warning (treated as "no filter" per Story 1.7).
  *
  *   - If `args.step` is set → resolve to that step name; throw
- *     `ConfigError` if not in the DAG.
+ *     `ConfigError` if not in the DAG. **Story 3.4 (epic AC line 780)**:
+ *     after the lookup succeeds, verify preconditions via
+ *     `isPreconditionMet`; throw `ConfigError` with the verbatim hint
+ *     `Run /bmad-next --explain to see why <step> is blocked.` when
+ *     unmet.
  *   - Else if `state.lastSuccessfulStep` is null/undefined → pick the
  *     first analysis-phase entry-point with empty `after[]` (per
  *     architecture line 419 — phase-ordered tiebreaker).
@@ -417,20 +508,56 @@ function getRequiredSections(stepName: string): readonly string[] {
  *     fully satisfied by `state.lastSuccessfulStep`. Tiebreaker: phase
  *     order then name lexicographic (architecture line 469).
  *
- *   - Apply `args.epic`, `args.story`, `args.phase` filters BEFORE
- *     selection (empty-string flag values treated as "no filter" per
- *     Story 1.7 line 70 forward-dep).
+ *   - **Story 3.4 (epic AC line 783)**: apply `args.phase` →
+ *     `args.epic` → `args.story` filters in that order. Phase is a true
+ *     DAG-node attribute (`node.phase`); epic/story are v0.1 runner-tier
+ *     projections from `state.lastAttempted ?? state.lastSuccessfulStep`
+ *     (DAG nodes do NOT carry epic/story attribution at the seed level
+ *     per `src/dag/types.ts:60-68`; Story 6.x telemetry-driven enhancement
+ *     may extend the DAG node shape with `epic?: number` + `story?: string`
+ *     attribution, swapping the projection for a true node-attribute
+ *     check with no test-shape change).
  *   - Apply `args.includeOptional` / `args.noOptional` to filter
  *     `node.optional === true` candidates.
  *   - If no candidate after filtering → throw `ConfigError` with
  *     `hintOverride: "Run /bmad-next --list to see candidate steps;
  *     the current filter excludes all candidates."`.
+ *
+ * Forward-coupling:
+ *   - **Story 3.5** (`--persona`/`--include-optional`/`--no-optional`):
+ *     reuses the 4-arg signature; the next round of flag wiring.
+ *   - **Story 3.6** (`--explain` reasoning trace): owns the unmet-
+ *     prerequisite enumeration. Story 3.4 ships a SHORT pointer hint;
+ *     Story 3.6 enriches with the full diagnostic.
+ *   - **Story 3.7** (`--list` candidate enumeration): consumes
+ *     `isPreconditionMet` as the shared predicate; may refactor to
+ *     a shared helper module.
+ *   - **Story 6.x** (per-step config): extends DAG nodes with epic/story
+ *     attribution. Story 3.4's runner-tier projection becomes a true
+ *     node-attribute filter with no test-shape change.
  */
 function pickNextStep(
   state: State,
   dag: DagAdjacency,
   args: NextArgs,
+  log: LoggerFns,
 ): DagNode {
+  // Story 3.4 (epic AC line 784): warn on --step + scope flag combo.
+  // The warning fires ONCE at the very top of pickNextStep (before the
+  // explicit-`--step` branch returns) when --step is explicit AND any
+  // of (--epic, --story, --phase) is set with a non-empty value. Per
+  // FR54 / src/io/log.ts:20-21, the warning writes to stderr; AR9's
+  // stdout reservation for the dispatch JSON line is preserved.
+  const stepIsExplicit = args.step !== undefined && args.step !== "";
+  const epicIsSet = args.epic !== undefined && args.epic !== "";
+  const storyIsSet = args.story !== undefined && args.story !== "";
+  const phaseIsSet = args.phase !== undefined;
+  if (stepIsExplicit && (epicIsSet || storyIsSet || phaseIsSet)) {
+    log.warn(
+      "next: --step is explicit; --epic/--story/--phase scope flags are ignored.",
+    );
+  }
+
   // Explicit --step path (highest priority).
   if (args.step !== undefined && args.step !== "") {
     const node = dag.nodes.get(args.step);
@@ -439,6 +566,20 @@ function pickNextStep(
         `Unknown step: ${args.step}`,
         JSON.stringify({ step: args.step, available: [...dag.nodes.keys()] }),
         `Run /bmad-next --list to see candidate steps; "${args.step}" is not in the resolved DAG.`,
+      );
+    }
+    // Story 3.4 (epic AC line 780): verify preconditions BEFORE returning.
+    // The named step is dispatched only if its preconditions are met;
+    // otherwise throw `ConfigError` with the verbatim AC-line-780 hint.
+    if (!isPreconditionMet(node, state)) {
+      throw new ConfigError(
+        `Step ${args.step} is blocked by unmet preconditions`,
+        JSON.stringify({
+          step: args.step,
+          after: node.after,
+          lastSuccessfulStep: state.lastSuccessfulStep?.step ?? null,
+        }),
+        `Run /bmad-next --explain to see why ${args.step} is blocked.`,
       );
     }
     return node;
@@ -483,24 +624,80 @@ function pickNextStep(
     filtered = filtered.filter((n) => n.phase === args.phase);
   }
 
-  // Apply args.epic / args.story filters: v0.1 simple semantics — these
-  // filters narrow the candidate set when the runner-tier knows the
-  // story-level metadata. The DAG nodes do NOT carry epic/story
-  // attribution at the seed level (story attribution is project-level
-  // and lives in `_bmad-output/implementation-artifacts/<story-key>.md`
-  // frontmatter — Story 6.x telemetry enhancement). v0.1 ignores
-  // empty-string inputs ("no filter" per Story 1.7 line 70 forward-dep)
-  // and otherwise preserves the candidate set for now (a future Story
-  // 3.4 enhancement may cross-reference epic/story metadata).
+  // Story 3.4 (epic AC line 783): --epic / --story filter wiring.
+  //
+  // v0.1 conservative semantics: DAG nodes do NOT carry epic/story
+  // attribution at the seed level (per `src/dag/types.ts:60-68`; story
+  // attribution is project-level and lives in
+  // `_bmad-output/implementation-artifacts/<story-key>.md` frontmatter —
+  // Story 6.x telemetry enhancement). The runner-tier projection sources
+  // epic/story from `state.lastAttempted ?? state.lastSuccessfulStep`
+  // (the same projection convention `generate-spec.ts:172-177` uses) and
+  // rejects ALL candidates whose projected attribution does NOT match.
+  //
+  // When projection mismatches, `filtered` is set to `[]`; the existing
+  // throw at lines below fires with the existing hint
+  // `Run /bmad-next --list to see candidate steps; the current filter
+  // excludes all candidates.` (no new error class; no new hint string).
+  //
+  // Empty-string flag values are treated as "no filter" per Story 1.7
+  // line 70 forward-dep precedent.
+  //
+  // Story 6.x telemetry enhancement may extend DAG nodes with
+  // `epic?: number` + `story?: string` attribution; the filter
+  // expression then swaps to `n.epic === Number(args.epic)` with no
+  // test-shape change.
   if (args.epic !== undefined && args.epic !== "") {
-    // No epic-level attribution at the DAG node level in v0.1; preserved.
-    void args.epic;
+    const projectedEpic =
+      state.lastAttempted?.epic ?? state.lastSuccessfulStep?.epic ?? 0;
+    if (projectedEpic !== Number(args.epic)) {
+      filtered = [];
+    }
   }
   if (args.story !== undefined && args.story !== "") {
-    void args.story;
+    const projectedStory =
+      state.lastAttempted?.story ?? state.lastSuccessfulStep?.story ?? "0.0";
+    if (projectedStory !== args.story) {
+      filtered = [];
+    }
   }
 
   // Apply optional inclusion/exclusion.
+  //
+  // **Story 3.5 (epic AC lines 797-802)**: the 3-mode branch:
+  //   - `--no-optional` → exclude `node.optional === true` candidates
+  //     (epic AC lines 797-799).
+  //   - `--include-optional` → include optional candidates with normal
+  //     priority — the same phase-order + name-lexicographic tiebreaker
+  //     applies (epic AC lines 800-802).
+  //   - default (neither flag) → exclude optional candidates (Story 2.4
+  //     v0.1 conservative default; the user explicitly opts in via
+  //     `--include-optional` when they want the broader candidate set).
+  //
+  // **Default semantics divergence note**: the project-config prose at
+  // `.bmad-stepper/config.yaml execution.optionalSteps: include` (line 14)
+  // declares an "include by default" intent, but the runner does NOT
+  // consume the project config at runtime in v0.1 (Story 6.1 forward-dep).
+  // Runner-tier default is EXCLUDE — keeps the deterministic happy-path
+  // narrow. Story 6.x reconciles when the full config-loader lands.
+  //
+  // **Note** (Story 3.5 AC line 805): the project-config `failurePolicies`
+  // defaults are forward-deferred to Story 6.x (the top-level config block
+  // at architecture §line 780 is declared but NOT yet consumed at runtime).
+  // v0.1 ships the optional-toggle semantics; the per-step failure-policy
+  // block (`retry` / `skip` / `route-to-fixer` / `escalate`) is Epic 5 +
+  // Story 6.1 scope.
+  //
+  // **Note** (Story 3.5): cross-validation between `--include-optional`
+  // and `--no-optional` happens BEFORE this branch in `runNext`'s Step 2
+  // via `enforceMutuallyExclusiveFlags(args)`; both-true is impossible
+  // here (the function would have thrown ConfigError already).
+  //
+  // **Note** (Story 3.5 + Story 3.4 carry-over): the explicit `--step`
+  // branch above returns BEFORE this filter runs. So `--step <optional-step>`
+  // dispatches the explicit step EVEN with `--no-optional` — the user's
+  // explicit `--step` intent supersedes the toggle. This is intentional
+  // per Story 3.5 §v0.1 Design Decisions.
   if (args.noOptional) {
     filtered = filtered.filter((n) => !n.optional);
   } else if (!args.includeOptional) {
@@ -681,6 +878,427 @@ function resolveResumeTarget(
   };
 }
 
+// ─── Story 3.6: --explain reasoning-trace helpers ─────────────────────────
+//
+// Story 3.6 replaces the Story 2.4 placeholder explain short-circuit with a
+// structured 5-component multi-line "report" message: target step name, the
+// chain of completed predecessors, the unmet preconditions for alternative
+// candidates (sorted by closeness-to-ready), the resolved persona (with tier
+// label), and a one-sentence reasoning summary in the format from PRD
+// Journey 1.
+//
+// AR9 invariant preserved: the `report` action's `message` is a `\n`-joined
+// multi-line string; the AR9 JSON line shape stays single-line.
+// Read-only / lock-free posture preserved: NO state writes, NO lock acquisition.
+//
+// v0.1 design decisions inlined per Story 3.6 §v0.1 Design Decisions:
+//   1. Predecessor chain v0.1 = [state.lastSuccessfulStep?.step] (single
+//      element). Story 6.x replaces with full transitive walk via
+//      `dag.edgesIn` when `state.completedSteps[]` lands on the schema.
+//   2. Alternatives capped at MAX_ALTERNATIVES = 5; truncation tail emits
+//      "(... <N> more candidates; run /bmad-next --list to see all)".
+//   3. Alternatives sorted by `count` ASCENDING → phase-order →
+//      name-lexicographic ("closest to ready" semantic).
+//   4. `resolvePersonaWithTier` is a SIBLING helper colocated with
+//      `resolvePersona`; the existing dispatch path stays unchanged.
+//   5. Tier 0 = "--persona override"; bypasses the 4-tier resolution per
+//      Story 3.5's design decision.
+//   6. Reasoning sentence v0.1 = three-slot semicolon-separated narrative
+//      ("Reasoning: <slot-1>; <slot-2>; <slot-3>."). Story 6.x telemetry
+//      adds the timestamp slot + artifact-existence slot.
+//   7. All-done detection v0.1 = `lastSuccessfulStep` is `retro`-phase +
+//      zero candidates with met preconditions. Story 6.x replaces with
+//      `dag.nodes.size === state.completedSteps.length`.
+//   8. Persona-resolution failure within explain → graceful message
+//      surfaces the AC-2 hint inside the explain narrative; the explain
+//      branch returns `report` with `exitCode: 0` (NOT halt). The
+//      diagnostic flag should always emit useful information.
+//   9. Filter-exhaustion within explain → graceful surface of alternatives.
+
+/**
+ * Maximum number of alternative candidates rendered in the explain output
+ * before truncation. Bounded explain output for 100 epics × 1000 stories
+ * projects (NFR-Sc1 — Story 3.7's `--list` is the unbounded enumeration
+ * surface). The user can always run `--list` for the full set.
+ */
+const MAX_ALTERNATIVES = 5;
+
+/**
+ * Per-alternative candidate shape. `count` is the cardinality of `unmet`
+ * (kept as a separate field for the closeness-to-ready sort).
+ */
+interface AlternativeCandidate {
+  readonly node: DagNode;
+  readonly unmet: readonly string[];
+  readonly count: number;
+}
+
+/**
+ * v0.1 conservative predecessor-chain helper. Since `state.completedSteps[]`
+ * is NOT in `StateV1Schema` (per `src/schemas/state.ts:92-119`), the
+ * predecessor chain in v0.1 is a single-element list of the most-recently-
+ * completed step. The full transitive walk via `dag.edgesIn` is forward-
+ * deferred to Story 6.x telemetry-driven enhancement.
+ */
+function buildPredecessorChain(state: State): string[] {
+  const last = state.lastSuccessfulStep?.step;
+  return last !== undefined ? [last] : [];
+}
+
+/**
+ * Compute the per-prerequisite unmet list for an alternative candidate.
+ * Mirrors `isPreconditionMet`'s per-prerequisite check but enumerates
+ * the unmet names rather than returning a boolean. v0.1 conservative
+ * rule: a prerequisite `p` is met when `p === state.lastSuccessfulStep?.step`.
+ */
+function unmetPrereqsForCandidate(
+  node: DagNode,
+  state: State,
+): readonly string[] {
+  const lastStepName = state.lastSuccessfulStep?.step;
+  const unmet: string[] = [];
+  for (const p of node.after) {
+    if (lastStepName === undefined || p !== lastStepName) {
+      unmet.push(p);
+    }
+  }
+  return unmet;
+}
+
+/**
+ * Compute the alternative-candidate list per AC line 817.
+ *
+ * Iterates EVERY non-target DAG node; for each candidate computes the
+ * unmet-preconditions list; sorts by count ASCENDING (fewest unmet first
+ * → "closest to ready"), then by phase-order, then by name lexicographic.
+ *
+ * Optional candidates respect the `--include-optional` / `--no-optional`
+ * toggles per Story 3.5's filter logic — the alternatives list mirrors
+ * `pickNextStep`'s candidate set under the same toggles.
+ *
+ * **Note**: the alternatives set is NOT scope-filtered (`--epic`/`--story`/
+ * `--phase`); v0.1 design decision per Story 3.6 §What this story DOES NOT
+ * do — alternatives use the unfiltered set so the user can see "what else
+ * could have been picked".
+ *
+ * Capped at `MAX_ALTERNATIVES = 5`; truncation tail emits "(... <N> more
+ * candidates; run /bmad-next --list to see all)".
+ */
+function computeAlternatives(
+  state: State,
+  dag: DagAdjacency,
+  args: NextArgs,
+  targetName: string | null,
+): readonly AlternativeCandidate[] {
+  const lastStepName = state.lastSuccessfulStep?.step;
+  const candidates: AlternativeCandidate[] = [];
+  for (const node of dag.nodes.values()) {
+    // Skip the target step itself (it's the dispatch focus, not an alternative).
+    if (targetName !== null && node.name === targetName) continue;
+    // Skip the last successful step itself (cannot re-pick).
+    if (node.name === lastStepName) continue;
+    // Story 3.5: respect --no-optional / --include-optional toggle. Default
+    // (neither flag) excludes optional candidates per Story 3.5's runner-tier
+    // default-EXCLUDE design decision.
+    if (args.noOptional && node.optional) continue;
+    if (!args.includeOptional && !args.noOptional && node.optional) continue;
+    const unmet = unmetPrereqsForCandidate(node, state);
+    candidates.push({
+      node,
+      unmet,
+      count: unmet.length,
+    });
+  }
+  // Sort: count ASC → phase-order → name lexicographic.
+  candidates.sort((a, b) => {
+    if (a.count !== b.count) return a.count - b.count;
+    const pa = PHASE_ORDER.get(a.node.phase) ?? 999;
+    const pb = PHASE_ORDER.get(b.node.phase) ?? 999;
+    if (pa !== pb) return pa - pb;
+    return a.node.name.localeCompare(b.node.name);
+  });
+  return candidates;
+}
+
+/**
+ * Format the alternative-candidate list as the per-line explain output.
+ *
+ * Output format:
+ *   - count >= 1: `<step-name> — needs: <comma-separated-unmet> (count: <N>)`
+ *   - count == 0: `<step-name> — preconditions met`
+ *   - empty list: `Alternative candidates: (none)`
+ *   - truncated:  appends `(... <N> more candidates; run /bmad-next --list to see all)`
+ */
+function formatAlternativesLines(
+  candidates: readonly AlternativeCandidate[],
+): string[] {
+  if (candidates.length === 0) {
+    return ["Alternative candidates: (none)"];
+  }
+  const lines: string[] = ["Alternative candidates:"];
+  const visible = candidates.slice(0, MAX_ALTERNATIVES);
+  for (const c of visible) {
+    if (c.count === 0) {
+      lines.push(`  - ${c.node.name} — preconditions met`);
+    } else {
+      lines.push(
+        `  - ${c.node.name} — needs: ${c.unmet.join(", ")} (count: ${c.count})`,
+      );
+    }
+  }
+  if (candidates.length > MAX_ALTERNATIVES) {
+    const remaining = candidates.length - MAX_ALTERNATIVES;
+    lines.push(
+      `  (... ${remaining} more candidates; run /bmad-next --list to see all)`,
+    );
+  }
+  return lines;
+}
+
+/**
+ * Story 3.7: format a single candidate line for the `--list` enumeration
+ * per epic AC line 833.
+ *
+ * Output format:
+ *   `<step-name> — <phase> — preconditions: [<met>/<unmet>] — optional: <yes/no>`
+ *
+ * Components:
+ *   1. `<step-name>` — `node.name` verbatim.
+ *   2. `<phase>` — `node.phase` verbatim (analysis|planning|solutioning|
+ *      implementation|retro).
+ *   3. `preconditions: [<met>/<unmet>]` — count-pair summary; `<met>` is
+ *      the count of `node.after[]` entries satisfied per the v0.1
+ *      conservative `isPreconditionMet`-style per-prerequisite check
+ *      (`p === state.lastSuccessfulStep?.step`); `<unmet>` is the
+ *      complement (`node.after.length - <met>`).
+ *   4. `optional: <yes/no>` — literal `yes` or `no` based on
+ *      `node.optional`. Always renders both states (in contrast to the
+ *      Story 2.4 placeholder which only suffixed `, optional` when
+ *      true).
+ *
+ * Pure / synchronous; no I/O.
+ *
+ * Forward-coupling:
+ *   - Story 6.x's `state.completedSteps[]` schema extension enables a
+ *     richer set-membership check (`completed.has(p)`); the line format
+ *     stays the same. Forward-compatible.
+ *
+ * The em-dash separator (` — ` U+2014) is shared with Story 3.6's
+ * `formatAlternativesLines` for visual consistency.
+ */
+function formatCandidateLine(node: DagNode, state: State): string {
+  const lastStepName = state.lastSuccessfulStep?.step;
+  let met = 0;
+  for (const p of node.after) {
+    if (p === lastStepName) met += 1;
+  }
+  const unmet = node.after.length - met;
+  const optional = node.optional ? "yes" : "no";
+  return `${node.name} — ${node.phase} — preconditions: [${met}/${unmet}] — optional: ${optional}`;
+}
+
+/**
+ * v0.1 conservative all-done detector. Since `state.completedSteps[]` is
+ * NOT in `StateV1Schema`, the proxy v0.1 detector is:
+ *
+ *   - If `state.lastSuccessfulStep === undefined`, return `false` (fresh
+ *     project — never all-done).
+ *   - If `lastSuccessfulStep.phase` is `retro` (the highest-phase-order
+ *     terminal phase) AND no candidate (computed under
+ *     `args.includeOptional` semantics — i.e., as if `--include-optional`
+ *     were set) has its `after[]` met by `lastSuccessfulStep`, return `true`.
+ *   - Otherwise, return `false`.
+ *
+ * Story 6.x replaces with `dag.nodes.size === state.completedSteps.length`
+ * when the schema extension lands.
+ */
+function isProjectAllDone(state: State, dag: DagAdjacency): boolean {
+  const last = state.lastSuccessfulStep;
+  if (last === undefined || last === null) return false;
+  // Look up the lastSuccessfulStep node in the DAG to check its phase.
+  const lastNode = dag.nodes.get(last.step);
+  if (lastNode === undefined) return false;
+  if (lastNode.phase !== "retro") return false;
+  // Compute the candidate set IGNORING --no-optional (i.e., as if
+  // --include-optional were set). Any node whose `after[]` includes the
+  // last step is a candidate; any candidate at all defeats the all-done
+  // detector.
+  for (const node of dag.nodes.values()) {
+    if (node.name === last.step) continue;
+    if (node.after.includes(last.step)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Format the resolved-persona explain line per AC line 817.
+ *
+ *   - Tier 0 case: `Resolved persona: <name> (Tier 0: --persona override; bypassed 4-tier resolution)`
+ *   - Single-persona Tier 1-4: `Resolved persona: <name> (Tier <N>: <tierLabel>)`
+ *   - Multi-persona case: `Resolved persona: <first> (multi-persona Tier <N>; sequential dispatch deferred to Stories 4.1 + 5.*)`
+ *   - Resolution-failure (AC-2 throw caught by surrounding try/catch):
+ *     `Resolved persona: (unresolvable — see hint: <ac2NoPersonaHint>)`
+ */
+function formatPersonaLine(
+  personaInfo: ResolvedPersonaWithTier | null,
+  personaErrorHint: string | null,
+): string {
+  if (personaInfo === null) {
+    if (personaErrorHint !== null) {
+      return `Resolved persona: (unresolvable — see hint: ${personaErrorHint})`;
+    }
+    return "Resolved persona: (unresolvable)";
+  }
+  if (personaInfo.tier === 0) {
+    return `Resolved persona: ${String(personaInfo.persona)} (Tier 0: ${personaInfo.tierLabel}; bypassed 4-tier resolution)`;
+  }
+  if (Array.isArray(personaInfo.persona)) {
+    const arr = personaInfo.persona as readonly string[];
+    const first = arr.length > 0 ? arr[0] : "(empty)";
+    return `Resolved persona: ${first} (multi-persona Tier ${personaInfo.tier}; sequential dispatch deferred to Stories 4.1 + 5.*)`;
+  }
+  return `Resolved persona: ${String(personaInfo.persona)} (Tier ${personaInfo.tier}: ${personaInfo.tierLabel})`;
+}
+
+/**
+ * Format the one-sentence PRD-Journey-1 reasoning summary per AC line 817.
+ *
+ * Three-slot semicolon-separated narrative:
+ *   1. Predecessor reference: "<last-successful-step> completed" OR
+ *      "fresh project (no prior steps)".
+ *   2. Selection reason: "explicit --step override (<step>)" /
+ *      "explicit --resume target (<step>)" /
+ *      "first analysis-phase entry-point on fresh project" /
+ *      "next after <last-successful-step>" /
+ *      "no target step matches the current filters".
+ *   3. Persona-naming slot: "persona resolved to <name> (Tier <N>: <label>)"
+ *      OR "persona unresolvable" when the AC-2 throw fires.
+ *
+ * Sentence template: `Reasoning: <slot-1>; <slot-2>; <slot-3>.`
+ *
+ * v0.1 → Story 6.x evolution: the timestamp slot ("completed on 2026-04-20")
+ * and the artifact-existence slot ("no <artifact> exists yet") are NOT in
+ * v0.1 (Story 6.x telemetry adds the run-log read).
+ */
+function formatReasoningSummary(input: {
+  targetNode: DagNode | null;
+  state: State;
+  personaInfo: ResolvedPersonaWithTier | null;
+  args: NextArgs;
+}): string {
+  const { targetNode, state, personaInfo, args } = input;
+  const last = state.lastSuccessfulStep?.step;
+
+  // Slot 1: predecessor reference.
+  const slot1 =
+    last !== undefined ? `${last} completed` : "fresh project (no prior steps)";
+
+  // Slot 2: selection reason.
+  let slot2: string;
+  if (args.step !== undefined && args.step !== "") {
+    slot2 = `explicit --step override (${args.step})`;
+  } else if (args.resume) {
+    const resumeStep = state.lastAttempted?.step ?? "(none)";
+    slot2 = `explicit --resume target (${resumeStep})`;
+  } else if (targetNode === null) {
+    slot2 = "no target step matches the current filters";
+  } else if (last === undefined) {
+    slot2 = "first analysis-phase entry-point on fresh project";
+  } else {
+    slot2 = `next after ${last}`;
+  }
+
+  // Slot 3: persona-naming slot.
+  let slot3: string;
+  if (personaInfo === null) {
+    slot3 = "persona unresolvable";
+  } else if (personaInfo.tier === 0) {
+    slot3 = `persona resolved to ${String(personaInfo.persona)} (Tier 0: --persona override)`;
+  } else if (Array.isArray(personaInfo.persona)) {
+    const arr = personaInfo.persona as readonly string[];
+    const first = arr.length > 0 ? arr[0] : "(empty)";
+    slot3 = `persona resolved to ${first} (multi-persona Tier ${personaInfo.tier}: ${personaInfo.tierLabel})`;
+  } else {
+    slot3 = `persona resolved to ${String(personaInfo.persona)} (Tier ${personaInfo.tier}: ${personaInfo.tierLabel})`;
+  }
+
+  return `Reasoning: ${slot1}; ${slot2}; ${slot3}.`;
+}
+
+/**
+ * Compose the full multi-line explain message per AC line 817 — the
+ * 5-component narrative:
+ *   1. Next step name (or graceful surface when pickNextStep throws)
+ *   2. Chain of completed predecessors
+ *   3. Alternative candidates (sorted by closeness-to-ready)
+ *   4. Resolved persona (with tier label)
+ *   5. One-sentence reasoning summary in PRD Journey 1 format
+ *
+ * The output is a `\n`-joined multi-line string; the AR9 JSON-line `message`
+ * field carries it. Callers `grep` it via `jq -r '.message'` or by reading
+ * the on-disk run-log.
+ */
+function formatExplainMessage(input: {
+  targetNode: DagNode | null;
+  pickError: string | null;
+  state: State;
+  alternatives: readonly AlternativeCandidate[];
+  personaInfo: ResolvedPersonaWithTier | null;
+  personaErrorHint: string | null;
+  args: NextArgs;
+}): string {
+  const {
+    targetNode,
+    pickError,
+    state,
+    alternatives,
+    personaInfo,
+    personaErrorHint,
+    args,
+  } = input;
+
+  const lines: string[] = [];
+
+  // Component 1: target step name.
+  if (targetNode !== null) {
+    lines.push(`Next step: ${targetNode.name}`);
+  } else {
+    lines.push(
+      `Next step: (no target step matches; current filter excludes all candidates)${pickError !== null ? ` — ${pickError}` : ""}`,
+    );
+  }
+
+  // Component 2: chain of completed predecessors.
+  const chain = buildPredecessorChain(state);
+  if (chain.length === 0) {
+    lines.push("Chain of completed predecessors: (none — fresh project)");
+  } else {
+    lines.push(`Chain of completed predecessors: ${chain.join(", ")}`);
+  }
+
+  // Component 3: alternative candidates.
+  for (const altLine of formatAlternativesLines(alternatives)) {
+    lines.push(altLine);
+  }
+
+  // Component 4: resolved persona with tier label.
+  lines.push(formatPersonaLine(personaInfo, personaErrorHint));
+
+  // Component 5: one-sentence reasoning summary.
+  lines.push(
+    formatReasoningSummary({
+      targetNode,
+      state,
+      personaInfo,
+      args,
+    }),
+  );
+
+  return lines.join("\n");
+}
+
 // ─── Public function ──────────────────────────────────────────────────────
 
 /**
@@ -695,16 +1313,22 @@ function resolveResumeTarget(
  *      failure → halt with exitCode 2 (FR53 configuration error).
  *   2. Cross-validate flags (Story 1.7 forward-dep): enforce
  *      `--include-optional` ⊕ `--no-optional`.
- *   3. Forward-deferral guards (`--upgrade`, `--watch`, `--force-unlock`)
- *      → halt with explicit hint pointing at the owning story.
+ *   3. Forward-deferral guards (`--upgrade`, `--force-unlock`) → halt
+ *      with explicit hint pointing at the owning story.
  *   4. `cleanStagingOrphans()` at Stepper start (best-effort —
  *      failures logged to stderr but do NOT propagate).
  *   5. `--doctor` short-circuit: delegate to `runDoctor` (Story 1.12)
  *      and re-emit the doctor result as `action: "report"`.
- *   6. Read-only flag handling (`--export-state` → Story 3.10 stub;
- *      `--diff-state` → Story 3.8 stub; `--list` → v0.1 candidate
- *      enumeration; `--explain` → Story 3.6 stub; `--dry-run` → builds
- *      dispatch spec but emits `action: "report"`).
+ *   5b. `--watch` short-circuit (Story 3.9): delegate to
+ *      `watchMostRecentRunLog` for the live tail; raw transcript
+ *      content streams to stdout DIRECTLY (AR9 SPECIAL CASE per
+ *      FR42 + FR54).
+ *   6. Read-only flag handling (`--export-state` → Story 3.8 schema-
+ *      versioned export; `--diff-state` → Story 3.8 divergence report;
+ *      `--list` → v0.1 candidate enumeration; `--explain` → Story 3.6
+ *      reasoning trace; `--dry-run` → Story 3.3 dispatch-spec preview
+ *      purely in-memory; emits `action: "report"` with byte-zero
+ *      filesystem mutation).
  *   7. Dispatch happy path: read state via `loadStateUnlocked`, build
  *      DAG, compute next step, resolve persona, build dispatch spec,
  *      emit `action: "dispatch"`.
@@ -730,17 +1354,14 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
     // Step 2: cross-validate flags (Story 1.7 forward-dep closure).
     enforceMutuallyExclusiveFlags(args);
 
-    // Step 3: forward-deferral guards.
+    // Step 3: forward-deferral guards. Story 3.9 removes the `--watch`
+    // entry from this block — the streaming-mode short-circuit is now
+    // handled in a new position between `--doctor` (Step 5) and
+    // `--export-state` (Step 6 first branch).
     if (args.upgrade) {
       return haltWithHint(
         1,
         "Run /bmad-next --doctor to verify your install. The --upgrade flow is implemented in Story 6.9 (Epic 6).",
-      );
-    }
-    if (args.watch) {
-      return haltWithHint(
-        1,
-        "Run /bmad-next --doctor instead; --watch is implemented in Story 3.9 (Epic 3).",
       );
     }
     if (args.forceUnlock) {
@@ -751,19 +1372,35 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
     }
 
     // Step 4: orphan staging cleanup (best-effort; Story 2.2 carry-over).
-    try {
-      const cleanup = await cleanStagingOrphans({
-        stagingRoot: opts?.stagingRoot,
-      });
-      if (cleanup.removedCount > 0) {
+    //
+    // Story 3.3 (AC line 768 strictness): skip on `--dry-run`. Strictly,
+    // `cleanStagingOrphans` is a maintenance write (deletion of orphan
+    // staging dirs older than 24h per Story 2.2's housekeeping contract)
+    // — not a dispatch write. AC line 766 targets dispatch writes
+    // (`staging/<run-id>/`, `state.yaml.tmp`, lock acquisition); AC line
+    // 768 says "no filesystem writes occur during dry-run". The integration
+    // test at `src/integration/dry-run-no-writes.test.ts` snapshots the
+    // tmpdir before + after `--dry-run` and asserts byte-identical
+    // inventory. On a fixture with stale orphan staging dirs, the cleanup
+    // would remove them and the snapshot would diverge. Gating the
+    // cleanup on `!args.dryRun` keeps the integration test deterministic
+    // and respects the AC-line-768 wording. On a clean fixture the gate
+    // is a no-op.
+    if (!args.dryRun) {
+      try {
+        const cleanup = await cleanStagingOrphans({
+          stagingRoot: opts?.stagingRoot,
+        });
+        if (cleanup.removedCount > 0) {
+          log.info(
+            `next: cleaned ${cleanup.removedCount} orphan staging dir(s) at start`,
+          );
+        }
+      } catch (err) {
         log.info(
-          `next: cleaned ${cleanup.removedCount} orphan staging dir(s) at start`,
+          `next: orphan staging cleanup failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
         );
       }
-    } catch (err) {
-      log.info(
-        `next: orphan staging cleanup failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
-      );
     }
 
     // Step 5: --doctor delegation (Story 1.12 reuse).
@@ -785,43 +1422,125 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       };
     }
 
+    // Step 5b: Story 3.9 --watch live-tail short-circuit. Sits between
+    // --doctor (above) and --export-state (below). Replaces the Story 2.4
+    // forward-deferral guard previously in Step 3.
+    //
+    // SPECIAL CASE per FR42 + FR54 + architecture §line 524 + §line 862:
+    // BYPASS the AR9 wrapper; raw transcript content streams to stdout
+    // DIRECTLY. The runner returns a structural `report` action for
+    // testability; the `import.meta.main` block detects the `--watch`
+    // flag in argv and SKIPS `emitDispatchAction`. The watcher itself
+    // emits raw lines via `process.stdout.write` from inside its loop.
+    //
+    // Mirrors Story 3.8's `--export-state` carve-out — the SECOND
+    // documented exception to AR9's single-JSON-line invariant. Every
+    // OTHER flag preserves AR9 strictly.
+    //
+    // Lock-free per AR8: ZERO interaction with `src/lock/`; the watcher
+    // does NOT read state.yaml; ZERO state interaction.
+    if (args.watch) {
+      const watchResult = await watchMostRecentRunLog({
+        ...(opts?.watchRunsRoot !== undefined
+          ? { runsRoot: opts.watchRunsRoot }
+          : {}),
+        ...(opts?.watchPollMs !== undefined
+          ? { pollMs: opts.watchPollMs }
+          : {}),
+        ...(opts?.watchSignal !== undefined
+          ? { signal: opts.watchSignal }
+          : {}),
+      });
+      const message =
+        watchResult.status === "no-runs"
+          ? "no runs to watch (fresh project)"
+          : `watch session ended (${watchResult.filePath})`;
+      return reportWithMessage(message);
+    }
+
     // Step 6: read-only flag handling (route order:
-    // --export-state → --diff-state → --explain → --list → --dry-run
-    // → fall-through to dispatch path).
+    // --doctor → --watch → --export-state → --diff-state → --explain
+    // → --list → --dry-run → fall-through to dispatch path).
 
     if (args.exportState) {
-      const statePath =
-        opts?.statePath ??
-        path.join(
-          opts?.projectRoot ?? process.cwd(),
-          "_bmad-output/.stepper/state.yaml",
-        );
-      return reportWithMessage(
-        `JSON export is implemented in Story 3.10 (Epic 3); current state path: ${statePath}`,
-      );
+      // Story 3.8 (epic AC lines 848-852): replace the Story 2.4 placeholder
+      // with the schema-versioned 7-field JSON export per FR4 + FR54.
+      //
+      // Build the DAG so `currentPhase` can be resolved via the `dagNodePhase`
+      // callback (graceful: `null` when the lookup misses or `lastSuccessfulStep`
+      // is null). The DAG is cheap (Story 1.10 minimum-viable seed-only graph
+      // when no skill names provided); lock-free per AR8.
+      //
+      // SPECIAL CASE per FR54 + architecture §line 524 + §line 862: the
+      // `--export-state` JSON body goes to stdout DIRECTLY (NOT wrapped in the
+      // AR9 line). The `import.meta.main` block at the bottom of this file
+      // detects `args.exportState === true` and emits `result.action.message`
+      // directly via `process.stdout.write`. The `runNext` function STILL
+      // returns `action: "report"` for testability — tests inspect
+      // `result.action.message` and `JSON.parse` it against `StateExportV1Schema`.
+      const dag = await build({
+        skillNames: opts?.skillNames ?? [],
+        ...(opts?.projectRoot !== undefined
+          ? { projectRoot: opts.projectRoot }
+          : {}),
+        ...(opts?.pluginDir !== undefined ? { pluginDir: opts.pluginDir } : {}),
+        ...(opts?.overridesPath !== undefined
+          ? { overridesPath: opts.overridesPath }
+          : {}),
+      });
+      const exported = await exportState({
+        ...(opts?.statePath !== undefined ? { statePath: opts.statePath } : {}),
+        dagNodePhase: (name) => dag.nodes.get(name)?.phase ?? null,
+      });
+      // Compact single-line JSON body — the AC-line-852 `jq '.currentPhase'`
+      // workflow expects a parseable JSON line on stdout.
+      return reportWithMessage(JSON.stringify(exported));
     }
 
     if (args.diffState) {
-      const statePath =
-        opts?.statePath ??
-        path.join(
-          opts?.projectRoot ?? process.cwd(),
-          "_bmad-output/.stepper/state.yaml",
-        );
-      return reportWithMessage(
-        `State diff is implemented in Story 3.8 (Epic 3); current state path: ${statePath}`,
-      );
+      // Story 3.8 (epic AC line 847): replace the Story 2.4 placeholder with
+      // the cache-vs-files-of-truth divergence report per FR3 + FR52.
+      //
+      // The diffState helper composes loadStateUnlocked + recomputeStateUnlocked
+      // + computeDivergences + formatHumanReadable. Multi-line message inside
+      // the AR9 `report` action's `message` field. Mirrors Story 3.7 --list +
+      // Story 3.6 --explain.
+      //
+      // Lock-free per AR8: ZERO interaction with `src/lock/`; both helpers use
+      // the unlocked variants. The AR41 boundary check at run.test.ts:606-638
+      // continues to pass.
+      const report = await diffState({
+        ...(opts?.statePath !== undefined ? { statePath: opts.statePath } : {}),
+        ...(opts?.projectRoot !== undefined
+          ? { projectRoot: opts.projectRoot }
+          : {}),
+      });
+      return reportWithMessage(report.humanReadable);
     }
 
     if (args.explain) {
-      // For --explain we still want to surface the candidate step name
-      // when computable; fall through to step computation but emit a
-      // report instead of a dispatch.
+      // Story 3.6: replace the Story 2.4 placeholder with the structured
+      // 5-component reasoning trace per epic AC lines 815-821.
       //
-      // Story 3.2: when `args.resume === true`, target `state.lastAttempted`
-      // via `resolveResumeTarget` instead of `pickNextStep`. This surfaces
-      // the resume target in the v0.1 explain stub; Story 3.6 owns the
-      // full reasoning trace (with persona path, model, budget, etc.).
+      // The branch composes the following:
+      //   1. Load state + build DAG (read-only / lock-free per AR8).
+      //   2. All-done detector: if every DAG node is in the completed set
+      //      (v0.1 proxy via lastSuccessfulStep.phase === "retro" + zero
+      //      candidates), emit the verbatim AC-line-820 hint and return.
+      //   3. Compute the target step via pickNextStep (or resolveResumeTarget
+      //      when args.resume === true). If it throws filter-exhaustion, the
+      //      surrounding try/catch surfaces the error narratively (NOT halt).
+      //   4. Compute the alternatives list (sorted by closeness-to-ready).
+      //   5. Resolve persona-with-tier (graceful: AC-2 throws caught).
+      //   6. Format the multi-line message via formatExplainMessage.
+      //   7. Return report with exitCode 0.
+      //
+      // AR9 invariant: the `report` action's `message` is a `\n`-joined
+      // multi-line string; the AR9 JSON line on stdout stays single-line.
+      // FR54: diagnostic warns/info route to stderr; the explain branch
+      // emits ZERO new stderr writes (existing pickFirstPersona warns are
+      // PRESERVED on the regular dispatch path; the explain branch reaches
+      // resolvePersonaWithTier directly without invoking pickFirstPersona).
       const state = await loadStateUnlocked({ statePath: opts?.statePath });
       const dag = await build({
         skillNames: opts?.skillNames ?? [],
@@ -829,21 +1548,94 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         pluginDir: opts?.pluginDir,
         overridesPath: opts?.overridesPath,
       });
-      let nextHint = "(none — DAG empty or filters exclude all candidates)";
-      try {
-        const node = args.resume
-          ? resolveResumeTarget(state, dag).node
-          : pickNextStep(state, dag, args);
-        nextHint = node.name;
-      } catch {
-        // Fall through with the empty-candidate hint.
+
+      // All-done branch (AC lines 818-820). Verbatim AC-line-820 hint.
+      // Byte-identical: period after "complete.", period after "steps.",
+      // leading "/" before "bmad-next".
+      if (isProjectAllDone(state, dag)) {
+        return reportWithMessage(
+          "All BMAD steps for this project are complete. See /bmad-next --list to inspect remaining optional or unsatisfied steps.",
+        );
       }
-      return reportWithMessage(
-        `Reasoning trace is implemented in Story 3.6 (Epic 3); current next step: ${nextHint}`,
+
+      // Compute the target step (graceful: catch filter-exhaustion +
+      // resume-resolution throws).
+      let targetNode: DagNode | null = null;
+      let pickError: string | null = null;
+      try {
+        targetNode = args.resume
+          ? resolveResumeTarget(state, dag).node
+          : pickNextStep(state, dag, args, log);
+      } catch (err) {
+        targetNode = null;
+        pickError =
+          err instanceof StepperError
+            ? err.actionableHint
+            : err instanceof Error
+              ? err.message
+              : String(err);
+      }
+
+      // Compute the alternatives list (excludes target; sorted by
+      // closeness-to-ready ascending).
+      const alternatives = computeAlternatives(
+        state,
+        dag,
+        args,
+        targetNode?.name ?? null,
       );
+
+      // Resolve persona-with-tier (graceful: AC-2 throws caught and
+      // rendered inside the explain message; the explain branch returns
+      // exitCode: 0 — diagnostic-not-halt).
+      let personaInfo: ResolvedPersonaWithTier | null = null;
+      let personaErrorHint: string | null = null;
+      if (targetNode !== null) {
+        try {
+          personaInfo = await resolvePersonaWithTier({
+            stepName: targetNode.name,
+            ...(args.persona !== undefined
+              ? { personaOverride: args.persona }
+              : {}),
+            pluginDir: opts?.pluginDir,
+            projectRoot: opts?.projectRoot,
+            configPath: opts?.configPath,
+            bmadConfigPath: opts?.bmadConfigPath,
+          });
+        } catch (err) {
+          personaInfo = null;
+          personaErrorHint =
+            err instanceof StepperError
+              ? err.actionableHint
+              : err instanceof Error
+                ? err.message
+                : null;
+        }
+      }
+
+      // Build the multi-line message (5 components per AC line 817).
+      const message = formatExplainMessage({
+        targetNode,
+        pickError,
+        state,
+        alternatives,
+        personaInfo,
+        personaErrorHint,
+        args,
+      });
+
+      return reportWithMessage(message);
     }
 
     if (args.list) {
+      // Story 3.7 (epic AC lines 833-835): replace the Story 2.4
+      // placeholder per-line format with the canonical 4-component line
+      // `<step-name> — <phase> — preconditions: [<met>/<unmet>] — optional: <yes/no>`,
+      // sorted by phase order then name lexicographic. PRESERVES the
+      // surrounding short-circuit position + the Story 3.5 optional-toggle
+      // filter; ADDS the `--phase` filter (Story 3.4 carry-over for
+      // consistency with `pickNextStep`); ADDS the empty-candidate-set
+      // hint emission. Read-only / lock-free per AR8.
       const state = await loadStateUnlocked({ statePath: opts?.statePath });
       const dag = await build({
         skillNames: opts?.skillNames ?? [],
@@ -852,7 +1644,8 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         overridesPath: opts?.overridesPath,
       });
       const lastStepName = state.lastSuccessfulStep?.step;
-      const lines: string[] = ["Candidate next steps:"];
+      // Collect the candidate set (existing filter logic).
+      const candidates: DagNode[] = [];
       for (const node of dag.nodes.values()) {
         if (node.name === lastStepName) continue;
         // Apply same selection model as pickNextStep:
@@ -865,13 +1658,42 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
           satisfied = node.after.includes(lastStepName);
         }
         if (!satisfied) continue;
+        // **Story 3.5 (epic AC lines 797-802)**: the `--list` short-circuit
+        // applies the same 3-mode optional-toggle filter as `pickNextStep`
+        // for consistency (the candidate enumeration must match the next-
+        // step selection contract). PRESERVED verbatim from Story 3.5.
         if (!args.includeOptional && !args.noOptional && node.optional) {
           continue;
         }
         if (args.noOptional && node.optional) continue;
-        lines.push(
-          `  - ${node.name} (phase: ${node.phase}${node.optional ? ", optional" : ""})`,
-        );
+        // **Story 3.7 (Story 3.4 carry-over)**: apply the `--phase` filter
+        // for consistency with `pickNextStep` (a candidate excluded by
+        // `--phase planning` from `pickNextStep` is also excluded from
+        // `--list --phase planning`). `--epic` / `--story` runner-tier
+        // projections are NOT applied per v0.1 conservative scope (Story
+        // 6.x revisits when DAG nodes gain epic/story attribution).
+        if (args.phase !== undefined && node.phase !== args.phase) continue;
+        candidates.push(node);
+      }
+      // **Story 3.7 (epic AC line 833)**: sort by phase-order then name
+      // lexicographic. Reproducibility (AC line 834) is inherited from
+      // upstream DAG-build determinism + this deterministic sort
+      // comparator.
+      candidates.sort((a, b) => {
+        const pa = PHASE_ORDER.get(a.phase) ?? 999;
+        const pb = PHASE_ORDER.get(b.phase) ?? 999;
+        if (pa !== pb) return pa - pb;
+        return a.name.localeCompare(b.name);
+      });
+      // **Story 3.7 (epic AC line 833)**: emit the canonical 4-component
+      // per-line format via `formatCandidateLine`. Empty-candidate-set hint
+      // is emitted INSIDE the message (the header is always present).
+      const lines: string[] = ["Candidate next steps:"];
+      for (const node of candidates) {
+        lines.push(`  - ${formatCandidateLine(node, state)}`);
+      }
+      if (candidates.length === 0) {
+        lines.push("  (none — current state + filters yield zero candidates)");
       }
       return reportWithMessage(lines.join("\n"));
     }
@@ -905,10 +1727,53 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       resumeEpicOverride = resumeResult.epic;
       resumeStoryOverride = resumeResult.story;
     } else {
-      nextStep = pickNextStep(state, dag, args);
+      nextStep = pickNextStep(state, dag, args, log);
     }
 
     // Resolve persona + apply --persona override (FR12).
+    //
+    // **Story 3.5 (epic AC lines 794-796)**: when `--persona <name>` is
+    // supplied (non-empty string), BYPASS the 4-tier resolution
+    // (Story 1.11's `resolvePersona` cascade: Tier 1 SKILL.md frontmatter
+    // > Tier 2 project config `personas:` > Tier 3 `DEFAULT_PERSONAS`
+    // > Tier 4 `_bmad/<module>/config.yaml` triggers) and use the
+    // supplied name verbatim. The dispatch-spec's `PERSONA` field
+    // (`buildDispatchSpec` → `generate-spec.ts`) receives the supplied
+    // name as-is; downstream sub-agent prompt is responsible for any
+    // persona-name validation.
+    //
+    // **Story 3.5 (empty-string handling)**: `--persona ""` is treated
+    // as "no override" per the existing Story 1.7 line 70 forward-dep
+    // precedent (the runner consistently treats empty-string flag values
+    // as "no filter / no override"). Handles the common shell-scripting
+    // case where a variable expands to empty.
+    //
+    // **Story 3.5 (forward-deferral)**: the supplied `--persona <name>`
+    // is NOT validated against any registry (`DEFAULT_PERSONAS` keys,
+    // project-config `personas:` block, `_bmad/<module>/config.yaml`
+    // triggers). v0.1 conservative: any non-empty string is accepted;
+    // Story 6.1 may add registry-validation when the full config-loader
+    // lands.
+    //
+    // **Story 3.5 (multi-persona warn elision)**: when `--persona` is
+    // supplied (a single string), `pickFirstPersona`'s
+    // `Array.isArray(persona)` branch is NOT taken — the supplied string
+    // is returned verbatim and NO multi-persona warn is emitted. This is
+    // the AC line 794-796 "bypassing the 4-tier resolution" semantics.
+    //
+    // **Story 3.5 (resume composition)**: the persona-resolution branch
+    // runs AFTER the `--resume` resume-target resolver (above), so
+    // `--persona` overrides EVEN ON RESUME. The user can repoint a
+    // resumed step at a different persona for one run; resume's
+    // "do the same thing again" intent is at the step level only.
+    //
+    // **Story 3.5 (forward-deferral on multi-persona sequential
+    // dispatch)**: when `--persona` is NOT supplied AND Tier 1 returns
+    // an array (multi-persona step like `bmad-create-story`), the
+    // existing single-element-pick + warn behaviour at `pickFirstPersona`
+    // wins. Full sequential dispatch is forward-deferred to Stories 4.1
+    // (loop runner) + 5.* (failure-UX engine) per AR16 + architecture
+    // §D13 line 640.
     let personaResolved: string | readonly string[];
     if (args.persona !== undefined && args.persona !== "") {
       personaResolved = args.persona;
@@ -922,6 +1787,65 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       });
     }
     const persona = pickFirstPersona(personaResolved, nextStep.name, log);
+
+    // Story 3.3: --dry-run preview branch (epic AC lines 762-768).
+    //
+    // Composes the dispatch-spec preview purely IN-MEMORY; does NOT call
+    // `buildDispatchSpec` (which would mkdir `staging/<runId>/`, mkdir
+    // `inputs/`+`outputs/`, and `atomicWrite` the `dispatch-spec.json`
+    // per `generate-spec.ts:184-185 + 236-237`). The 5-field preview
+    // message includes target step, persona, model, budget, and expected
+    // output path per AC line 767.
+    //
+    // No-write invariants per AC line 766:
+    //   - NO `staging/<run-id>/` mkdir   (bypass `buildDispatchSpec`)
+    //   - NO `dispatch-spec.json` write  (same bypass)
+    //   - NO `state.yaml.tmp` write      (run.ts is structurally lock-free
+    //                                     per architecture §line 1672)
+    //   - NO lock acquisition            (AR41 + AR8 + Story 2.4 contract)
+    //   - NO sub-agent dispatch          (AR9 emit is `report`, not
+    //                                     `dispatch`; Layer 1's slash-
+    //                                     command markdown branches on
+    //                                     `action` and skips Task on
+    //                                     `report`)
+    //
+    // Insertion site sits AFTER `pickFirstPersona` (so the preview can
+    // surface the resolved persona) and BEFORE `buildContextRefs`/
+    // `buildDispatchSpec` (so the dispatch-spec writes are bypassed).
+    //
+    // Forward-coupling (documented carry-overs):
+    //   - Story 3.6 (`--explain` Reasoning Trace): the existing `--explain`
+    //     short-circuit at run.ts:816-844 returns BEFORE this branch, so
+    //     `--dry-run --explain` produces the explain stub (explain wins).
+    //   - Story 3.10 (Non-Locking Read Flags): wires `skipAcquire: boolean`
+    //     on `src/io/lock.ts`; in v0.1 the no-lock invariant is structural.
+    //   - Story 3.6 persona-tier enrichment ("resolved via tier 2: plugin-
+    //     default"): v0.1 ships persona NAME only.
+    //   - Stories 6.3 + 6.4 (`models:` + `budgets:` per-step config): v0.1
+    //     hardcodes `model: "sonnet"`, `contextTokens: 60_000`,
+    //     `timeoutMs: 300_000` (matching `generate-spec.ts:196-200`).
+    //
+    // Dry-run runId convention: `<tsPart>-<stepName>-DRYRUN` (no
+    // `node:crypto.randomUUID` entropy — predictable for tests; clearly
+    // identifies a dry-run runId in logs that may surface it). The
+    // expected-output-path uses the same dry-run runId so the user sees a
+    // coherent path that does NOT exist on disk.
+    if (args.dryRun) {
+      const tsPart = (opts?.nowIso ?? new Date().toISOString())
+        .replace(/\.\d{3}Z$/, "")
+        .replace(/:/g, "-");
+      const dryRunId = `${tsPart}-${nextStep.name}-DRYRUN`;
+      const epic =
+        state.lastAttempted?.epic ?? state.lastSuccessfulStep?.epic ?? 0;
+      const story =
+        state.lastAttempted?.story ?? state.lastSuccessfulStep?.story ?? "0.0";
+      const expectedOutput = `staging/${dryRunId}/outputs/${nextStep.name}.md`;
+      const message =
+        `Dry-run: would dispatch ${nextStep.name} (epic ${epic} / story ${story}) → ` +
+        `${persona} (sonnet, 60k context, 5min timeout). ` +
+        `Expected output: ${expectedOutput}`;
+      return reportWithMessage(message);
+    }
 
     // Story 2.2 carry-over populators (Task 7.6 + Task 11).
     const contextRefs = buildContextRefs(nextStep, dag);
@@ -956,14 +1880,6 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         ? { story: resumeStoryOverride }
         : {}),
     });
-
-    // --dry-run: emit report instead of dispatch (the dispatch-spec
-    // IS still written so the user can inspect it).
-    if (args.dryRun) {
-      return reportWithMessage(
-        `Dry-run: would dispatch step ${nextStep.name} to agent ${STEP_RUNNER_AGENT} with run-id ${result.runId} at ${result.stagingDir}. Pass without --dry-run to actually dispatch.`,
-      );
-    }
 
     // AR9 dispatch action emit (the canonical happy path).
     // Story 3.1: include the planned `lastAttempted` payload on the
@@ -1053,6 +1969,58 @@ function reportWithMessage(message: string): NextResult {
 
 // ─── import.meta.main entrypoint ──────────────────────────────────────────
 
+/**
+ * Story 3.8: detect whether the current invocation was driven by
+ * `--export-state` so the `import.meta.main` block can SPECIAL-CASE the
+ * stdout emission. Per FR54 + architecture §line 524 + §line 862, the
+ * `--export-state` JSON body goes to stdout DIRECTLY (NOT wrapped in the
+ * AR9 line), enabling the AC-line-852 `--export-state | jq '.currentPhase'`
+ * single-step `jq` workflow. Every OTHER read-only flag (`--diff-state`,
+ * `--explain`, `--list`, `--dry-run`) preserves the AR9 line strictly.
+ *
+ * The argv scan is intentionally simple: a substring match for
+ * `--export-state` (with or without `=`-style attachment). Story 1.7's
+ * argument parser is the canonical source of truth for parsing semantics;
+ * this helper only needs to detect the flag's presence in the
+ * `import.meta.main` post-runNext path. False positives are impossible
+ * because the runner only emits a `report` action when `args.exportState`
+ * is `true` — the substring scan agrees with the parsed args.
+ */
+function wasExportStateRequested(argv: readonly string[]): boolean {
+  for (const arg of argv) {
+    if (arg === "--export-state" || arg.startsWith("--export-state=")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Story 3.9: detect whether the current invocation was driven by
+ * `--watch` so the `import.meta.main` block can SPECIAL-CASE the stdout
+ * emission. Per FR42 + FR54 + architecture §line 524 + §line 862, the
+ * `--watch` raw transcript stream goes to stdout DIRECTLY (NOT wrapped
+ * in the AR9 line) — the watcher emits each line via
+ * `process.stdout.write` from inside its tail loop. The
+ * `import.meta.main` block detects `--watch` in argv and SKIPS
+ * `emitDispatchAction` so the structural `report`-action's summary
+ * message does NOT print after the streamed content.
+ *
+ * Mirrors Story 3.8's `wasExportStateRequested` precedent — substring
+ * match for the flag name; runs in the post-`runNext` path to decide
+ * whether to bypass the AR9 emit. False positives are impossible
+ * because the runner only reaches this branch when `args.watch` is
+ * `true` (the parsed arg agrees with the substring scan).
+ */
+function wasWatchRequested(argv: readonly string[]): boolean {
+  for (const arg of argv) {
+    if (arg === "--watch" || arg.startsWith("--watch=")) {
+      return true;
+    }
+  }
+  return false;
+}
+
 if (import.meta.main) {
   // The outer entrypoint per Story 1.12 doctor precedent. `runNext`
   // returns the structured `NextResult`; the entrypoint emits the AR9
@@ -1063,9 +2031,32 @@ if (import.meta.main) {
   // The top-level catch handles non-StepperError throws (system errors,
   // unexpected failures). StepperError throws are translated to
   // `action: "halt"` by `runNext`'s own try/catch (Task 8 pattern).
+  //
+  // Story 3.8 SPECIAL CASE for `--export-state` per FR54 + architecture
+  // §line 524 + §line 862: emit the JSON body DIRECTLY on stdout (NOT
+  // wrapped in the AR9 line). When `args.exportState === true` AND the
+  // result is a `report` action, write `result.action.message` (the JSON
+  // body) to stdout instead of `emitDispatchAction(result.action)`. This
+  // is the documented FR54 carve-out; every OTHER flag (including
+  // `--diff-state`) preserves AR9 strictly.
   try {
     const result = await runNext();
-    emitDispatchAction(result.action);
+    const argvSlice = process.argv.slice(2);
+    if (wasWatchRequested(argvSlice)) {
+      // Story 3.9 SPECIAL CASE per FR42 + FR54: the watcher already
+      // emitted the transcript content directly via
+      // `process.stdout.write` from inside its tail loop. SKIP
+      // `emitDispatchAction` so the AR9 summary line does NOT trail
+      // the streamed content. The structural `report` action remains
+      // available on the `runNext` return value for tests.
+    } else if (
+      wasExportStateRequested(argvSlice) &&
+      result.action.action === "report"
+    ) {
+      process.stdout.write(`${result.action.message}\n`);
+    } else {
+      emitDispatchAction(result.action);
+    }
     process.exit(result.exitCode);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
