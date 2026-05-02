@@ -18,5 +18,9 @@
  */
 
 export { DEFAULT_PERSONAS } from "./defaults.ts";
-export type { ResolveInput, ResolveOptions } from "./resolve.ts";
-export { resolvePersona } from "./resolve.ts";
+export type {
+  ResolvedPersonaWithTier,
+  ResolveInput,
+  ResolveOptions,
+} from "./resolve.ts";
+export { resolvePersona, resolvePersonaWithTier } from "./resolve.ts";
