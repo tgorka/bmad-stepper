@@ -506,5 +506,172 @@ describe("constants", () => {
   });
 });
 
+// ─── Story 3.10 — `skipAcquire` no-op carve-out (FR52 / epic AC line 878-880) ──
+//
+// AC verbatim:
+//   - Given `src/io/lock.ts` updated to support a `skipAcquire: boolean` flag
+//   - When any of the five read-only flags is supplied
+//   - Then lock acquisition is skipped and the command runs in pure-read mode
+//   - Given an active Stepper invocation holds the lock
+//   - When a CI script runs `--export-state`
+//   - Then it succeeds without `LOCK_CONTENTION`
+//
+// Tests A-G cover the no-op handle shape, no-FS-mutation, no-heartbeat-timer,
+// idempotent release, succeeds-with-held-live-lock (AC line 881-883), and two
+// regression sentinels (`skipAcquire: false` + `skipAcquire` omitted) to
+// guarantee the regular happy path is unchanged.
+
+describe("acquire — skipAcquire (Story 3.10 / FR52)", () => {
+  // ─── Test A — sentinel handle shape ───────────────────────────────────────
+  it("Test A: returns a sentinel handle with `<no-op:skipAcquire>` path strings", async () => {
+    const handle = await acquire({
+      skipAcquire: true,
+      logger: makeCapturingLogger(),
+    });
+    try {
+      expect(handle.lockDir).toBe("<no-op:skipAcquire>");
+      expect(handle.pidFile).toBe("<no-op:skipAcquire>");
+      // acquiredAt is a valid ISO timestamp.
+      expect(typeof handle.acquiredAt).toBe("string");
+      expect(handle.acquiredAt).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+      expect(new Date(handle.acquiredAt).toString()).not.toBe("Invalid Date");
+      expect(typeof handle.release).toBe("function");
+    } finally {
+      await handle.release();
+    }
+  });
+
+  // ─── Test B — no filesystem mutation ──────────────────────────────────────
+  it("Test B: does NOT create the lock dir at the canonical path", async () => {
+    const handle = await acquire({
+      skipAcquire: true,
+      lockDir, // ignored on the no-op path
+      logger: makeCapturingLogger(),
+    });
+    try {
+      // The synthetic lockDir was NOT created — fs.access rejects.
+      expect(await pathExists(lockDir)).toBe(false);
+      // The sentinel lockDir literal is NOT a real filesystem path.
+      expect(await pathExists("<no-op:skipAcquire>")).toBe(false);
+    } finally {
+      await handle.release();
+    }
+  });
+
+  // ─── Test C — no heartbeat timer registered ───────────────────────────────
+  it("Test C: does NOT register a heartbeat setInterval timer", async () => {
+    // Snapshot the active-handle count before; the no-op path MUST NOT
+    // increment it (the regular path adds one unref'd interval timer).
+    const beforeCount = (
+      process as unknown as { _getActiveHandles?: () => unknown[] }
+    )._getActiveHandles?.().length;
+    const handle = await acquire({
+      skipAcquire: true,
+      logger: makeCapturingLogger(),
+    });
+    try {
+      const afterCount = (
+        process as unknown as { _getActiveHandles?: () => unknown[] }
+      )._getActiveHandles?.().length;
+      // If the runtime exposes _getActiveHandles, the count must not have
+      // grown. Bun exposes the helper via its node:process polyfill.
+      if (beforeCount !== undefined && afterCount !== undefined) {
+        expect(afterCount).toBeLessThanOrEqual(beforeCount);
+      }
+    } finally {
+      await handle.release();
+    }
+  });
+
+  // ─── Test D — release() is idempotent ─────────────────────────────────────
+  it("Test D: release() is idempotent (first + second + third call all resolve)", async () => {
+    const handle = await acquire({
+      skipAcquire: true,
+      logger: makeCapturingLogger(),
+    });
+    await handle.release();
+    await handle.release();
+    await handle.release();
+    // Triple release without throw — the no-op release is idempotent.
+  });
+
+  // ─── Test E — succeeds with held-live-lock (AC line 881-883) ──────────────
+  it("Test E: succeeds when a live holder owns the canonical lock dir (AC line 881-883)", async () => {
+    // Synthesise a held lock claiming a different PID with recent mtime.
+    // This mirrors src/lock/integration/concurrent-acquire.test.ts:49-58 —
+    // the live-holder branch a real second process would exercise.
+    const recentMtime = Date.now();
+    await writeFakePidFile(
+      lockDir,
+      {
+        pid: process.pid + 100_000,
+        hostname: "concurrent-test-other-host",
+        acquiredAt: new Date(recentMtime).toISOString(),
+        heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
+      },
+      recentMtime,
+    );
+
+    const logger = makeCapturingLogger();
+    // The skipAcquire path MUST NOT throw LockContentionError — the
+    // entire stale-evaluation branch is bypassed.
+    const handle = await acquire({
+      lockDir,
+      skipAcquire: true,
+      isPidAlive: () => true,
+      logger,
+    });
+    try {
+      expect(handle.lockDir).toBe("<no-op:skipAcquire>");
+      // The synthesised lock dir MUST still be present — the read-only
+      // flag did NOT touch the lock.
+      expect(await pathExists(lockDir)).toBe(true);
+      // The pid file is also untouched.
+      const raw = await fs.readFile(path.join(lockDir, PID_FILE_NAME), "utf8");
+      const parsed = JSON.parse(raw) as { pid: number };
+      expect(parsed.pid).toBe(process.pid + 100_000);
+      // ZERO log lines emitted on the no-op path (no "acquired", no
+      // "reclaiming", no "released").
+      expect(logger.infos.length).toBe(0);
+      expect(logger.warns.length).toBe(0);
+    } finally {
+      await handle.release();
+    }
+  });
+
+  // ─── Test F — skipAcquire: false (regression sentinel) ────────────────────
+  it("Test F: skipAcquire=false still uses the regular happy path (regression sentinel)", async () => {
+    const handle = await acquire({
+      lockDir,
+      skipAcquire: false,
+      logger: makeCapturingLogger(),
+    });
+    try {
+      expect(handle.lockDir).toBe(lockDir);
+      expect(handle.pidFile).toBe(path.join(lockDir, PID_FILE_NAME));
+      expect(await pathExists(handle.lockDir)).toBe(true);
+      expect(await pathExists(handle.pidFile)).toBe(true);
+    } finally {
+      await handle.release();
+    }
+  });
+
+  // ─── Test G — skipAcquire omitted (backward-compat sentinel) ──────────────
+  it("Test G: skipAcquire omitted still uses the regular happy path (backward-compat sentinel)", async () => {
+    const handle = await acquire({
+      lockDir,
+      logger: makeCapturingLogger(),
+    });
+    try {
+      expect(handle.lockDir).toBe(lockDir);
+      expect(handle.pidFile).toBe(path.join(lockDir, PID_FILE_NAME));
+      expect(await pathExists(handle.lockDir)).toBe(true);
+      expect(await pathExists(handle.pidFile)).toBe(true);
+    } finally {
+      await handle.release();
+    }
+  });
+});
+
 // Suppress unused-import lint by exporting a type alias used in JSDoc.
 export type _LockHandleAlias = LockHandle;

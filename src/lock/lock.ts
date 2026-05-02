@@ -24,6 +24,19 @@
  *       running?") is the CLI layer's responsibility (Story 1.12) — this
  *       module exposes the unconditional removal primitive only.
  *
+ * Story 3.10 (FR52 / epic AC line 878-880) — `skipAcquire` carve-out:
+ *   When `opts.skipAcquire === true`, `acquire(opts)` returns a sentinel
+ *   no-op `LockHandle` IMMEDIATELY — ZERO filesystem mutation, ZERO
+ *   heartbeat timer, ZERO scope check, ZERO log emission. The handle's
+ *   `release()` is also a no-op (idempotent). Use case: read-only flag
+ *   cluster (`--export-state`, `--list`, `--explain`, `--dry-run`,
+ *   `--diff-state`). NOTE: `--watch` is structurally lock-free without
+ *   the opt-in (Story 3.9 §Forward Dependencies). v0.1 callers do NOT
+ *   exercise this flag — the read-only flags structurally never reach
+ *   `acquire(...)` in `run.ts` per AR8 + architecture §line 1672. The
+ *   flag is forward-proofing for Story 6.x lock-acquiring read flows +
+ *   AC verbatim compliance per epics.md line 878.
+ *
  * The `opts` parameter is purely for testing — production callers pass none.
  * It allows tests to point at an isolated `lockDir`, lower the heartbeat /
  * stale thresholds for fast simulation, or stub the liveness check.
@@ -81,6 +94,31 @@ export interface LockOptions {
    * Tests pass a no-op or capturing logger.
    */
   readonly logger?: LockLogger;
+  /**
+   * Skip lock acquisition (Story 3.10 / FR52 / epic AC line 878). When
+   * `true`, `acquire(opts)` returns a sentinel no-op `LockHandle`
+   * IMMEDIATELY — ZERO `mkdir`, ZERO staleness evaluation, ZERO pid file,
+   * ZERO heartbeat. The handle's `release()` is a no-op (idempotent;
+   * resolves `undefined`).
+   *
+   * Use case: the FIVE read-only flags (`--export-state`, `--list`,
+   * `--explain`, `--dry-run`, `--diff-state`) — they need a structurally
+   * clean escape hatch from the lock-acquiring code path. NOTE: `--watch`
+   * is OUT of this enumeration (per Story 3.9 §Forward Dependencies +
+   * epics.md line 873) — it is structurally lock-free without the opt-in.
+   *
+   * v0.1 callers do NOT exercise this flag in production code. The
+   * read-only flags structurally never reach `acquire(...)` in
+   * `src/commands/next/run.ts` per AR8 + architecture §line 1672 (the
+   * runner module is read-only / lock-free). The flag is forward-proofing
+   * for Story 6.x lock-acquiring read flows + AC verbatim compliance per
+   * epics.md line 878.
+   *
+   * Defense-in-depth: should a future story accidentally route a read-
+   * only flag through a lock-acquiring path, this flag provides the
+   * right-answer-off-the-shelf without forcing a refactor.
+   */
+  readonly skipAcquire?: boolean;
 }
 
 export interface LockLogger {
@@ -275,9 +313,55 @@ async function evaluateStaleness(
  *   4. Return a `LockHandle` whose `.release()` stops the heartbeat and
  *      `rm -rf`s the lock dir.
  *
+ * **Story 3.10 (epic AC line 878-880; FR52)**: when
+ * `opts?.skipAcquire === true`, the function returns a sentinel no-op
+ * `LockHandle` IMMEDIATELY — ZERO filesystem mutation, ZERO heartbeat
+ * timer, ZERO scope check, ZERO log emission. The handle's `release()`
+ * is also a no-op (idempotent). The sentinel `lockDir` and `pidFile`
+ * fields hold the literal string `"<no-op:skipAcquire>"` (machine-
+ * recognisable marker; never refers to a real path). Use case: the
+ * FIVE read-only flags (`--export-state`, `--list`, `--explain`,
+ * `--dry-run`, `--diff-state`). v0.1 callers do NOT exercise this path
+ * — the read-only flags structurally never reach `acquire(...)` in
+ * `run.ts` per AR8 + architecture §line 1672. The flag is forward-
+ * proofing for Story 6.x lock-acquiring read flows + AC verbatim
+ * compliance per epics.md line 878.
+ *
  * @throws {LockContentionError} when a live holder owns the lock.
  */
 export async function acquire(opts?: LockOptions): Promise<LockHandle> {
+  // Story 3.10 (epic AC line 878-880; FR52): when skipAcquire is true,
+  // return a sentinel no-op handle IMMEDIATELY. ZERO filesystem mutation;
+  // ZERO heartbeat timer; ZERO scope-check; ZERO log emission. The
+  // handle's release() is also a no-op (idempotent). Use case: FR52
+  // read-only flag cluster (--export-state, --list, --explain,
+  // --dry-run, --diff-state). NOTE: --watch is OUT of the enumeration
+  // (Story 3.9 §Forward Dependencies + epics.md line 873).
+  //
+  // The v0.1 callers do NOT reach this path (run.ts is structurally
+  // lock-free per AR8 + architecture §line 1672); this is forward-
+  // proofing + AC verbatim compliance.
+  //
+  // Placed BEFORE resolveConfig + assertWithinScope so the no-op path
+  // skips the unnecessary path.resolve + scope-check work; the no-op
+  // path doesn't touch any path so the scope guard is irrelevant.
+  if (opts?.skipAcquire === true) {
+    const sentinelAt = new Date().toISOString();
+    let releasedNoOp = false;
+    const releaseNoOp = async (): Promise<void> => {
+      if (releasedNoOp) {
+        return;
+      }
+      releasedNoOp = true;
+    };
+    return {
+      lockDir: "<no-op:skipAcquire>",
+      pidFile: "<no-op:skipAcquire>",
+      acquiredAt: sentinelAt,
+      release: releaseNoOp,
+    };
+  }
+
   const config = resolveConfig(opts);
 
   // AR42 defensive: if the caller did not override `lockDir`, sanity-check
