@@ -219,3 +219,43 @@ export async function recomputeState(opts?: RecomputeOptions): Promise<State> {
     await handle.release();
   }
 }
+
+/**
+ * Recompute the would-be `State` shape from project artifacts WITHOUT
+ * acquiring the lock and WITHOUT persisting (Story 3.8, FR3, FR52, NFR-R3).
+ *
+ * Re-uses the same internal helpers as `recomputeState` (`scanArtifacts`,
+ * `extractFrontmatter`, `readArtifactRecord`, `ARTIFACT_GLOBS`,
+ * `FRONTMATTER_OPEN`); skips the `acquire(...)` call AND skips the
+ * `saveState(...)` call. The read-only contract is the foundation for the
+ * `--diff-state` audit path.
+ *
+ * Story 6.x evolution: full DAG-aware, BMAD-skill-aware, verifier-aware
+ * recompute will replace BOTH locked + unlocked variants; the function
+ * signatures stay the same; the implementation evolves.
+ *
+ * @throws {Error} surfaces from filesystem reads (rare — `scanArtifacts`
+ *   tolerates missing dirs by yielding zero records).
+ */
+export async function recomputeStateUnlocked(
+  opts?: RecomputeOptions,
+): Promise<State> {
+  const projectRoot = opts?.projectRoot ?? process.cwd();
+  const bmadVersion = opts?.bmadVersion ?? "unknown";
+  const projectName = path.basename(projectRoot);
+
+  let mostRecent: ArtifactRecord | null = null;
+  for await (const record of scanArtifacts(projectRoot)) {
+    if (mostRecent === null || record.completedAt > mostRecent.completedAt) {
+      mostRecent = record;
+    }
+  }
+
+  return {
+    schemaVersion: 1,
+    project: { name: projectName, bmadVersion },
+    lastSuccessfulStep: mostRecent,
+    runHistory: [],
+    checkpoints: [],
+  };
+}
