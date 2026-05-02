@@ -1,0 +1,52 @@
+src/integration/watch-fresh-project.test.ts
+  1d4e065f7719b064 1-133
+src/integration/non-locking-read-flags.test.ts
+  1d4e065f7719b064 1-271
+src/commands/next/run.test.ts
+  1d4e065f7719b064 215-217,222,304,313-317,320-323,332-340,343-347,356-359,362,384-403,1113-1116,1121,1139-1144,1256-3915
+src/integration/dry-run-no-writes.test.ts
+  1d4e065f7719b064 1-256
+src/integration/export-state-no-lock.test.ts
+  1d4e065f7719b064 1-165
+src/commands/next/run.ts
+  1d4e065f7719b064 39-51,109-114,117-118,237-252,301-317,452-486,490-496,499-503,511-519,525-537,543,545-560,571-584,627-649,651-655,658-662,666-700,881-1301,1316-1317,1322-1331,1357-1360,1375-1399,1401,1425-1460,1462-1463,1466-1497,1501-1518,1522-1523,1525-1536,1538-1543,1551-1564,1566,1568-1576,1578-1585,1587-1627,1631-1638,1647-1648,1661-1664,1669-1696,1730,1734-1776,1791-1849,1972-2023,2034-2041,2044-2059
+  93427a1958b93e17 1524
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "b2aa4039385106eb13c0e84c4d9c22fa8e588d8f",
+  "prompts": {
+    "1d4e065f7719b064": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8f5f4be1-15b5-4dd7-b3df-21f915f3eb5f",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 11876,
+      "overriden_lines": 0
+    },
+    "93427a1958b93e17": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7f976703-dd8d-45cd-890b-dffbeda155a9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 351,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
