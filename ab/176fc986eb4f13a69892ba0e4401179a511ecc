@@ -1,0 +1,43 @@
+src/lock/lock.test.ts
+  1d4e065f7719b064 509-675
+src/lock/lock.ts
+  1d4e065f7719b064 27-39,97-121,316-329,333-364
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ab176fc986eb4f13a69892ba0e4401179a511ecc",
+  "prompts": {
+    "1d4e065f7719b064": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8f5f4be1-15b5-4dd7-b3df-21f915f3eb5f",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 12127,
+      "overriden_lines": 0
+    },
+    "93427a1958b93e17": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7f976703-dd8d-45cd-890b-dffbeda155a9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 437,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
