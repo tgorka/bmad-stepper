@@ -20,4 +20,6 @@ export type {
   WriteStepTranscriptInput,
   WriteStepTranscriptResult,
 } from "./types.ts";
+export type { WatchOptions, WatchResult } from "./watch.ts";
+export { watchMostRecentRunLog } from "./watch.ts";
 export { writeStepTranscript } from "./write-step.ts";
