@@ -10,10 +10,11 @@ Run `/bmad-next` repeatedly inside a bounded loop until a stop condition
 fires. Layer 1 orchestrator: Bash → AR9 JSON line → (per-iteration Task →
 Bash verify-and-advance) → final-summary report.
 
-Story 4.1 ships the **runner skeleton**: only `--max-iters` is wired as a
-runtime stop condition. The other 12 flags are ARG-SURFACE-PRESENT (the
-parser accepts them, the schema validates them) but RUNTIME-DEFERRED to
-subsequent Epic 4 + Epic 5 stories (see Behavior §Stop conditions).
+Story 4.1 wired `--max-iters` (with a default-50 cap added in Story 4.4);
+Stories 4.2 + 4.3 wired the four condition flags `--until-epic-end`,
+`--until-story X.Y`, `--next-story`, `--phase-end`. Stories 4.5+ will
+wire the remaining flags (`--time-budget`, `--token-budget`,
+`--stop-on-error`, `--continue-on-error`, `--plan-first`).
 
 ## Usage examples
 
@@ -62,10 +63,14 @@ the 13-field surface via `LoopArgsSchema.strict()`, and enters the
 iteration loop. Each iteration:
 
 1. Evaluates the stop-condition gate (`shouldStop(iterCount, args)`).
-   Story 4.1 wires ONLY `--max-iters`; other 7 stop conditions are
-   forward-deferred to Stories 4.2-4.10.
+   Story 4.1 wired `--max-iters`; Story 4.4 added the `--max-iters=50`
+   default cap (FR25); Stories 4.2 + 4.3 wired four more flags
+   (`--until-epic-end`, `--until-story X.Y`, `--next-story`,
+   `--phase-end`); Stories 4.5-4.10 will wire the remaining flags.
 2. If stop-condition fires, breaks with the StopReason (one of
-   `max-iters-reached`, `no-stop-condition`, `halt-on-error`).
+   `max-iters-reached`, `halt-on-error`, OR any of the four
+   Story-4.2/4.3 variants `epic-end-reached` / `until-story-reached` /
+   `next-story-reached` / `phase-end-reached`).
 3. Else, invokes `runNext` once via in-process function call.
 4. Captures the per-iteration result into an `IterationRecord`
    (`{ iterCount, runId, action, exitCode, durationMs, startedAt }`).
@@ -86,8 +91,8 @@ their own locks).
 
 Exit-code mapping per FR53 + Story 4.1:
 
-- `0` — `max-iters-reached` OR `no-stop-condition` (clean exit; v0.1
-  pre-Story-4.4 placeholder for the no-stop-condition case).
+- `0` — clean exit (one of `max-iters-reached`, `epic-end-reached`,
+  `until-story-reached`, `next-story-reached`, `phase-end-reached`).
 - `1` — `halt-on-error` (per-iteration runNext halt; failureCode
   encoded in the iteration record).
 - `2` — argument parse error (configuration error per FR53).
@@ -100,7 +105,7 @@ summary. The shape is the AR9 `report` variant per
 
 ```
 { "action": "report",
-  "message": "<exit reason summary, e.g. 'max-iters reached (1 iteration)'>",
+  "message": "<exit reason summary, e.g. 'max-iters (50) reached'>",
   "exitCode": <number> }
 ```
 
@@ -155,25 +160,44 @@ recorded in `IterationRecord[]` and folded into the final AR9 summary.
 
 ## Stop conditions
 
-Story 4.1 wires ONLY `--max-iters` as a runtime stop condition per AC-1
-verbatim. The full 13-field surface is parsed by `LoopArgsSchema` per
-AC-2 verbatim, but only `maxIters` drives runtime branching:
+Story 4.1 wired `--max-iters` (with the default-50 cap added in Story
+4.4); Stories 4.2 + 4.3 wired the four condition flags. The full
+13-field surface is parsed by `LoopArgsSchema`; only the wired flags
+drive runtime branching:
 
-| Flag                   | Story | Status                           |
-|------------------------|-------|----------------------------------|
-| `--max-iters N`        | 4.1   | RUNTIME-WIRED                    |
-| `--until-epic-end`     | 4.2   | RUNTIME-WIRED in 4.2             |
-| `--until-story X.Y`    | 4.2   | RUNTIME-WIRED in 4.2             |
-| `--next-story`         | 4.3   | RUNTIME-WIRED in 4.3             |
-| `--phase-end`          | 4.3   | RUNTIME-WIRED in 4.3             |
-| `--time-budget MS`     | 4.5   | parsed only                      |
-| `--token-budget N`     | 4.5   | parsed only                      |
-| `--stop-on-error`      | 4.6   | parsed only                      |
-| `--continue-on-error`  | 4.6   | parsed only                      |
-| `--plan-first`         | 4.7   | parsed only                      |
-| `--checkpoint-each X`  | 4.8   | parsed only                      |
-| `--interactive`        | 5.5   | parsed only                      |
-| `--auto-fix`           | 5.3   | parsed only                      |
+| Flag                   | Story    | Status                              |
+|------------------------|----------|-------------------------------------|
+| `--max-iters N`        | 4.1+4.4  | RUNTIME-WIRED + DEFAULT 50 in 4.4   |
+| `--until-epic-end`     | 4.2      | RUNTIME-WIRED in 4.2                |
+| `--until-story X.Y`    | 4.2      | RUNTIME-WIRED in 4.2                |
+| `--next-story`         | 4.3      | RUNTIME-WIRED in 4.3                |
+| `--phase-end`          | 4.3      | RUNTIME-WIRED in 4.3                |
+| `--time-budget MS`     | 4.5      | parsed only                         |
+| `--token-budget N`     | 4.5      | parsed only                         |
+| `--stop-on-error`      | 4.6      | parsed only                         |
+| `--continue-on-error`  | 4.6      | parsed only                         |
+| `--plan-first`         | 4.7      | parsed only                         |
+| `--checkpoint-each X`  | 4.8      | parsed only                         |
+| `--interactive`        | 5.5      | parsed only                         |
+| `--auto-fix`           | 5.3      | parsed only                         |
+
+### `--max-iters N` (Story 4.1, default-cap in 4.4)
+
+Caps the loop's iteration count. After the Nth successful iteration the
+loop exits with reason `max-iters (N) reached`.
+
+```
+/bmad-loop --max-iters 10
+```
+
+**Default cap (Story 4.4)**: when NO stop condition is supplied (no
+`--max-iters`, no `--until-epic-end`, no `--until-story X.Y`, no
+`--next-story`, no `--phase-end`), the runner injects `--max-iters=50`
+automatically per FR25 — preventing accidental infinite loops. When the
+user supplies an explicit condition WITHOUT `--max-iters`, NO default
+cap is applied (the explicit condition controls the loop's lifetime).
+
+Exit message: `max-iters (N) reached`. Exit code: `0`.
 
 ### `--until-epic-end` (Story 4.2)
 
@@ -253,11 +277,13 @@ when `--phase-end` is supplied (zero-cost otherwise). On graceful DAG-
 load failure (rare — defensive only), the predicate short-circuits and
 the loop continues with other stop conditions.
 
-When NEITHER `--max-iters` nor any other stop condition is supplied, the
-loop halts immediately with `stopReason.code === "no-stop-condition"`
-AND `exitCode === 0` (Story 4.1 v0.1 pre-Story-4.4 placeholder; Story
-4.4 will replace this branch with the `--max-iters=50` default cap per
-FR25).
+When NEITHER `--max-iters` nor any other stop condition is supplied,
+the loop runner injects `--max-iters=50` as a DEFAULT cap per FR25,
+preventing accidental infinite loops (Story 4.4 AC-1). When the user
+supplies an explicit stop condition (e.g., `--until-epic-end`,
+`--until-story X.Y`, `--next-story`, `--phase-end`) WITHOUT `--max-iters`,
+NO default cap is applied — the explicit condition controls the loop's
+lifetime.
 
 ## Tool restrictions
 
