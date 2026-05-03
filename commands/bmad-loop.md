@@ -12,9 +12,10 @@ Bash verify-and-advance) → final-summary report.
 
 Story 4.1 wired `--max-iters` (with a default-50 cap added in Story 4.4);
 Stories 4.2 + 4.3 wired the four condition flags `--until-epic-end`,
-`--until-story X.Y`, `--next-story`, `--phase-end`. Stories 4.5+ will
-wire the remaining flags (`--time-budget`, `--token-budget`,
-`--stop-on-error`, `--continue-on-error`, `--plan-first`).
+`--until-story X.Y`, `--next-story`, `--phase-end`. Story 4.5 wired the
+two budget flags (`--time-budget MS`, `--token-budget N`); Stories 4.6+
+will wire the remaining flags (`--stop-on-error`, `--continue-on-error`,
+`--plan-first`).
 
 ## Usage examples
 
@@ -66,11 +67,13 @@ iteration loop. Each iteration:
    Story 4.1 wired `--max-iters`; Story 4.4 added the `--max-iters=50`
    default cap (FR25); Stories 4.2 + 4.3 wired four more flags
    (`--until-epic-end`, `--until-story X.Y`, `--next-story`,
-   `--phase-end`); Stories 4.5-4.10 will wire the remaining flags.
+   `--phase-end`); Story 4.5 wired two budget flags (`--time-budget MS`,
+   `--token-budget N`); Stories 4.6-4.10 will wire the remaining flags.
 2. If stop-condition fires, breaks with the StopReason (one of
-   `max-iters-reached`, `halt-on-error`, OR any of the four
-   Story-4.2/4.3 variants `epic-end-reached` / `until-story-reached` /
-   `next-story-reached` / `phase-end-reached`).
+   `max-iters-reached`, `halt-on-error`, OR any of the six
+   Story-4.2/4.3/4.5 variants `epic-end-reached` / `until-story-reached` /
+   `next-story-reached` / `phase-end-reached` / `time-budget-reached` /
+   `token-budget-reached`).
 3. Else, invokes `runNext` once via in-process function call.
 4. Captures the per-iteration result into an `IterationRecord`
    (`{ iterCount, runId, action, exitCode, durationMs, startedAt }`).
@@ -92,7 +95,8 @@ their own locks).
 Exit-code mapping per FR53 + Story 4.1:
 
 - `0` — clean exit (one of `max-iters-reached`, `epic-end-reached`,
-  `until-story-reached`, `next-story-reached`, `phase-end-reached`).
+  `until-story-reached`, `next-story-reached`, `phase-end-reached`,
+  `time-budget-reached`, `token-budget-reached`).
 - `1` — `halt-on-error` (per-iteration runNext halt; failureCode
   encoded in the iteration record).
 - `2` — argument parse error (configuration error per FR53).
@@ -172,8 +176,8 @@ drive runtime branching:
 | `--until-story X.Y`    | 4.2      | RUNTIME-WIRED in 4.2                |
 | `--next-story`         | 4.3      | RUNTIME-WIRED in 4.3                |
 | `--phase-end`          | 4.3      | RUNTIME-WIRED in 4.3                |
-| `--time-budget MS`     | 4.5      | parsed only                         |
-| `--token-budget N`     | 4.5      | parsed only                         |
+| `--time-budget MS`     | 4.5      | RUNTIME-WIRED in 4.5                |
+| `--token-budget N`     | 4.5      | RUNTIME-WIRED in 4.5                |
 | `--stop-on-error`      | 4.6      | parsed only                         |
 | `--continue-on-error`  | 4.6      | parsed only                         |
 | `--plan-first`         | 4.7      | parsed only                         |
@@ -277,13 +281,59 @@ when `--phase-end` is supplied (zero-cost otherwise). On graceful DAG-
 load failure (rare — defensive only), the predicate short-circuits and
 the loop continues with other stop conditions.
 
+### `--time-budget MS` (Story 4.5)
+
+Halts the loop when the wall-clock elapsed time reaches or exceeds the
+budget (in milliseconds). At 80% of the budget the loop emits a
+single-shot warning to **stderr**; at 100% the loop exits cleanly with
+reason `time-budget (Xh) reached, partial work committed`. The unit
+suffix (`Xh` / `Xm` / `Xs` / `Xms`) is computed by `formatTimeBudget`
+via cascade — the largest unit that exactly divides the millisecond
+value (e.g., `7_200_000 → "2h"`, `5_400_000 → "90m"`, `1_500 → "1500ms"`).
+
+```
+/bmad-loop --time-budget 7200000   # 2 hours
+```
+
+Source: `Bun.nanoseconds()` snapshot at loop entry; per-iteration check
+`(Bun.nanoseconds() - startedAtNs) / 1_000_000`. Monotonic — resistant
+to system-clock adjustments mid-loop.
+
+Exit message: `time-budget (2h) reached, partial work committed`
+(byte-identical to AC-1; epics.md line 966). Exit code: `0`.
+Constraint: positive integer only (Zod schema rejects zero / negative).
+
+### `--token-budget N` (Story 4.5)
+
+Halts the loop when the cumulative `tokensIn + tokensOut` reaches or
+exceeds the budget. At 80% of the budget the loop emits a single-shot
+warning to **stderr**; at 100% the loop exits cleanly with reason
+`token-budget (N) reached, used X tokensIn + Y tokensOut`.
+
+```
+/bmad-loop --token-budget 200000
+```
+
+Token-flow per AR10: Task tool's response carries `usage.input_tokens` /
+`usage.output_tokens`; Layer 1 markdown captures them as
+`--tokens-in/--tokens-out` flags; `verify-and-advance.ts` writes them
+into `state.runHistory[].{tokensIn, tokensOut}` (per Story 2.6); the
+loop runner reads the latest entry per-iteration via `loadStateUnlocked`
+and accumulates into `LoopMetrics.{tokensIn, tokensOut}`.
+
+Exit message: `token-budget (N) reached, used X tokensIn + Y tokensOut`
+where `N` is the budget and `X` / `Y` are the cumulative usage stats at
+halt time (per AC-2 "the exit reason includes the actual usage stats").
+Exit code: `0`. Constraint: positive integer only (Zod schema rejects
+zero / negative).
+
 When NEITHER `--max-iters` nor any other stop condition is supplied,
 the loop runner injects `--max-iters=50` as a DEFAULT cap per FR25,
 preventing accidental infinite loops (Story 4.4 AC-1). When the user
 supplies an explicit stop condition (e.g., `--until-epic-end`,
-`--until-story X.Y`, `--next-story`, `--phase-end`) WITHOUT `--max-iters`,
-NO default cap is applied — the explicit condition controls the loop's
-lifetime.
+`--until-story X.Y`, `--next-story`, `--phase-end`, `--time-budget MS`,
+`--token-budget N`) WITHOUT `--max-iters`, NO default cap is applied —
+the explicit condition controls the loop's lifetime.
 
 ## Tool restrictions
 

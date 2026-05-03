@@ -990,6 +990,228 @@ describe("runLoop AC-3 sweep — default cap behaviour (Story 4.4)", () => {
   });
 });
 
+// ─── Story 4.5 — runLoop integration tests (AC-1 + AC-2) ────────────────
+
+/**
+ * Story 4.5 Test fixture: returns a `tokensPerIter`-compatible function
+ * that emits the same per-iteration token usage every call.
+ */
+function tokensStub(perIter: { in: number; out: number }) {
+  return () => ({ tokensIn: perIter.in, tokensOut: perIter.out });
+}
+
+describe("runLoop — Test TB_45_1 (Story 4.5 AC-1: --time-budget fires at 100%)", () => {
+  it("--time-budget 100 halts with time-budget-reached after wall-clock budget elapses", async () => {
+    // Use a slow stub that takes ~50ms/iter so the 100ms budget fires.
+    const slowStub = async () => {
+      await Bun.sleep(50);
+      return successResult();
+    };
+    const result = await runLoop({
+      argv: ["--time-budget", "100"],
+      runNextOverride: slowStub,
+      stateOverride: () => null,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("time-budget-reached");
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+describe("runLoop — Test TB_45_2 (Story 4.5 AC-1: 80%-warning to stderr)", () => {
+  it("--time-budget 100 emits a stderr 80%-warning before halt", async () => {
+    const stderrLines: string[] = [];
+    const slowStub = async () => {
+      await Bun.sleep(50);
+      return successResult();
+    };
+    await runLoop({
+      argv: ["--time-budget", "100"],
+      runNextOverride: slowStub,
+      stateOverride: () => null,
+      sprintStatusOverride: () => null,
+      stderrOverride: (chunk) => stderrLines.push(chunk),
+    });
+    const warningEmitted = stderrLines.some((l) =>
+      l.includes("time-budget at 80%"),
+    );
+    expect(warningEmitted).toBe(true);
+  });
+});
+
+describe("runLoop — Test TB_45_3 (Story 4.5 AC-1: exit message format)", () => {
+  it("exit message matches /^time-budget \\(\\d+(h|m|s|ms)\\) reached, partial work committed$/", async () => {
+    const slowStub = async () => {
+      await Bun.sleep(50);
+      return successResult();
+    };
+    const result = await runLoop({
+      argv: ["--time-budget", "100"],
+      runNextOverride: slowStub,
+      stateOverride: () => null,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("time-budget-reached");
+    if (result.stopReason.code !== "time-budget-reached") return;
+    expect(result.stopReason.message).toMatch(
+      /^time-budget \(\d+(h|m|s|ms)\) reached, partial work committed$/,
+    );
+  });
+});
+
+describe("runLoop — Test TB_45_4 (Story 4.5: --time-budget alone does NOT inject default cap)", () => {
+  it("--time-budget 100 alone exits via time-budget-reached, NOT max-iters-reached(50)", async () => {
+    const slowStub = async () => {
+      await Bun.sleep(50);
+      return successResult();
+    };
+    const result = await runLoop({
+      argv: ["--time-budget", "100"],
+      runNextOverride: slowStub,
+      stateOverride: () => null,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("time-budget-reached");
+    expect(result.stopReason.code).not.toBe("max-iters-reached");
+  });
+});
+
+describe("runLoop — Test KB_45_1 (Story 4.5 AC-2: --token-budget fires at 100%)", () => {
+  it("--token-budget 100 with tokensPerIter 50/50 halts after exactly 1 iter", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--token-budget", "100"],
+      runNextOverride: stub,
+      tokensPerIter: tokensStub({ in: 50, out: 50 }),
+      stateOverride: () => null,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("token-budget-reached");
+    expect(result.exitCode).toBe(0);
+    // 1 iter: 50+50=100 >= budget 100 → fires on next check
+    expect(calls()).toBe(1);
+  });
+});
+
+describe("runLoop — Test KB_45_2 (Story 4.5 AC-2: 80%-warning to stderr)", () => {
+  it("--token-budget 100 emits a stderr 80%-warning before halt", async () => {
+    const stderrLines: string[] = [];
+    const { stub } = countingStub(successResult());
+    await runLoop({
+      argv: ["--token-budget", "100"],
+      runNextOverride: stub,
+      tokensPerIter: tokensStub({ in: 40, out: 40 }),
+      stateOverride: () => null,
+      sprintStatusOverride: () => null,
+      stderrOverride: (chunk) => stderrLines.push(chunk),
+    });
+    const warningEmitted = stderrLines.some((l) =>
+      l.includes("token-budget at 80%"),
+    );
+    expect(warningEmitted).toBe(true);
+  });
+});
+
+describe("runLoop — Test KB_45_3 (Story 4.5 AC-2: exit message includes usage stats)", () => {
+  it("token-budget exit message matches /^token-budget \\(\\d+\\) reached, used \\d+ tokensIn \\+ \\d+ tokensOut$/", async () => {
+    const { stub } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--token-budget", "100"],
+      runNextOverride: stub,
+      tokensPerIter: tokensStub({ in: 60, out: 60 }),
+      stateOverride: () => null,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("token-budget-reached");
+    if (result.stopReason.code !== "token-budget-reached") return;
+    expect(result.stopReason.message).toMatch(
+      /^token-budget \(\d+\) reached, used \d+ tokensIn \+ \d+ tokensOut$/,
+    );
+  });
+});
+
+describe("runLoop — Test KB_45_4 (Story 4.5: --token-budget alone does NOT inject default cap)", () => {
+  it("--token-budget 100 alone exits via token-budget-reached, NOT max-iters-reached(50)", async () => {
+    const { stub } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--token-budget", "100"],
+      runNextOverride: stub,
+      tokensPerIter: tokensStub({ in: 100, out: 100 }),
+      stateOverride: () => null,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("token-budget-reached");
+    expect(result.stopReason.code).not.toBe("max-iters-reached");
+  });
+});
+
+describe("runLoop — Test KB_45_5 (Story 4.5: production-style flow reads tokens from state.runHistory[])", () => {
+  it("production path (no tokensPerIter seam) reads tokens from latest state.runHistory entry", async () => {
+    const { stub } = countingStub(successResult());
+    // Simulate state with 60 tokensIn + 60 tokensOut in latest runHistory entry.
+    const stateWithTokens = {
+      schemaVersion: 1 as const,
+      project: { name: "bmad-stepper", bmadVersion: "v6.x" },
+      lastSuccessfulStep: { story: "4.1", step: "bmad-dev-story", epic: 4 },
+      lastAttempted: null,
+      lastFailureReason: null,
+      lastSnapshot: null,
+      checkpoints: [],
+      runHistory: [{ tokensIn: 60, tokensOut: 60 }],
+    };
+    let callCount = 0;
+    const stateSeq = () => {
+      callCount++;
+      return stateWithTokens;
+    };
+    const result = await runLoop({
+      argv: ["--token-budget", "100"],
+      runNextOverride: stub,
+      // No tokensPerIter — exercises production reading path.
+      stateOverride: stateSeq,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("token-budget-reached");
+  });
+});
+
+describe("runLoop — Test SWEEP_45 (Story 4.5: AC-1 + AC-2 sweep)", () => {
+  it("Sweep-45-A: --time-budget fires (uses Bun.sleep)", async () => {
+    const slowStub = async () => {
+      await Bun.sleep(50);
+      return successResult();
+    };
+    const result = await runLoop({
+      argv: ["--time-budget", "100"],
+      runNextOverride: slowStub,
+      stateOverride: () => null,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("time-budget-reached");
+  });
+
+  it("Sweep-45-B: --token-budget fires (uses tokensPerIter)", async () => {
+    const { stub } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--token-budget", "200"],
+      runNextOverride: stub,
+      tokensPerIter: tokensStub({ in: 100, out: 100 }),
+      stateOverride: () => null,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("token-budget-reached");
+  });
+});
+
 // Cleanup any potential mocks across the file boundary.
 let originalArgv: string[] | undefined;
 beforeEach(() => {
