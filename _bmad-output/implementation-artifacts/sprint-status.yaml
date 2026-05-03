@@ -1,5 +1,5 @@
 # generated: 2026-04-30
-# last_updated: 2026-05-02T07:30:00Z
+# last_updated: 2026-05-03T02:30:00Z
 # project: bmad-stepper
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-30
-last_updated: 2026-05-02T07:30:00Z
+last_updated: 2026-05-03T02:30:00Z
 project: bmad-stepper
 project_key: NOKEY
 tracking_system: file-system
@@ -82,7 +82,7 @@ development_status:
   epic-4: in-progress
   4-1-bmad-loop-command-skeleton: done
   4-2-stop-condition-epic-end-and-story-x-y: done
-  4-3-stop-condition-next-story-and-phase-end: backlog
+  4-3-stop-condition-next-story-and-phase-end: done
   4-4-stop-condition-max-iters-and-default-cap: backlog
   4-5-stop-condition-time-budget-and-token-budget: backlog
   4-6-stop-condition-error-with-stop-on-error-continue-on-error: backlog

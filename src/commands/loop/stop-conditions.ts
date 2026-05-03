@@ -8,14 +8,17 @@
  * loader handles I/O failures and passes `null` for `state`/`dag`/
  * `sprintStatus` when load fails).
  *
- * Story 4.2 ships TWO predicates (`untilEpicEndStopCondition`,
+ * Story 4.2 shipped TWO predicates (`untilEpicEndStopCondition`,
  * `untilStoryStopCondition`) plus the `evaluateStopConditions` dispatcher
- * + the `compareStoryIds` numeric-segment comparator helper. Stories
- * 4.3 (`--next-story`, `--phase-end`), 4.5 (`--time-budget`,
- * `--token-budget`), and 4.6 (`--stop-on-error` / `--continue-on-error`)
- * will EXTEND this file with additional pure-function predicates following
- * the same `(state, dag, args, sprintStatus?) => StopReason | null`
- * contract.
+ * + the `compareStoryIds` numeric-segment comparator helper. Story 4.3
+ * EXTENDS the file with TWO MORE predicates (`nextStoryStopCondition`,
+ * `phaseEndStopCondition`) + the `LoopContext` interface (loop-entry
+ * baseline captured by `runLoop`); the dispatcher signature widens to
+ * accept an optional `loopContext` parameter; predicates that don't
+ * need it ignore it. Stories 4.5 (`--time-budget`, `--token-budget`)
+ * and 4.6 (`--stop-on-error` / `--continue-on-error`) will EXTEND
+ * further following the same `(state, dag, args, sprintStatus?,
+ * loopContext?) => StopReason | null` contract.
  *
  * §AC-3 contract widening: AC-3 (epics.md line 919) literally says
  * "exports each stop-condition as a pure function `(state, dag) => boolean`".
@@ -45,7 +48,7 @@
  *     pure-function file structure mandate).
  */
 
-import type { DagAdjacency } from "../../dag/index.ts";
+import type { DagAdjacency, Phase } from "../../dag/index.ts";
 import type { State } from "../../schemas/state.ts";
 import type { LoopArgs } from "./args.ts";
 import type { StopReason } from "./run.ts";
@@ -55,6 +58,33 @@ import type { StopReason } from "./run.ts";
 // `src/dag/types.ts`. Stories 4.3 + later may rename if a richer Dag
 // abstraction emerges.
 export type Dag = DagAdjacency;
+
+/**
+ * Loop-entry baseline context captured by `runLoop` BEFORE the first
+ * iteration runs. Consumed by `nextStoryStopCondition` and
+ * `phaseEndStopCondition` (Story 4.3) to detect transitions away from
+ * the baseline.
+ *
+ * `startStory` is the value of `state.lastSuccessfulStep?.story` at
+ * loop entry (or `null` when no prior successful step). `startPhase`
+ * is the corresponding phase from
+ * `dag.nodes.get(state.lastSuccessfulStep.step)?.phase` at loop entry
+ * (or `null` when DAG not loaded or step not found).
+ *
+ * v0.1 conservative: when both fields are `null`, the predicates
+ * short-circuit (no baseline to compare against). The runLoop captures
+ * the FIRST iteration's resulting story/phase as a fallback baseline
+ * when `lastSuccessfulStep === null` at entry — see `runLoop` body
+ * (Story 4.3 §Open Question 2 deferred-baseline adjudication).
+ *
+ * Fields are `readonly` per Story 4.3 §Open Question 9 (immutable
+ * struct; the runLoop creates a new object via spread when updating
+ * the baseline).
+ */
+export interface LoopContext {
+  readonly startStory: string | null;
+  readonly startPhase: Phase | null;
+}
 
 // ─── Public types ─────────────────────────────────────────────────────────
 
@@ -69,14 +99,22 @@ export interface SprintStatus {
 }
 
 /**
- * Pure-function stop-condition predicate signature. Stories 4.3/4.5/4.6
+ * Pure-function stop-condition predicate signature. Stories 4.5/4.6
  * MUST follow this contract when adding new predicates.
+ *
+ * Story 4.3 widened the contract with an optional `loopContext`
+ * parameter (the loop-entry baseline captured by `runLoop`). Predicates
+ * that don't consume the baseline (e.g., `untilEpicEndStopCondition`,
+ * `untilStoryStopCondition`) ignore it; predicates that DO consume it
+ * (`nextStoryStopCondition`, `phaseEndStopCondition`) short-circuit
+ * gracefully when the parameter is `undefined`.
  */
 export type StopConditionFn = (
   state: State,
   dag: Dag,
   args: LoopArgs,
   sprintStatus?: SprintStatus,
+  loopContext?: LoopContext,
 ) => StopReason | null;
 
 // ─── compareStoryIds — numeric-segment comparator ─────────────────────────
@@ -253,6 +291,133 @@ export function untilStoryStopCondition(
   return null;
 }
 
+// ─── nextStoryStopCondition (AC-1, Story 4.3) ─────────────────────────────
+
+/**
+ * Fires when `args.nextStory === true` AND `loopContext.startStory` was
+ * captured at loop entry AND `compareStoryIds(state.lastSuccessfulStep.story,
+ * loopContext.startStory) !== 0` — i.e., the just-completed iteration's
+ * story DIFFERS from the loop-entry baseline.
+ *
+ * Returns a `StopReason` of code `"next-story-reached"` carrying the
+ * `startStory` (baseline at loop entry) + the `currentStory` (post-
+ * iteration story) + the verbatim AC-1 message text
+ * `"next-story boundary reached"` (epics.md line 931).
+ *
+ * Pure function; no I/O; no throws. Inherits Story 4.2 §Open Question 3
+ * adjudication (post-iteration check only — the predicate runs AFTER
+ * each `runNext` returns success; the `state.lastSuccessfulStep.story`
+ * is updated by the just-completed `verify-and-advance.ts` invocation).
+ *
+ * Re-uses `compareStoryIds` (Story 4.2) for numeric-segment ordering —
+ * critical for the "1.10 vs 1.2" hazard where lexicographic ordering
+ * would return the wrong sign. The predicate fires on ANY direction of
+ * change (overshoot OR backshift); backshift is unexpected per BMAD
+ * progression but the inequality is symmetric for safety.
+ *
+ * Edge cases (all return `null`):
+ *   - `args.nextStory !== true` (flag absent or explicit-false).
+ *   - `loopContext === undefined` (predicate called without context).
+ *   - `loopContext.startStory === null` (fresh-project: baseline not
+ *     yet captured; the runLoop will UPDATE the baseline after the
+ *     first iteration per Story 4.3 §Open Question 2).
+ *   - `state.lastSuccessfulStep === null/undefined` (defensive — should
+ *     not happen post-iteration but guards against the fresh-project
+ *     edge case).
+ */
+export function nextStoryStopCondition(
+  state: State,
+  _dag: Dag,
+  args: LoopArgs,
+  _sprintStatus: SprintStatus | undefined,
+  loopContext: LoopContext | undefined,
+): StopReason | null {
+  if (args.nextStory !== true) return null;
+  if (loopContext === undefined) return null;
+  const baseline = loopContext.startStory;
+  if (baseline === null) return null;
+
+  const currentStory = state.lastSuccessfulStep?.story;
+  if (currentStory === undefined || currentStory === null) return null;
+
+  const cmp = compareStoryIds(currentStory, baseline);
+  if (cmp !== 0) {
+    return {
+      code: "next-story-reached",
+      startStory: baseline,
+      currentStory,
+      message: "next-story boundary reached",
+    };
+  }
+  return null;
+}
+
+// ─── phaseEndStopCondition (AC-2, Story 4.3) ──────────────────────────────
+
+/**
+ * Fires when `args.phaseEnd === true` AND `loopContext.startPhase` was
+ * captured at loop entry AND the just-completed iteration's step phase
+ * (looked up via `dag.nodes.get(state.lastSuccessfulStep.step)?.phase`)
+ * DIFFERS from `loopContext.startPhase`.
+ *
+ * Returns a `StopReason` of code `"phase-end-reached"` carrying the
+ * `fromPhase` (baseline) + the `toPhase` (post-iteration) + the verbatim
+ * AC-2 message text `"phase-end (transition <from>→<to>) reached"`
+ * (epics.md line 933) — e.g., `"phase-end (transition planning→implementation) reached"`.
+ *
+ * The `→` character is the unicode RIGHTWARDS ARROW (U+2192). Per
+ * Story 4.3 §Open Question 4, the source string uses the `→`
+ * unicode escape to keep the source file byte-clean (Story 4.2
+ * convention). The runtime-emitted message contains the actual arrow
+ * character.
+ *
+ * Pure function; no I/O; no throws. The DAG dependency is HARD — the
+ * predicate REQUIRES `dag.nodes` to be populated; the runLoop loads
+ * the DAG opt-in only when `args.phaseEnd === true` (Story 4.3 §Open
+ * Question 8 — opt-in to preserve zero-cost behaviour for the other
+ * five stop-condition flags).
+ *
+ * Edge cases (all return `null`):
+ *   - `args.phaseEnd !== true` (flag absent or explicit-false).
+ *   - `loopContext === undefined` (predicate called without context).
+ *   - `loopContext.startPhase === null` (fresh-project: baseline not
+ *     yet captured OR DAG load failed at loop entry).
+ *   - `state.lastSuccessfulStep === null/undefined` (defensive — fresh
+ *     project pre-first-iteration).
+ *   - `dag.nodes.get(currentStep) === undefined` (graceful degradation
+ *     when the step is not in the DAG; should not happen per AR41 but
+ *     defensive against Tier-3 unknown skills without phase metadata).
+ *   - `currentPhase === fromPhase` (no transition).
+ */
+export function phaseEndStopCondition(
+  state: State,
+  dag: Dag,
+  args: LoopArgs,
+  _sprintStatus: SprintStatus | undefined,
+  loopContext: LoopContext | undefined,
+): StopReason | null {
+  if (args.phaseEnd !== true) return null;
+  if (loopContext === undefined) return null;
+  const fromPhase = loopContext.startPhase;
+  if (fromPhase === null) return null;
+
+  const currentStep = state.lastSuccessfulStep?.step;
+  if (currentStep === undefined || currentStep === null) return null;
+
+  const node = dag.nodes.get(currentStep);
+  if (node === undefined) return null;
+  const toPhase = node.phase;
+  if (toPhase === fromPhase) return null;
+
+  return {
+    code: "phase-end-reached",
+    fromPhase,
+    toPhase,
+    // Unicode RIGHTWARDS ARROW (U+2192) per AC-2 verbatim.
+    message: `phase-end (transition ${fromPhase}→${toPhase}) reached`,
+  };
+}
+
 // ─── evaluateStopConditions — dispatcher ──────────────────────────────────
 
 /**
@@ -260,17 +425,19 @@ export function untilStoryStopCondition(
  * order; returns the first non-null `StopReason` or `null` when no predicate
  * fires.
  *
- * Stories 4.3/4.5/4.6 will EXTEND this function with additional predicate
- * invocations following the same `(state, dag, args, sprintStatus?) =>
- * StopReason | null` contract.
+ * Stories 4.5/4.6 will EXTEND this function with additional predicate
+ * invocations following the same `(state, dag, args, sprintStatus?,
+ * loopContext?) => StopReason | null` contract.
  *
  * Declaration order = priority order. The current order is:
  *   1. `untilEpicEndStopCondition` (Story 4.2 — AC-1).
  *   2. `untilStoryStopCondition`   (Story 4.2 — AC-2).
+ *   3. `nextStoryStopCondition`    (Story 4.3 — AC-1).
+ *   4. `phaseEndStopCondition`     (Story 4.3 — AC-2).
  *
- * When BOTH predicates fire on the same iteration, the dispatcher
- * returns the epic-end variant (first in declaration order). This is
- * deterministic and documented in `stop-conditions.test.ts` Test 14.
+ * When MULTIPLE predicates would fire on the same iteration, the dispatcher
+ * returns the FIRST non-null in declaration order. This is deterministic
+ * and tested in `stop-conditions.test.ts` Tests 14, EVAL_43_1, EVAL_43_2.
  *
  * Pure function; no I/O; no throws.
  */
@@ -279,12 +446,32 @@ export function evaluateStopConditions(
   dag: Dag,
   args: LoopArgs,
   sprintStatus?: SprintStatus,
+  loopContext?: LoopContext,
 ): StopReason | null {
   const epicEnd = untilEpicEndStopCondition(state, dag, args, sprintStatus);
   if (epicEnd !== null) return epicEnd;
 
   const story = untilStoryStopCondition(state, dag, args);
   if (story !== null) return story;
+
+  // Story 4.3 additions (AC-1, AC-2):
+  const nextStory = nextStoryStopCondition(
+    state,
+    dag,
+    args,
+    sprintStatus,
+    loopContext,
+  );
+  if (nextStory !== null) return nextStory;
+
+  const phase = phaseEndStopCondition(
+    state,
+    dag,
+    args,
+    sprintStatus,
+    loopContext,
+  );
+  if (phase !== null) return phase;
 
   return null;
 }

@@ -164,8 +164,8 @@ AC-2 verbatim, but only `maxIters` drives runtime branching:
 | `--max-iters N`        | 4.1   | RUNTIME-WIRED                    |
 | `--until-epic-end`     | 4.2   | RUNTIME-WIRED in 4.2             |
 | `--until-story X.Y`    | 4.2   | RUNTIME-WIRED in 4.2             |
-| `--next-story`         | 4.3   | parsed only                      |
-| `--phase-end`          | 4.3   | parsed only                      |
+| `--next-story`         | 4.3   | RUNTIME-WIRED in 4.3             |
+| `--phase-end`          | 4.3   | RUNTIME-WIRED in 4.3             |
 | `--time-budget MS`     | 4.5   | parsed only                      |
 | `--token-budget N`     | 4.5   | parsed only                      |
 | `--stop-on-error`      | 4.6   | parsed only                      |
@@ -207,6 +207,51 @@ Exit message: `story 3.2 reached` (verbatim per AC-2). When the loop
 overshoots (e.g., the iteration advanced to story 3.3 before the
 predicate could fire on 3.2), the structured `StopReason.currentStory`
 field captures the overshoot context for tooling consumers.
+
+### `--next-story` (Story 4.3)
+
+Halts the loop when the just-completed iteration's story DIFFERS from
+the story at loop entry. Useful for chaining partial work without
+committing to a full epic. The baseline story is captured BEFORE the
+first iteration; subsequent iterations' completed-story is compared
+against the baseline via `compareStoryIds`.
+
+```
+/bmad-loop --next-story
+```
+
+Exit message: `next-story boundary reached`. Exit code: `0`. The
+structured `StopReason` carries `startStory` (the loop-entry baseline)
+and `currentStory` (the post-iteration value) for tooling consumers;
+the AR9 summary line embeds both for human readers
+(`next-story boundary reached (3.2 → 3.3)`).
+
+Edge case: when the loop starts with no prior successful step
+(`state.lastSuccessfulStep === null`), the FIRST iteration's resulting
+story is captured as the baseline; subsequent iterations fire on
+transition.
+
+### `--phase-end` (Story 4.3)
+
+Halts the loop when the just-completed iteration's BMAD phase
+(`analysis`, `planning`, `solutioning`, `implementation`, `retro`)
+DIFFERS from the phase at loop entry. The baseline phase is looked up
+from the DAG (`dag.nodes.get(state.lastSuccessfulStep.step).phase`)
+before the first iteration; subsequent iterations' completed-step phase
+is compared against the baseline.
+
+```
+/bmad-loop --phase-end
+```
+
+Exit message: `phase-end (transition <from>→<to>) reached` (e.g.,
+`phase-end (transition planning→implementation) reached`). The arrow is
+the unicode RIGHTWARDS ARROW (U+2192). Exit code: `0`.
+
+Note: requires the DAG to be loaded; the runner builds the DAG only
+when `--phase-end` is supplied (zero-cost otherwise). On graceful DAG-
+load failure (rare — defensive only), the predicate short-circuits and
+the loop continues with other stop conditions.
 
 When NEITHER `--max-iters` nor any other stop condition is supplied, the
 loop halts immediately with `stopReason.code === "no-stop-condition"`

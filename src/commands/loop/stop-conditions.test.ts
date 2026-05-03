@@ -12,12 +12,15 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import type { DagAdjacency } from "../../dag/index.ts";
+import type { DagAdjacency, DagNode, Phase } from "../../dag/index.ts";
 import type { State } from "../../schemas/state.ts";
 import type { LoopArgs } from "./args.ts";
 import {
   compareStoryIds,
   evaluateStopConditions,
+  type LoopContext,
+  nextStoryStopCondition,
+  phaseEndStopCondition,
   type SprintStatus,
   untilEpicEndStopCondition,
   untilStoryStopCondition,
@@ -31,7 +34,11 @@ const EMPTY_DAG: DagAdjacency = {
   edgesIn: new Map(),
 };
 
-function makeState(epic: number | null, story: string | null): State {
+function makeState(
+  epic: number | null,
+  story: string | null,
+  step = "bmad-dev-story",
+): State {
   if (epic === null || story === null) {
     return {
       schemaVersion: 1,
@@ -48,7 +55,7 @@ function makeState(epic: number | null, story: string | null): State {
     schemaVersion: 1,
     project: { name: "bmad-stepper", bmadVersion: "v6.x" },
     lastSuccessfulStep: {
-      step: "bmad-dev-story",
+      step,
       epic,
       story,
       completedAt: "2026-05-02T00:00:00Z",
@@ -58,6 +65,40 @@ function makeState(epic: number | null, story: string | null): State {
     lastSnapshot: null,
     checkpoints: [],
     runHistory: [],
+  };
+}
+
+// ─── Story 4.3 fixture helpers ────────────────────────────────────────────
+
+/**
+ * Build a minimal DagAdjacency fixture with a known set of nodes whose
+ * `phase` field can be queried. The fixture covers the canonical step
+ * names used in Story 4.3 phase-transition tests:
+ *   - `bmad-create-prd`  → planning
+ *   - `bmad-dev-story`   → implementation
+ *   - `bmad-retrospective` → retro
+ */
+function makeDagFixture(): DagAdjacency {
+  const nodes = new Map<string, DagNode>();
+  const addNode = (name: string, phase: Phase): void => {
+    nodes.set(name, {
+      name,
+      phase,
+      after: [],
+      before: [],
+      optional: false,
+      persona: null,
+    });
+  };
+  addNode("bmad-create-prd", "planning");
+  addNode("bmad-dev-story", "implementation");
+  addNode("bmad-retrospective", "retro");
+  addNode("bmad-create-architecture", "solutioning");
+  addNode("bmad-domain-research", "analysis");
+  return {
+    nodes,
+    edgesOut: new Map(),
+    edgesIn: new Map(),
   };
 }
 
@@ -374,5 +415,304 @@ describe("predicate purity (Test 16)", () => {
     for (let i = 0; i < 100; i++) {
       expect(compareStoryIds("1.10", "1.2")).toBe(1);
     }
+  });
+});
+
+// ─── Tests N1-N8: nextStoryStopCondition (Story 4.3 AC-1) ─────────────────
+
+describe("nextStoryStopCondition (Story 4.3 AC-1, Tests N1-N8)", () => {
+  const args: LoopArgs = { nextStory: true };
+
+  it("Test N1: fires when story changes within an epic (3.2 → 3.3)", () => {
+    const state = makeState(3, "3.3");
+    const ctx: LoopContext = { startStory: "3.2", startPhase: null };
+    const result = nextStoryStopCondition(
+      state,
+      EMPTY_DAG,
+      args,
+      undefined,
+      ctx,
+    );
+    expect(result).not.toBeNull();
+    if (result === null) return;
+    expect(result.code).toBe("next-story-reached");
+    if (result.code !== "next-story-reached") return;
+    expect(result.startStory).toBe("3.2");
+    expect(result.currentStory).toBe("3.3");
+    expect(result.message).toBe("next-story boundary reached");
+  });
+
+  it("Test N2: fires across epic boundaries (3.10 → 4.1)", () => {
+    const state = makeState(4, "4.1");
+    const ctx: LoopContext = { startStory: "3.10", startPhase: null };
+    const result = nextStoryStopCondition(
+      state,
+      EMPTY_DAG,
+      args,
+      undefined,
+      ctx,
+    );
+    expect(result).not.toBeNull();
+    if (result === null) return;
+    expect(result.code).toBe("next-story-reached");
+    if (result.code !== "next-story-reached") return;
+    expect(result.startStory).toBe("3.10");
+    expect(result.currentStory).toBe("4.1");
+  });
+
+  it("Test N3: does NOT fire when story unchanged (3.2 === 3.2)", () => {
+    const state = makeState(3, "3.2");
+    const ctx: LoopContext = { startStory: "3.2", startPhase: null };
+    expect(
+      nextStoryStopCondition(state, EMPTY_DAG, args, undefined, ctx),
+    ).toBeNull();
+  });
+
+  it("Test N4: does NOT fire when args.nextStory is undefined", () => {
+    const state = makeState(3, "3.3");
+    const ctx: LoopContext = { startStory: "3.2", startPhase: null };
+    expect(
+      nextStoryStopCondition(state, EMPTY_DAG, {}, undefined, ctx),
+    ).toBeNull();
+  });
+
+  it("Test N5: does NOT fire when args.nextStory is explicit false", () => {
+    const state = makeState(3, "3.3");
+    const ctx: LoopContext = { startStory: "3.2", startPhase: null };
+    expect(
+      nextStoryStopCondition(
+        state,
+        EMPTY_DAG,
+        { nextStory: false },
+        undefined,
+        ctx,
+      ),
+    ).toBeNull();
+  });
+
+  it("Test N6: does NOT fire when loopContext.startStory is null (fresh project)", () => {
+    const state = makeState(3, "3.3");
+    const ctx: LoopContext = { startStory: null, startPhase: null };
+    expect(
+      nextStoryStopCondition(state, EMPTY_DAG, args, undefined, ctx),
+    ).toBeNull();
+  });
+
+  it("Test N7: does NOT fire when loopContext is undefined", () => {
+    const state = makeState(3, "3.3");
+    expect(
+      nextStoryStopCondition(state, EMPTY_DAG, args, undefined, undefined),
+    ).toBeNull();
+  });
+
+  it("Test N8: does NOT fire when state.lastSuccessfulStep is null", () => {
+    const state = makeState(null, null);
+    const ctx: LoopContext = { startStory: "3.2", startPhase: null };
+    expect(
+      nextStoryStopCondition(state, EMPTY_DAG, args, undefined, ctx),
+    ).toBeNull();
+  });
+});
+
+// ─── Tests P1-P6: phaseEndStopCondition (Story 4.3 AC-2) ──────────────────
+
+describe("phaseEndStopCondition (Story 4.3 AC-2, Tests P1-P6)", () => {
+  const args: LoopArgs = { phaseEnd: true };
+
+  it("Test P1: fires on planning → implementation transition", () => {
+    const dag = makeDagFixture();
+    // The just-completed step is `bmad-dev-story` (implementation phase).
+    const state = makeState(3, "3.3", "bmad-dev-story");
+    const ctx: LoopContext = {
+      startStory: null,
+      startPhase: "planning",
+    };
+    const result = phaseEndStopCondition(state, dag, args, undefined, ctx);
+    expect(result).not.toBeNull();
+    if (result === null) return;
+    expect(result.code).toBe("phase-end-reached");
+    if (result.code !== "phase-end-reached") return;
+    expect(result.fromPhase).toBe("planning");
+    expect(result.toPhase).toBe("implementation");
+    expect(result.message).toBe(
+      "phase-end (transition planning→implementation) reached",
+    );
+  });
+
+  it("Test P2: fires on implementation → retro transition", () => {
+    const dag = makeDagFixture();
+    // Just-completed is `bmad-retrospective` (retro phase).
+    const state = makeState(3, "3.10", "bmad-retrospective");
+    const ctx: LoopContext = {
+      startStory: null,
+      startPhase: "implementation",
+    };
+    const result = phaseEndStopCondition(state, dag, args, undefined, ctx);
+    expect(result).not.toBeNull();
+    if (result === null) return;
+    expect(result.code).toBe("phase-end-reached");
+    if (result.code !== "phase-end-reached") return;
+    expect(result.fromPhase).toBe("implementation");
+    expect(result.toPhase).toBe("retro");
+    expect(result.message).toBe(
+      "phase-end (transition implementation→retro) reached",
+    );
+  });
+
+  it("Test P3: does NOT fire when phase unchanged (implementation === implementation)", () => {
+    const dag = makeDagFixture();
+    const state = makeState(3, "3.3", "bmad-dev-story");
+    const ctx: LoopContext = {
+      startStory: null,
+      startPhase: "implementation",
+    };
+    expect(phaseEndStopCondition(state, dag, args, undefined, ctx)).toBeNull();
+  });
+
+  it("Test P4: does NOT fire when args.phaseEnd is undefined", () => {
+    const dag = makeDagFixture();
+    const state = makeState(3, "3.3", "bmad-dev-story");
+    const ctx: LoopContext = {
+      startStory: null,
+      startPhase: "planning",
+    };
+    expect(phaseEndStopCondition(state, dag, {}, undefined, ctx)).toBeNull();
+  });
+
+  it("Test P5: does NOT fire when loopContext.startPhase is null (baseline not yet captured)", () => {
+    const dag = makeDagFixture();
+    const state = makeState(3, "3.3", "bmad-dev-story");
+    const ctx: LoopContext = { startStory: null, startPhase: null };
+    expect(phaseEndStopCondition(state, dag, args, undefined, ctx)).toBeNull();
+  });
+
+  it("Test P6: does NOT fire when DAG lookup fails (graceful degradation)", () => {
+    const dag = makeDagFixture();
+    // Step name not in DAG.
+    const state = makeState(3, "3.3", "bmad-unknown-skill");
+    const ctx: LoopContext = {
+      startStory: null,
+      startPhase: "planning",
+    };
+    expect(phaseEndStopCondition(state, dag, args, undefined, ctx)).toBeNull();
+  });
+
+  it("Test P6b: does NOT fire when state.lastSuccessfulStep is null (defensive)", () => {
+    const dag = makeDagFixture();
+    const state = makeState(null, null);
+    const ctx: LoopContext = {
+      startStory: null,
+      startPhase: "planning",
+    };
+    expect(phaseEndStopCondition(state, dag, args, undefined, ctx)).toBeNull();
+  });
+
+  it("Test P6c: does NOT fire when loopContext is undefined", () => {
+    const dag = makeDagFixture();
+    const state = makeState(3, "3.3", "bmad-dev-story");
+    expect(
+      phaseEndStopCondition(state, dag, args, undefined, undefined),
+    ).toBeNull();
+  });
+});
+
+// ─── Tests EVAL_43_*: dispatcher priority for Story 4.3 predicates ────────
+
+describe("evaluateStopConditions priority — Story 4.3 (Tests EVAL_43_1, EVAL_43_2)", () => {
+  it("Test EVAL_43_1: epic-end wins over phase-end (declaration order)", () => {
+    // Setup: both epic-end AND phase-end would fire on this iteration.
+    const dag = makeDagFixture();
+    // Just-completed is `bmad-retrospective` in epic 3 story 3.10 (retro
+    // phase). All stories done + retro done → epic-end fires. Phase
+    // baseline === implementation → phase changed → phase-end would fire.
+    const state = makeState(3, "3.10", "bmad-retrospective");
+    const sprintStatus = makeSprintStatusEpic3();
+    const ctx: LoopContext = {
+      startStory: "3.9",
+      startPhase: "implementation",
+    };
+    const args: LoopArgs = { untilEpicEnd: true, phaseEnd: true };
+    const result = evaluateStopConditions(state, dag, args, sprintStatus, ctx);
+    expect(result).not.toBeNull();
+    if (result === null) return;
+    expect(result.code).toBe("epic-end-reached");
+  });
+
+  it("Test EVAL_43_2: until-story wins over next-story (declaration order)", () => {
+    // Setup: --until-story 3.3 + --next-story; both fire (current 3.3
+    // matches target AND differs from baseline 3.2). until-story is
+    // declared SECOND but precedes next-story (declared THIRD); that
+    // ordering is canonical per Story 4.3 §Open Question 6.
+    const state = makeState(3, "3.3");
+    const ctx: LoopContext = { startStory: "3.2", startPhase: null };
+    const args: LoopArgs = { untilStory: "3.3", nextStory: true };
+    const result = evaluateStopConditions(
+      state,
+      EMPTY_DAG,
+      args,
+      undefined,
+      ctx,
+    );
+    expect(result).not.toBeNull();
+    if (result === null) return;
+    expect(result.code).toBe("until-story-reached");
+  });
+
+  it("Test EVAL_43_3: dispatcher routes to nextStoryStopCondition when only --next-story fires", () => {
+    const state = makeState(3, "3.3");
+    const ctx: LoopContext = { startStory: "3.2", startPhase: null };
+    const args: LoopArgs = { nextStory: true };
+    const result = evaluateStopConditions(
+      state,
+      EMPTY_DAG,
+      args,
+      undefined,
+      ctx,
+    );
+    expect(result).not.toBeNull();
+    if (result === null) return;
+    expect(result.code).toBe("next-story-reached");
+  });
+
+  it("Test EVAL_43_4: dispatcher routes to phaseEndStopCondition when only --phase-end fires", () => {
+    const dag = makeDagFixture();
+    const state = makeState(3, "3.3", "bmad-dev-story");
+    const ctx: LoopContext = { startStory: null, startPhase: "planning" };
+    const args: LoopArgs = { phaseEnd: true };
+    const result = evaluateStopConditions(state, dag, args, undefined, ctx);
+    expect(result).not.toBeNull();
+    if (result === null) return;
+    expect(result.code).toBe("phase-end-reached");
+  });
+
+  it("Test EVAL_43_5: dispatcher returns null when no Story 4.3 predicate fires (loopContext undefined)", () => {
+    const state = makeState(3, "3.3");
+    const args: LoopArgs = { nextStory: true, phaseEnd: true };
+    expect(
+      evaluateStopConditions(state, EMPTY_DAG, args, undefined, undefined),
+    ).toBeNull();
+  });
+});
+
+// ─── Test 17: Story 4.3 predicate purity (defence-in-depth) ───────────────
+
+describe("predicate purity — Story 4.3 (Test 17)", () => {
+  it("nextStoryStopCondition: identical inputs → identical results (idempotent)", () => {
+    const state = makeState(3, "3.3");
+    const ctx: LoopContext = { startStory: "3.2", startPhase: null };
+    const args: LoopArgs = { nextStory: true };
+    const a = nextStoryStopCondition(state, EMPTY_DAG, args, undefined, ctx);
+    const b = nextStoryStopCondition(state, EMPTY_DAG, args, undefined, ctx);
+    expect(a).toEqual(b);
+  });
+
+  it("phaseEndStopCondition: identical inputs → identical results (idempotent)", () => {
+    const dag = makeDagFixture();
+    const state = makeState(3, "3.3", "bmad-dev-story");
+    const ctx: LoopContext = { startStory: null, startPhase: "planning" };
+    const args: LoopArgs = { phaseEnd: true };
+    const a = phaseEndStopCondition(state, dag, args, undefined, ctx);
+    const b = phaseEndStopCondition(state, dag, args, undefined, ctx);
+    expect(a).toEqual(b);
   });
 });
