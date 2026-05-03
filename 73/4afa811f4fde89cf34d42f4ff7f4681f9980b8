@@ -1,0 +1,40 @@
+src/commands/loop/stop-conditions.ts
+  7cd88fa2957a9a0f 11,13-21,51,62-88,102,104-110,117,294-420,428-430,435-436,438-440,449,457-474
+_bmad-output/implementation-artifacts/sprint-status.yaml
+  7cd88fa2957a9a0f 2,38,85
+src/commands/loop/run.ts
+  7cd88fa2957a9a0f 41-42,53,85-91,104-115,180-191,198-202,208-213,243,264-267,274,424-437,448-485,494-498,500-507,541-572,641-648
+commands/bmad-loop.md
+  7cd88fa2957a9a0f 167-168,211-255
+src/commands/loop/run.test.ts
+  7cd88fa2957a9a0f 266-275,551-851
+_bmad-output/implementation-artifacts/4-3-stop-condition-next-story-and-phase-end.md
+  7cd88fa2957a9a0f 1-965
+src/commands/loop/stop-conditions.test.ts
+  7cd88fa2957a9a0f 15,21-23,37-41,58,71-104,420-718
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "734afa811f4fde89cf34d42f4ff7f4681f9980b8",
+  "prompts": {
+    "7cd88fa2957a9a0f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8dd72143-d165-49ff-a1d7-9bbfc58db741",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 2159,
+      "total_deletions": 171,
+      "accepted_lines": 2028,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
