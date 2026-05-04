@@ -15,8 +15,9 @@ Stories 4.2 + 4.3 wired the four condition flags `--until-epic-end`,
 `--until-story X.Y`, `--next-story`, `--phase-end`. Story 4.5 wired the
 two budget flags (`--time-budget MS`, `--token-budget N`); Story 4.6
 wired the failure-policy flags (`--stop-on-error`, `--continue-on-error`);
-Stories 4.7+ will wire the remaining flags (`--plan-first`,
-`--checkpoint-each <type>`, SIGINT, exit-reason format).
+Story 4.7 wired `--plan-first` (dry-run preview); Stories 4.8+ will
+wire the remaining flags (`--checkpoint-each <type>`, SIGINT, exit-
+reason format).
 
 ## Usage examples
 
@@ -28,7 +29,7 @@ Stories 4.7+ will wire the remaining flags (`--plan-first`,
 /bmad-loop --next-story              # Story 4.3 — runtime-wired
 /bmad-loop --phase-end               # Story 4.3 — runtime-wired
 /bmad-loop --time-budget 7200000 --token-budget 200000  # Story 4.5
-/bmad-loop --plan-first              # Story 4.7 — dry-run preview (wired in 4.7)
+/bmad-loop --plan-first              # Story 4.7 — RUNTIME-WIRED in 4.7
 /bmad-loop --checkpoint-each story   # Story 4.8 — per-iteration snapshot
 /bmad-loop --interactive             # Story 5.5 — pause-between-steps
 /bmad-loop --auto-fix                # Story 5.3 — route-to-fixer
@@ -75,6 +76,11 @@ iteration loop. Each iteration:
    Story-4.2/4.3/4.5/4.6 variants `epic-end-reached` /
    `until-story-reached` / `next-story-reached` / `phase-end-reached` /
    `time-budget-reached` / `token-budget-reached` / `error-stop`).
+2.5. When `--plan-first` is supplied (Story 4.7), the runner short-
+   circuits BEFORE the iteration body — emits a single AR9 `"report"`
+   JSON line carrying the planned step sequence and exits 0 without
+   dispatching anything. The StopReason variants do not apply in
+   plan-mode.
 3. Else, invokes `runNext` once via in-process function call.
 4. Captures the per-iteration result into an `IterationRecord`
    (`{ iterCount, runId, action, exitCode, durationMs, startedAt }`).
@@ -106,6 +112,9 @@ Exit-code mapping per FR53 + Story 4.1:
   `halt-on-error` retains the v0.1 generic-halt message format for
   non-verifier halts).
 - `2` — argument parse error (configuration error per FR53).
+
+Plan-mode (`--plan-first`) ALWAYS maps to exit code `0` (clean exit;
+the dry-run is the success path per Story 4.7 AC-1).
 
 ### 2. Parse the single stdout JSON line.
 
@@ -186,7 +195,7 @@ drive runtime branching:
 | `--token-budget N`     | 4.5      | RUNTIME-WIRED in 4.5                |
 | `--stop-on-error`      | 4.6      | RUNTIME-WIRED in 4.6                |
 | `--continue-on-error`  | 4.6      | RUNTIME-WIRED in 4.6                |
-| `--plan-first`         | 4.7      | parsed only                         |
+| `--plan-first`         | 4.7      | RUNTIME-WIRED in 4.7                |
 | `--checkpoint-each X`  | 4.8      | parsed only                         |
 | `--interactive`        | 5.5      | parsed only                         |
 | `--auto-fix`           | 5.3      | parsed only                         |
@@ -405,9 +414,79 @@ the loop runner injects `--max-iters=50` as a DEFAULT cap per FR25,
 preventing accidental infinite loops (Story 4.4 AC-1). When the user
 supplies an explicit stop condition (e.g., `--until-epic-end`,
 `--until-story X.Y`, `--next-story`, `--phase-end`, `--time-budget MS`,
-`--token-budget N`, `--stop-on-error`, `--continue-on-error`) WITHOUT
-`--max-iters`, NO default cap is applied — the explicit condition
-controls the loop's lifetime.
+`--token-budget N`, `--stop-on-error`, `--continue-on-error`,
+`--plan-first`) WITHOUT `--max-iters`, NO default cap is applied — the
+explicit condition controls the loop's lifetime. Note: `--plan-first`
+is technically NOT a stop condition (it's a pre-flight mode), but for
+the purposes of the default-cap suppression it behaves like one.
+
+### `--plan-first` (Story 4.7)
+
+Preview the loop's planned step sequence WITHOUT dispatching anything.
+Plan-mode short-circuits BEFORE the iteration body — performs THREE
+one-shot read-only loads (state, sprint-status, DAG), computes the
+planned step sequence by walking the DAG until the first declared stop
+condition would fire (best-effort, since failures may divert), emits a
+single AR9 `"report"` JSON line carrying the human-readable plan in
+its `message` field, and exits 0 without dispatching anything.
+
+```
+/bmad-loop --plan-first
+/bmad-loop --plan-first --until-epic-end --max-iters 50
+```
+
+Use `--plan-first` before any nightly unattended run to verify your
+assumptions about the planned step sequence — by convention, the
+overnight-run pattern checks the plan first to avoid starting an
+unattended run on a wrong assumption.
+
+**Plan output shape**: a multi-line human-readable text body in the
+AR9 `"report"` action's `message` field. The body includes:
+
+- A summary header (`Plan: <N> steps planned (first stop: <code> — <message>)`).
+- Total estimated steps + total estimated tokens (Story 6.3 forward
+  dependency — v0.1 renders `<unknown — Story 6.3 \`models:\` config required>`
+  for the totals; Story 6.3 will replace the stub with a config-driven
+  lookup).
+- The numbered steps list with `step-name [phase] (epic E, story S) —
+  persona — ~tokens in / ~tokens out`.
+- Checkpoints section (Story 4.8 forward dependency — when
+  `--checkpoint-each <type>` is supplied, plan-mode SURFACES the planned
+  checkpoint locations; when not supplied, renders `(none —
+  --checkpoint-each not supplied)`).
+- A trailing `First stop condition: <code> — <message>` line.
+
+**AR9 stdout discipline**: a SINGLE `"report"` JSON line per command
+invocation. The `message` field is a multi-line human-readable string
+where embedded newlines are JSON-escaped — the OUTER JSON line stays a
+single stdout line per AR9 + FR54.
+
+**Exit code**: ALWAYS `0` (clean exit; the dry-run is the success path
+per Story 4.7 AC-1). ZERO tokens are spent on Task subagents; ZERO
+state.yaml writes; ZERO checkpoint snapshots.
+
+**Reproducibility (AC-3)**: the plan output is byte-identical across
+invocations on the same state. `computePlan` + `formatPlan` are PURE
+FUNCTIONS over their inputs — no `Bun.nanoseconds()`, no `new Date()`,
+no random IDs. The DAG iteration order is deterministic per `Map`
+insertion-order (Story 1.10 invariant). The `PlanResult` wrapper carries
+`startedAt` / `completedAt` / `durationMs` for observability — but
+those fields are NOT included in `formattedPlan`; reproducibility is
+asserted on `formattedPlan` only.
+
+**Forward dependencies**:
+
+- Story 6.3 (`models:` per-step config): replaces the v0.1
+  `lookupModelTokens` stub with a config-driven lookup; the formatter
+  already accommodates the eventual non-null return path.
+- Story 4.8 (`--checkpoint-each <type>` runtime): wires the actual
+  snapshot creation at iteration time; plan-mode's checkpoint
+  enumeration becomes shared with Story 4.8's runtime path.
+
+**Graceful fallback**: when state.yaml cannot be read OR the DAG build
+fails, plan-mode emits a single-line `Plan unavailable — <reason>. Run
+/bmad-loop --doctor to diagnose.` message and exits 0. The fallback
+preserves AC-1's "exits 0 without dispatching anything" wording.
 
 ## Tool restrictions
 

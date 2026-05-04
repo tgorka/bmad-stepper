@@ -39,6 +39,11 @@
  *         v0.1 generic-halt message format for non-verifier halts).
  *   - 2 — argv parse error (configuration error).
  *
+ * Plan-mode (`--plan-first`, Story 4.7) ALWAYS maps to exit code `0`
+ * (clean exit; the dry-run is the success path per AC-1). The plan body
+ * is carried in the AR9 `"report"` action's `message` field; the exit
+ * code is fixed.
+ *
  * Architecture cross-references:
  *   - architecture.md §line 1294-1302 (AR41 top-tier import boundary).
  *   - architecture.md §line 1660 (AR9 protocol concretization).
@@ -57,6 +62,7 @@ import type { State } from "../../schemas/state.ts";
 import { loadStateUnlocked } from "../../state/load.ts";
 import { type NextResult, type RunNextOptions, runNext } from "../next/run.ts";
 import { type LoopArgs, parseLoopArgs } from "./args.ts";
+import { computePlan, formatPlan, type Plan } from "./plan.ts";
 import {
   evaluateStopConditions,
   type LoopContext,
@@ -167,13 +173,14 @@ export type StopReason =
     };
 
 /**
- * Structured return value from `runLoop`. Tests inspect this directly
- * without mutating stdout / process state. The `import.meta.main` block
- * emits the AR9 line via `emitDispatchAction` and exits with
- * `result.exitCode`.
+ * Structured return value from `runLoop` when invoked in iteration-body
+ * mode (the default). Tests inspect this directly without mutating
+ * stdout / process state. The `import.meta.main` block emits the AR9
+ * line via `emitDispatchAction` and exits with `result.exitCode`.
  *
- * Story 4.7 will add a `mode: "loop"` discriminator to distinguish this
- * from a future `PlanResult` union variant (`--plan-first`).
+ * Story 4.7: the `mode: "loop"` discriminator field distinguishes this
+ * from the new `PlanResult` shape returned in plan-mode. The discriminator
+ * is the FIRST field for canonical positioning.
  */
 export interface LoopResult {
   readonly mode: "loop";
@@ -183,6 +190,38 @@ export interface LoopResult {
   readonly durationMs: number;
   readonly startedAt: string;
   readonly completedAt: string;
+}
+
+/**
+ * Structured return value from `runLoop` when invoked in plan-mode
+ * (`--plan-first`). The plan-mode short-circuit at run.ts:486+ returns
+ * this shape INSTEAD OF the iteration-body `LoopResult`. The
+ * `import.meta.main` block branches on `result.mode` to dispatch the
+ * AR9 emit + exit code.
+ *
+ * Fields:
+ *   - mode           — Discriminator literal `"plan"`.
+ *   - plan           — Structured `Plan` value (for tests / tooling).
+ *   - formattedPlan  — Human-readable text body carried in the AR9
+ *                      `"report"` action's `message` field.
+ *   - exitCode       — Fixed at literal `0` (plan-mode is always clean).
+ *   - startedAt      — ISO timestamp at plan-mode entry (observability).
+ *   - completedAt    — ISO timestamp at plan-mode exit (observability).
+ *   - durationMs     — Plan computation wall-clock in ms (observability).
+ *
+ * AC-3 reproducibility: `plan` and `formattedPlan` are byte-identical
+ * across invocations on the same state. The wrapper fields
+ * (`startedAt`, `completedAt`, `durationMs`) are NOT included in
+ * `formattedPlan` and are NOT subject to the AC-3 guarantee.
+ */
+export interface PlanResult {
+  readonly mode: "plan";
+  readonly plan: Plan;
+  readonly formattedPlan: string;
+  readonly exitCode: 0;
+  readonly startedAt: string;
+  readonly completedAt: string;
+  readonly durationMs: number;
 }
 
 /**
@@ -461,17 +500,27 @@ function extractFailureCode(
  * translated to a thrown `ConfigError` for AR33 compliance at this
  * tier).
  *
+ * Story 4.7 (`--plan-first`) ADDS a pre-flight branch BEFORE the
+ * iteration body. When `args.planFirst === true`, the runner performs
+ * THREE one-shot read-only loads (state, sprint-status, DAG) and computes
+ * a `Plan` value via `computePlan`; the formatted plan is returned via
+ * the `PlanResult` discriminated-union variant. The plan-mode branch is
+ * gated AFTER LoopArgs resolution and BEFORE the default-cap injection
+ * — argv parse errors still fire correctly. The iteration body never
+ * runs in plan-mode; ZERO tokens are spent on Task subagents.
+ *
  * Architecture compliance:
  *   - AR8: lock-free top-tier; does not import `src/lock/`.
  *   - AR9: per-iteration AR9 lines are captured in-process; the loop's
  *          OWN AR9 line is emitted by `import.meta.main` only.
  *   - AR41: imports only top-tier sibling `runNext` (next/run.ts);
- *          intra-module `./args.ts` + `./stop-conditions.ts`;
- *          foundational `errors.ts` + `io/log.ts`
- *          + `schemas/dispatch-protocol.ts`; mid-tier `dispatch/index.ts`
- *          for the AR9 emit helper.
+ *          intra-module `./args.ts` + `./plan.ts` + `./stop-conditions.ts`;
+ *          foundational `errors.ts` + `io/log.ts` + `schemas/`;
+ *          mid-tier `dispatch/index.ts` for the AR9 emit helper.
  */
-export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
+export async function runLoop(
+  opts?: LoopOpts,
+): Promise<LoopResult | PlanResult> {
   // Resolve LoopArgs from either pre-parsed `opts.args` or argv.
   let args: LoopArgs;
   if (opts?.args !== undefined) {
@@ -489,6 +538,102 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
     args = parsed.value;
   }
 
+  // Story 4.7 AC-1: --plan-first short-circuits the iteration body.
+  // Compute the plan, format it, and emit a single AR9 "report" line at
+  // the import.meta.main block — exit 0 without dispatching anything.
+  // The branch is gated AFTER LoopArgs resolution (argv parse errors
+  // fire correctly) and BEFORE the default-cap injection (so plan-mode
+  // never triggers the implicit 50-iter cap). All loaders/closures
+  // below this point are unused in plan-mode.
+  if (args.planFirst === true) {
+    const planStartedAt = new Date().toISOString();
+    const planStartNs: number = Bun.nanoseconds();
+
+    // One-shot state read (lock-free per AR8 — same loader the iteration
+    // body uses, but called ONCE before any iteration would have run).
+    const planStateFn =
+      opts?.stateOverride ??
+      (async () => {
+        try {
+          return await loadStateUnlocked();
+        } catch {
+          return null;
+        }
+      });
+    let planState: State | null = null;
+    try {
+      planState = await planStateFn();
+    } catch {
+      planState = null;
+    }
+
+    // One-shot sprint-status read.
+    const planSprintStatusFn =
+      opts?.sprintStatusOverride ?? loadSprintStatusForLoop;
+    let planSprintStatus: SprintStatus | null = null;
+    try {
+      planSprintStatus = await planSprintStatusFn();
+    } catch {
+      planSprintStatus = null;
+    }
+
+    // One-shot DAG build (always — plan-mode requires the DAG to walk).
+    const planDagFn =
+      opts?.dagOverride ??
+      (async () => {
+        try {
+          return await buildDag({ skillNames: [] });
+        } catch {
+          return null;
+        }
+      });
+    let planDag: DagAdjacency | null = null;
+    try {
+      planDag = await planDagFn();
+    } catch {
+      planDag = null;
+    }
+
+    // Construct the Plan + formattedPlan.
+    let plan: Plan;
+    let formattedPlan: string;
+    if (planState === null || planDag === null) {
+      // Graceful fallback (Story 4.7 OQ-4): emit a single-line message
+      // with an AR22-conformant hint. Plan-mode does NOT throw on read
+      // failure — AC-1 mandates "exits 0 without dispatching anything".
+      plan = {
+        totalEstimatedSteps: 0,
+        steps: [],
+        totalEstimatedTokensIn: null,
+        totalEstimatedTokensOut: null,
+        modelsConfigPresent: false,
+        checkpoints: [],
+        checkpointEachConfigured: args.checkpointEach !== undefined,
+        firstStopCondition: null,
+      };
+      formattedPlan =
+        planState === null
+          ? "Plan unavailable — state.yaml could not be read. Run /bmad-loop --doctor to diagnose."
+          : "Plan unavailable — DAG build failed. Run /bmad-loop --doctor to diagnose.";
+    } else {
+      plan = computePlan(planState, planDag, planSprintStatus, args);
+      formattedPlan = formatPlan(plan);
+    }
+
+    const planCompletedAt = new Date().toISOString();
+    const planDurationMs = (Bun.nanoseconds() - planStartNs) / 1_000_000;
+
+    return {
+      mode: "plan",
+      plan,
+      formattedPlan,
+      exitCode: 0,
+      startedAt: planStartedAt,
+      completedAt: planCompletedAt,
+      durationMs: planDurationMs,
+    };
+  }
+
   // Story 4.4 (FR25): default `--max-iters=50` when no stop condition is
   // supplied. The injection ONLY applies when `args.maxIters` is
   // undefined AND no other stop condition is set. When the user
@@ -499,12 +644,23 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
   // is explicitly set, this is a no-op.
   //
   // Story 4.5 wired the time-budget + token-budget clauses; Story 4.6
-  // wired the stop-on-error + continue-on-error clauses. Story 4.7
-  // (`--plan-first`) will short-circuit before this stanza — no clause
-  // needed here for that flag.
+  // wired the stop-on-error + continue-on-error clauses; Story 4.7
+  // wired the plan-first clause — when `--plan-first` is supplied
+  // alone (without `--max-iters`), the pre-flight branch (run.ts:486+)
+  // short-circuits BEFORE this stanza is reached, but the defensive
+  // clause is preserved for refactor-safety. The default-cap predicate
+  // is now COMPLETE for all wired stop-condition flags.
   //
   // The default value (50) matches PRD §Bounded Loop Execution line 589
   // and epics.md §Story 4.4 AC-1 line 947.
+  // The `planFirst` clause is defensive: at this point the plan-mode
+  // pre-flight branch above has already returned when `args.planFirst
+  // === true`, so TypeScript narrows the value to `false | undefined`
+  // here. The cast preserves the symmetry of the predicate (10 clauses,
+  // one per LoopArgsSchema field) and future-proofs against a
+  // hypothetical refactor that moves the pre-flight gate INTO the
+  // iteration body. Story 4.7 OQ-1 (deferred `hasExplicitStopCondition`
+  // helper refactor).
   if (
     args.maxIters === undefined &&
     args.untilEpicEnd !== true &&
@@ -514,7 +670,8 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
     args.timeBudgetMs === undefined &&
     args.tokenBudget === undefined &&
     args.stopOnError !== true &&
-    args.continueOnError !== true
+    args.continueOnError !== true &&
+    (args.planFirst as boolean | undefined) !== true
   ) {
     args = { ...args, maxIters: 50 };
   }
@@ -966,6 +1123,17 @@ function formatExitReason(stopReason: StopReason): string {
 if (import.meta.main) {
   try {
     const result = await runLoop({ argv: process.argv.slice(2) });
+    if (result.mode === "plan") {
+      // Story 4.7 AC-1: plan-mode emits a single AR9 "report" line
+      // carrying the human-readable plan in its message field. Exit
+      // code is fixed at 0 (clean exit; the dry-run is the success path).
+      emitDispatchAction({
+        action: "report",
+        message: result.formattedPlan,
+        exitCode: result.exitCode,
+      });
+      process.exit(result.exitCode);
+    }
     const message = formatExitReason(result.stopReason);
     emitDispatchAction({
       action: "report",

@@ -22,9 +22,20 @@ export {
   type Result,
 } from "./args.ts";
 export {
+  computePlan,
+  formatPlan,
+  lookupModelTokens,
+  MAX_PLAN_WALK,
+  type Plan,
+  type PlanCheckpoint,
+  type PlanFirstStopCondition,
+  type PlannedStep,
+} from "./plan.ts";
+export {
   type IterationRecord,
   type LoopOpts,
   type LoopResult,
+  type PlanResult,
   runLoop,
   type StopReason,
 } from "./run.ts";

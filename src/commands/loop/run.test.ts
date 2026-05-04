@@ -31,6 +31,16 @@
  *   - AC-2 (Tests CE_46_1-5 + Sweep-46-B): Story 4.6 `--continue-on-error`
  *     allows subsequent iterations to run; integration test asserts iter
  *     2 still runs after iter 1 halt.
+ *   - AC-1 (Tests PF_47_1-2 + Sweep-47-A): Story 4.7 `--plan-first` short-
+ *     circuits BEFORE iteration body; emits a single AR9 `"report"` JSON
+ *     line with the human-readable plan; exits 0 without dispatching
+ *     anything.
+ *   - AC-2 (Tests PF_47_7-8 + Sweep-47-B): plan output includes total
+ *     estimated steps, total estimated tokens (Story 6.3 stub),
+ *     checkpoints (with `--checkpoint-each` Story 4.8 forward dependency).
+ *   - AC-3 (Tests PF_47_5 + Sweep-47-C): plan output is reproducible
+ *     across invocations on the same state (pure-function `computePlan`
+ *     + `formatPlan`).
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
@@ -39,14 +49,20 @@ import { join } from "node:path";
 import type { NextResult } from "../next/run.ts";
 import { runLoop } from "./run.ts";
 
-// Story 4.6 tests use `asLoop` to narrow the `LoopResult` return shape.
-// Story 4.7 will change `runLoop` to return `LoopResult | PlanResult`;
-// this helper is prep for that transition.
-function asLoop<T extends { mode: "loop" }>(result: T): T {
+// Story 4.7: `runLoop` now returns `LoopResult | PlanResult` (discriminated
+// union). Existing tests assert on `result.stopReason` / `result.iterations`
+// — the helper below narrows the union to `LoopResult` so existing tests
+// continue to type-check unchanged. Tests for plan-mode use the inline
+// `result.mode === "plan"` guard instead.
+function asLoop<T extends { mode: "loop" | "plan" }>(
+  result: T,
+): Extract<T, { mode: "loop" }> {
   if (result.mode !== "loop") {
-    throw new Error(`Expected mode === "loop", got "${String((result as { mode: unknown }).mode)}"`);
+    throw new Error(
+      `Expected mode === "loop", got "${result.mode}" — plan-mode results must use the explicit guard.`,
+    );
   }
-  return result;
+  return result as Extract<T, { mode: "loop" }>;
 }
 
 // Helper: build a stub NextResult that returns success.
@@ -92,10 +108,12 @@ function countingStub(result: NextResult | (() => NextResult)): {
 describe("runLoop — Test A + B (AC-1 verbatim: --max-iters 1)", () => {
   it("Test A: --max-iters 1 runs exactly one iteration", async () => {
     const { stub, calls } = countingStub(successResult());
-    const result = await runLoop({
-      argv: ["--max-iters", "1"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+      }),
+    );
     expect(result.iterations.length).toBe(1);
     expect(result.iterations[0]?.iterCount).toBe(1);
     expect(result.exitCode).toBe(0);
@@ -104,10 +122,12 @@ describe("runLoop — Test A + B (AC-1 verbatim: --max-iters 1)", () => {
 
   it("Test B: exits with reason max-iters-reached + maxIters=1", async () => {
     const { stub } = countingStub(successResult());
-    const result = await runLoop({
-      argv: ["--max-iters", "1"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+      }),
+    );
     expect(result.stopReason.code).toBe("max-iters-reached");
     if (result.stopReason.code !== "max-iters-reached") return;
     expect(result.stopReason.maxIters).toBe(1);
@@ -118,10 +138,12 @@ describe("runLoop — Test A + B (AC-1 verbatim: --max-iters 1)", () => {
 describe("runLoop — Test C (multi-iteration --max-iters 3)", () => {
   it("--max-iters 3 runs exactly 3 iterations", async () => {
     const { stub, calls } = countingStub(successResult());
-    const result = await runLoop({
-      argv: ["--max-iters", "3"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "3"],
+        runNextOverride: stub,
+      }),
+    );
     expect(result.iterations.length).toBe(3);
     expect(calls()).toBe(3);
     expect(result.stopReason.code).toBe("max-iters-reached");
@@ -138,10 +160,12 @@ describe("runLoop — Test C (multi-iteration --max-iters 3)", () => {
 describe("runLoop — Test D (IterationRecord shape)", () => {
   it("each iteration record contains the expected fields", async () => {
     const { stub } = countingStub(successResult("rec-shape-test"));
-    const result = await runLoop({
-      argv: ["--max-iters", "1"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+      }),
+    );
     const record = result.iterations[0];
     expect(record).toBeDefined();
     if (record === undefined) return;
@@ -165,10 +189,12 @@ describe("runLoop — Test D (IterationRecord shape)", () => {
     // The loop does NOT halt-on-error since exitCode===0, so iteration 1
     // appends with runId=null and then max-iters fires.
     const { stub } = countingStub(reportResult);
-    const result = await runLoop({
-      argv: ["--max-iters", "1"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+      }),
+    );
     expect(result.iterations.length).toBe(1);
     expect(result.iterations[0]?.runId).toBeNull();
     expect(result.iterations[0]?.action).toBe("report");
@@ -178,7 +204,7 @@ describe("runLoop — Test D (IterationRecord shape)", () => {
 describe("runLoop — Test E (default --max-iters=50 when no stop condition supplied; Story 4.4 AC-1)", () => {
   it("argv=[] applies the default --max-iters=50 cap and runs 50 iterations", async () => {
     const { stub, calls } = countingStub(successResult());
-    const result = await runLoop({ argv: [], runNextOverride: stub });
+    const result = asLoop(await runLoop({ argv: [], runNextOverride: stub }));
     expect(result.iterations.length).toBe(50);
     expect(result.stopReason.code).toBe("max-iters-reached");
     if (result.stopReason.code !== "max-iters-reached") return;
@@ -192,10 +218,12 @@ describe("runLoop — Test E (default --max-iters=50 when no stop condition supp
 describe("runLoop — Test F (halt-on-error stops the loop)", () => {
   it("non-zero exitCode short-circuits before reaching --max-iters cap", async () => {
     const { stub, calls } = countingStub(haltResult("verifier_failure"));
-    const result = await runLoop({
-      argv: ["--max-iters", "5"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "5"],
+        runNextOverride: stub,
+      }),
+    );
     // Loop attempted iteration 1, runNext returned halt, loop short-circuited.
     expect(result.iterations.length).toBe(1);
     expect(calls()).toBe(1);
@@ -208,10 +236,12 @@ describe("runLoop — Test F (halt-on-error stops the loop)", () => {
 
   it("halt-on-error iteration record carries action=halt", async () => {
     const { stub } = countingStub(haltResult("verifier_failure"));
-    const result = await runLoop({
-      argv: ["--max-iters", "5"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "5"],
+        runNextOverride: stub,
+      }),
+    );
     expect(result.iterations[0]?.action).toBe("halt");
     expect(result.iterations[0]?.exitCode).toBe(1);
   });
@@ -220,10 +250,12 @@ describe("runLoop — Test F (halt-on-error stops the loop)", () => {
 describe("runLoop — Test G (LoopResult shape)", () => {
   it("startedAt + completedAt are ISO timestamps; durationMs >= 0", async () => {
     const { stub } = countingStub(successResult());
-    const result = await runLoop({
-      argv: ["--max-iters", "2"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "2"],
+        runNextOverride: stub,
+      }),
+    );
     expect(Number.isNaN(Date.parse(result.startedAt))).toBe(false);
     expect(Number.isNaN(Date.parse(result.completedAt))).toBe(false);
     expect(typeof result.durationMs).toBe("number");
@@ -239,7 +271,7 @@ describe("runLoop — Test H (ConfigError on argv parse failure)", () => {
   it("throws on unknown flag", async () => {
     let caught: unknown;
     try {
-      await runLoop({ argv: ["--unknown-flag"] });
+      asLoop(await runLoop({ argv: ["--unknown-flag"] }));
     } catch (err) {
       caught = err;
     }
@@ -252,7 +284,7 @@ describe("runLoop — Test H (ConfigError on argv parse failure)", () => {
   it("throws on missing --max-iters value", async () => {
     let caught: unknown;
     try {
-      await runLoop({ argv: ["--max-iters"] });
+      asLoop(await runLoop({ argv: ["--max-iters"] }));
     } catch (err) {
       caught = err;
     }
@@ -327,12 +359,14 @@ describe("stop-conditions — AR41 boundary check (Story 4.2)", () => {
 describe("runLoop — args pass-through", () => {
   it("opts.args overrides opts.argv", async () => {
     const { stub, calls } = countingStub(successResult());
-    const result = await runLoop({
-      args: { maxIters: 2 },
-      // argv is ignored when args is set.
-      argv: ["--max-iters", "100"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        args: { maxIters: 2 },
+        // argv is ignored when args is set.
+        argv: ["--max-iters", "100"],
+        runNextOverride: stub,
+      }),
+    );
     expect(result.iterations.length).toBe(2);
     expect(calls()).toBe(2);
     if (result.stopReason.code !== "max-iters-reached") return;
@@ -347,10 +381,12 @@ describe("runLoop — multi-iteration with mixed action sequence", () => {
       i++;
       return successResult(`iter-${i}`);
     });
-    const result = await runLoop({
-      argv: ["--max-iters", "3"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "3"],
+        runNextOverride: stub,
+      }),
+    );
     expect(result.iterations.length).toBe(3);
     expect(result.iterations[0]?.runId).toBe("iter-1");
     expect(result.iterations[1]?.runId).toBe("iter-2");
@@ -409,13 +445,15 @@ describe("runLoop — Test I_42 (Story 4.2 AC-1: --until-epic-end fires when epi
     const { stub } = countingStub(successResult());
     const state = makeStateFixture(3, "3.10");
     const sprintStatus = makeSprintStatusEpic3Done();
-    const result = await runLoop({
-      argv: ["--until-epic-end"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => sprintStatus,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-epic-end"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => sprintStatus,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("epic-end-reached");
     if (result.stopReason.code !== "epic-end-reached") return;
     expect(result.stopReason.epic).toBe("3");
@@ -435,13 +473,15 @@ describe("runLoop — Test I_42 (Story 4.2 AC-1: --until-epic-end fires when epi
     };
     // Combine with --max-iters 2 to bound the loop (the until-epic-end
     // predicate does NOT fire; max-iters does).
-    const result = await runLoop({
-      argv: ["--until-epic-end", "--max-iters", "2"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => mutated,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-epic-end", "--max-iters", "2"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => mutated,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("max-iters-reached");
     expect(result.iterations.length).toBe(2);
   });
@@ -453,15 +493,17 @@ describe("runLoop — Test J_42 (Story 4.2 AC-1: state-snapshot pointer + --resu
     const state = makeStateFixture(3, "3.10");
     const sprintStatus = makeSprintStatusEpic3Done();
     const captured: string[] = [];
-    await runLoop({
-      argv: ["--until-epic-end"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => sprintStatus,
-      stderrOverride: (chunk: string) => {
-        captured.push(chunk);
-      },
-    });
+    asLoop(
+      await runLoop({
+        argv: ["--until-epic-end"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => sprintStatus,
+        stderrOverride: (chunk: string) => {
+          captured.push(chunk);
+        },
+      }),
+    );
     const combined = captured.join("");
     expect(combined).toContain("epic-end reached");
     expect(combined).toContain("State snapshot");
@@ -473,13 +515,15 @@ describe("runLoop — Test K_42 (Story 4.2 AC-2: --until-story 3.2 fires on exac
   it("exits with stopReason.code === until-story-reached + correct fields", async () => {
     const { stub } = countingStub(successResult());
     const state = makeStateFixture(3, "3.2");
-    const result = await runLoop({
-      argv: ["--until-story", "3.2"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-story", "3.2"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("until-story-reached");
     if (result.stopReason.code !== "until-story-reached") return;
     expect(result.stopReason.targetStory).toBe("3.2");
@@ -493,13 +537,15 @@ describe("runLoop — Test L_42 (Story 4.2 AC-2: --until-story 3.2 fires on over
   it("fires when state advanced to story 3.3 (overshoot) — message stays AC-2 verbatim", async () => {
     const { stub } = countingStub(successResult());
     const state = makeStateFixture(3, "3.3");
-    const result = await runLoop({
-      argv: ["--until-story", "3.2"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-story", "3.2"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("until-story-reached");
     if (result.stopReason.code !== "until-story-reached") return;
     expect(result.stopReason.targetStory).toBe("3.2");
@@ -512,13 +558,15 @@ describe("runLoop — Test M_42 (Story 4.2 AC-2: --until-story 3.2 does NOT fire
   it("loop bounded by --max-iters when current story < target story", async () => {
     const { stub } = countingStub(successResult());
     const state = makeStateFixture(3, "3.1");
-    const result = await runLoop({
-      argv: ["--until-story", "3.2", "--max-iters", "2"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-story", "3.2", "--max-iters", "2"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     // The until-story predicate does NOT fire because 3.1 < 3.2.
     // The --max-iters cap kicks in instead.
     expect(result.stopReason.code).toBe("max-iters-reached");
@@ -546,13 +594,15 @@ describe("runLoop — Test N_42 (Story 4.4 AC-3: explicit-overrides-default — 
         "3-7-list-candidate-next-steps": "in-progress",
       },
     };
-    const result = await runLoop({
-      argv: ["--until-epic-end", "--max-iters", "2"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => mutated,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-epic-end", "--max-iters", "2"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => mutated,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("max-iters-reached");
     expect(calls()).toBe(2);
   });
@@ -564,13 +614,15 @@ describe("runLoop — Test N_42 (Story 4.4 AC-3: explicit-overrides-default — 
     // supplied alone, NO default cap is applied — the explicit
     // condition controls.
     const state = makeStateFixture(3, "3.5");
-    const result = await runLoop({
-      argv: ["--until-story", "3.5"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-story", "3.5"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("until-story-reached");
     expect(calls()).toBe(0);
   });
@@ -650,13 +702,15 @@ describe("runLoop --next-story (Story 4.3 AC-1)", () => {
       makeStateFixtureFull(3, "3.2"),
       makeStateFixtureFull(3, "3.3"),
     ];
-    const result = await runLoop({
-      argv: ["--next-story"],
-      runNextOverride: stub,
-      stateOverride: sequenceStateStub(states),
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--next-story"],
+        runNextOverride: stub,
+        stateOverride: sequenceStateStub(states),
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.iterations.length).toBe(1);
     expect(result.stopReason.code).toBe("next-story-reached");
     if (result.stopReason.code !== "next-story-reached") return;
@@ -670,13 +724,15 @@ describe("runLoop --next-story (Story 4.3 AC-1)", () => {
     const { stub, calls } = countingStub(successResult());
     // State remains at 3.2 across iterations.
     const state = makeStateFixtureFull(3, "3.2");
-    const result = await runLoop({
-      argv: ["--next-story", "--max-iters", "2"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--next-story", "--max-iters", "2"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("max-iters-reached");
     expect(result.iterations.length).toBe(2);
     expect(calls()).toBe(2);
@@ -690,13 +746,15 @@ describe("runLoop --next-story (Story 4.3 AC-1)", () => {
       makeStateFixtureFull(3, "3.10"),
       makeStateFixtureFull(4, "4.1"),
     ];
-    const result = await runLoop({
-      argv: ["--next-story"],
-      runNextOverride: stub,
-      stateOverride: sequenceStateStub(states),
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--next-story"],
+        runNextOverride: stub,
+        stateOverride: sequenceStateStub(states),
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("next-story-reached");
     if (result.stopReason.code !== "next-story-reached") return;
     expect(result.stopReason.startStory).toBe("3.10");
@@ -719,14 +777,16 @@ describe("runLoop --phase-end (Story 4.3 AC-2)", () => {
       makeStateFixtureFull(3, "3.2", "bmad-create-prd"),
       makeStateFixtureFull(3, "3.2", "bmad-dev-story"),
     ];
-    const result = await runLoop({
-      argv: ["--phase-end"],
-      runNextOverride: stub,
-      stateOverride: sequenceStateStub(states),
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-      dagOverride: () => dag,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--phase-end"],
+        runNextOverride: stub,
+        stateOverride: sequenceStateStub(states),
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+        dagOverride: () => dag,
+      }),
+    );
     expect(result.stopReason.code).toBe("phase-end-reached");
     if (result.stopReason.code !== "phase-end-reached") return;
     expect(result.stopReason.fromPhase).toBe("planning");
@@ -742,14 +802,16 @@ describe("runLoop --phase-end (Story 4.3 AC-2)", () => {
     const dag = makeDagFixture();
     // State always returns the same step (implementation phase).
     const state = makeStateFixtureFull(3, "3.2", "bmad-dev-story");
-    const result = await runLoop({
-      argv: ["--phase-end", "--max-iters", "2"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-      dagOverride: () => dag,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--phase-end", "--max-iters", "2"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+        dagOverride: () => dag,
+      }),
+    );
     expect(result.stopReason.code).toBe("max-iters-reached");
     expect(result.iterations.length).toBe(2);
     expect(calls()).toBe(2);
@@ -758,15 +820,17 @@ describe("runLoop --phase-end (Story 4.3 AC-2)", () => {
   it("Test U_43: --phase-end degrades gracefully when DAG load fails", async () => {
     const { stub, calls } = countingStub(successResult());
     const state = makeStateFixtureFull(3, "3.2", "bmad-dev-story");
-    const result = await runLoop({
-      argv: ["--phase-end", "--max-iters", "2"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-      // dagOverride returns null — simulates buildDag failure.
-      dagOverride: () => null,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--phase-end", "--max-iters", "2"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+        // dagOverride returns null — simulates buildDag failure.
+        dagOverride: () => null,
+      }),
+    );
     // The phase-end predicate short-circuits (loopContext.startPhase
     // === null because DAG load failed). The loop runs to --max-iters cap.
     expect(result.stopReason.code).toBe("max-iters-reached");
@@ -782,13 +846,15 @@ describe("runLoop — Test V_43 (Story 4.4: --next-story / --phase-end alone WIT
     // WITHOUT `--max-iters`, NO default cap is applied — the explicit
     // `--max-iters 1` here wins and bounds the loop to 1 iteration.
     const state = makeStateFixtureFull(3, "3.2");
-    const result = await runLoop({
-      argv: ["--next-story", "--max-iters", "1"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--next-story", "--max-iters", "1"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("max-iters-reached");
     expect(calls()).toBe(1);
   });
@@ -797,14 +863,16 @@ describe("runLoop — Test V_43 (Story 4.4: --next-story / --phase-end alone WIT
     const { stub, calls } = countingStub(successResult());
     const dag = makeDagFixture();
     const state = makeStateFixtureFull(3, "3.2", "bmad-dev-story");
-    const result = await runLoop({
-      argv: ["--phase-end", "--max-iters", "1"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-      dagOverride: () => dag,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--phase-end", "--max-iters", "1"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+        dagOverride: () => dag,
+      }),
+    );
     expect(result.stopReason.code).toBe("max-iters-reached");
     expect(calls()).toBe(1);
   });
@@ -815,26 +883,30 @@ describe("runLoop AC-3 sweep — all four stop conditions (Story 4.3)", () => {
     const { stub } = countingStub(successResult());
     const state = makeStateFixture(3, "3.10");
     const sprintStatus = makeSprintStatusEpic3Done();
-    const result = await runLoop({
-      argv: ["--until-epic-end"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => sprintStatus,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-epic-end"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => sprintStatus,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("epic-end-reached");
   });
 
   it("Sweep-B: --until-story 3.2 fires on exact match", async () => {
     const { stub } = countingStub(successResult());
     const state = makeStateFixture(3, "3.2");
-    const result = await runLoop({
-      argv: ["--until-story", "3.2"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-story", "3.2"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("until-story-reached");
   });
 
@@ -845,13 +917,15 @@ describe("runLoop AC-3 sweep — all four stop conditions (Story 4.3)", () => {
       makeStateFixtureFull(3, "3.2"),
       makeStateFixtureFull(3, "3.3"),
     ];
-    const result = await runLoop({
-      argv: ["--next-story"],
-      runNextOverride: stub,
-      stateOverride: sequenceStateStub(states),
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--next-story"],
+        runNextOverride: stub,
+        stateOverride: sequenceStateStub(states),
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("next-story-reached");
   });
 
@@ -863,14 +937,16 @@ describe("runLoop AC-3 sweep — all four stop conditions (Story 4.3)", () => {
       makeStateFixtureFull(3, "3.2", "bmad-create-prd"),
       makeStateFixtureFull(3, "3.2", "bmad-dev-story"),
     ];
-    const result = await runLoop({
-      argv: ["--phase-end"],
-      runNextOverride: stub,
-      stateOverride: sequenceStateStub(states),
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-      dagOverride: () => dag,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--phase-end"],
+        runNextOverride: stub,
+        stateOverride: sequenceStateStub(states),
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+        dagOverride: () => dag,
+      }),
+    );
     expect(result.stopReason.code).toBe("phase-end-reached");
   });
 });
@@ -880,7 +956,7 @@ describe("runLoop AC-3 sweep — all four stop conditions (Story 4.3)", () => {
 describe("runLoop — Test X_44 (Story 4.4 AC-1: default cap fires with max-iters-reached)", () => {
   it("default-cap injection produces stopReason.maxIters === 50 when argv=[]", async () => {
     const { stub } = countingStub(successResult());
-    const result = await runLoop({ argv: [], runNextOverride: stub });
+    const result = asLoop(await runLoop({ argv: [], runNextOverride: stub }));
     expect(result.stopReason.code).toBe("max-iters-reached");
     if (result.stopReason.code !== "max-iters-reached") return;
     expect(result.stopReason.maxIters).toBe(50);
@@ -891,10 +967,12 @@ describe("runLoop — Test X_44 (Story 4.4 AC-1: default cap fires with max-iter
 describe("runLoop — Test Y_44 (Story 4.4 AC-2: --max-iters 10 exits with maxIters=10/iterCount=10)", () => {
   it("--max-iters 10 exits with stopReason.maxIters === 10 + iterCount === 10", async () => {
     const { stub, calls } = countingStub(successResult());
-    const result = await runLoop({
-      argv: ["--max-iters", "10"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "10"],
+        runNextOverride: stub,
+      }),
+    );
     expect(result.iterations.length).toBe(10);
     expect(result.stopReason.code).toBe("max-iters-reached");
     if (result.stopReason.code !== "max-iters-reached") return;
@@ -916,13 +994,15 @@ describe("runLoop — Test Z_44 (Story 4.4 AC-3: explicit condition does NOT inj
     // Epic-3 is fully done in this fixture → --until-epic-end fires on iter 0.
     const state = makeStateFixture(3, "3.10");
     const sprintStatus = makeSprintStatusEpic3Done();
-    const result = await runLoop({
-      argv: ["--until-epic-end"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => sprintStatus,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-epic-end"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => sprintStatus,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("epic-end-reached");
     // The default-cap was NOT applied; the loop exited via the
     // explicit condition. iter count is 0 because --until-epic-end
@@ -934,13 +1014,15 @@ describe("runLoop — Test Z_44 (Story 4.4 AC-3: explicit condition does NOT inj
   it("--until-story 3.5 alone fires WITHOUT applying default cap", async () => {
     const { stub, calls } = countingStub(successResult());
     const state = makeStateFixture(3, "3.5");
-    const result = await runLoop({
-      argv: ["--until-story", "3.5"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-story", "3.5"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("until-story-reached");
     expect(calls()).toBe(0);
   });
@@ -959,13 +1041,15 @@ describe("runLoop — Test Z_44 (Story 4.4 AC-3: explicit condition does NOT inj
       return successResult();
     };
     const state = makeStateFixtureFull(3, "3.2");
-    const result = await runLoop({
-      argv: ["--next-story"],
-      runNextOverride: haltStub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--next-story"],
+        runNextOverride: haltStub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("halt-on-error");
   });
 });
@@ -973,7 +1057,7 @@ describe("runLoop — Test Z_44 (Story 4.4 AC-3: explicit condition does NOT inj
 describe("runLoop AC-3 sweep — default cap behaviour (Story 4.4)", () => {
   it("Sweep-44-A: default cap fires when no stop condition supplied (50 iters)", async () => {
     const { stub, calls } = countingStub(successResult());
-    const result = await runLoop({ argv: [], runNextOverride: stub });
+    const result = asLoop(await runLoop({ argv: [], runNextOverride: stub }));
     expect(result.stopReason.code).toBe("max-iters-reached");
     if (result.stopReason.code !== "max-iters-reached") return;
     expect(result.stopReason.maxIters).toBe(50);
@@ -982,10 +1066,12 @@ describe("runLoop AC-3 sweep — default cap behaviour (Story 4.4)", () => {
 
   it("Sweep-44-B: explicit --max-iters 10 overrides default cap", async () => {
     const { stub, calls } = countingStub(successResult());
-    const result = await runLoop({
-      argv: ["--max-iters", "10"],
-      runNextOverride: stub,
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "10"],
+        runNextOverride: stub,
+      }),
+    );
     expect(result.stopReason.code).toBe("max-iters-reached");
     if (result.stopReason.code !== "max-iters-reached") return;
     expect(result.stopReason.maxIters).toBe(10);
@@ -996,13 +1082,15 @@ describe("runLoop AC-3 sweep — default cap behaviour (Story 4.4)", () => {
     const { stub } = countingStub(successResult());
     const state = makeStateFixture(3, "3.10");
     const sprintStatus = makeSprintStatusEpic3Done();
-    const result = await runLoop({
-      argv: ["--until-epic-end"],
-      runNextOverride: stub,
-      stateOverride: () => state,
-      sprintStatusOverride: () => sprintStatus,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--until-epic-end"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => sprintStatus,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("epic-end-reached");
   });
 });
@@ -1024,13 +1112,15 @@ describe("runLoop — Test TB_45_1 (Story 4.5 AC-1: --time-budget fires at 100%)
       await Bun.sleep(50);
       return successResult();
     };
-    const result = await runLoop({
-      argv: ["--time-budget", "100"],
-      runNextOverride: slowStub,
-      stateOverride: () => null,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--time-budget", "100"],
+        runNextOverride: slowStub,
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("time-budget-reached");
     expect(result.exitCode).toBe(0);
   });
@@ -1043,13 +1133,15 @@ describe("runLoop — Test TB_45_2 (Story 4.5 AC-1: 80%-warning to stderr)", () 
       await Bun.sleep(50);
       return successResult();
     };
-    await runLoop({
-      argv: ["--time-budget", "100"],
-      runNextOverride: slowStub,
-      stateOverride: () => null,
-      sprintStatusOverride: () => null,
-      stderrOverride: (chunk) => stderrLines.push(chunk),
-    });
+    asLoop(
+      await runLoop({
+        argv: ["--time-budget", "100"],
+        runNextOverride: slowStub,
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: (chunk) => stderrLines.push(chunk),
+      }),
+    );
     const warningEmitted = stderrLines.some((l) =>
       l.includes("time-budget at 80%"),
     );
@@ -1063,13 +1155,15 @@ describe("runLoop — Test TB_45_3 (Story 4.5 AC-1: exit message format)", () =>
       await Bun.sleep(50);
       return successResult();
     };
-    const result = await runLoop({
-      argv: ["--time-budget", "100"],
-      runNextOverride: slowStub,
-      stateOverride: () => null,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--time-budget", "100"],
+        runNextOverride: slowStub,
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("time-budget-reached");
     if (result.stopReason.code !== "time-budget-reached") return;
     expect(result.stopReason.message).toMatch(
@@ -1084,13 +1178,15 @@ describe("runLoop — Test TB_45_4 (Story 4.5: --time-budget alone does NOT inje
       await Bun.sleep(50);
       return successResult();
     };
-    const result = await runLoop({
-      argv: ["--time-budget", "100"],
-      runNextOverride: slowStub,
-      stateOverride: () => null,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--time-budget", "100"],
+        runNextOverride: slowStub,
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("time-budget-reached");
     expect(result.stopReason.code).not.toBe("max-iters-reached");
   });
@@ -1099,14 +1195,16 @@ describe("runLoop — Test TB_45_4 (Story 4.5: --time-budget alone does NOT inje
 describe("runLoop — Test KB_45_1 (Story 4.5 AC-2: --token-budget fires at 100%)", () => {
   it("--token-budget 100 with tokensPerIter 50/50 halts after exactly 1 iter", async () => {
     const { stub, calls } = countingStub(successResult());
-    const result = await runLoop({
-      argv: ["--token-budget", "100"],
-      runNextOverride: stub,
-      tokensPerIter: tokensStub({ in: 50, out: 50 }),
-      stateOverride: () => null,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--token-budget", "100"],
+        runNextOverride: stub,
+        tokensPerIter: tokensStub({ in: 50, out: 50 }),
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("token-budget-reached");
     expect(result.exitCode).toBe(0);
     // 1 iter: 50+50=100 >= budget 100 → fires on next check
@@ -1118,14 +1216,16 @@ describe("runLoop — Test KB_45_2 (Story 4.5 AC-2: 80%-warning to stderr)", () 
   it("--token-budget 100 emits a stderr 80%-warning before halt", async () => {
     const stderrLines: string[] = [];
     const { stub } = countingStub(successResult());
-    await runLoop({
-      argv: ["--token-budget", "100"],
-      runNextOverride: stub,
-      tokensPerIter: tokensStub({ in: 40, out: 40 }),
-      stateOverride: () => null,
-      sprintStatusOverride: () => null,
-      stderrOverride: (chunk) => stderrLines.push(chunk),
-    });
+    asLoop(
+      await runLoop({
+        argv: ["--token-budget", "100"],
+        runNextOverride: stub,
+        tokensPerIter: tokensStub({ in: 40, out: 40 }),
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: (chunk) => stderrLines.push(chunk),
+      }),
+    );
     const warningEmitted = stderrLines.some((l) =>
       l.includes("token-budget at 80%"),
     );
@@ -1136,14 +1236,16 @@ describe("runLoop — Test KB_45_2 (Story 4.5 AC-2: 80%-warning to stderr)", () 
 describe("runLoop — Test KB_45_3 (Story 4.5 AC-2: exit message includes usage stats)", () => {
   it("token-budget exit message matches /^token-budget \\(\\d+\\) reached, used \\d+ tokensIn \\+ \\d+ tokensOut$/", async () => {
     const { stub } = countingStub(successResult());
-    const result = await runLoop({
-      argv: ["--token-budget", "100"],
-      runNextOverride: stub,
-      tokensPerIter: tokensStub({ in: 60, out: 60 }),
-      stateOverride: () => null,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--token-budget", "100"],
+        runNextOverride: stub,
+        tokensPerIter: tokensStub({ in: 60, out: 60 }),
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("token-budget-reached");
     if (result.stopReason.code !== "token-budget-reached") return;
     expect(result.stopReason.message).toMatch(
@@ -1155,14 +1257,16 @@ describe("runLoop — Test KB_45_3 (Story 4.5 AC-2: exit message includes usage 
 describe("runLoop — Test KB_45_4 (Story 4.5: --token-budget alone does NOT inject default cap)", () => {
   it("--token-budget 100 alone exits via token-budget-reached, NOT max-iters-reached(50)", async () => {
     const { stub } = countingStub(successResult());
-    const result = await runLoop({
-      argv: ["--token-budget", "100"],
-      runNextOverride: stub,
-      tokensPerIter: tokensStub({ in: 100, out: 100 }),
-      stateOverride: () => null,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--token-budget", "100"],
+        runNextOverride: stub,
+        tokensPerIter: tokensStub({ in: 100, out: 100 }),
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("token-budget-reached");
     expect(result.stopReason.code).not.toBe("max-iters-reached");
   });
@@ -1175,26 +1279,33 @@ describe("runLoop — Test KB_45_5 (Story 4.5: production-style flow reads token
     const stateWithTokens = {
       schemaVersion: 1 as const,
       project: { name: "bmad-stepper", bmadVersion: "v6.x" },
-      lastSuccessfulStep: { story: "4.1", step: "bmad-dev-story", epic: 4 },
+      lastSuccessfulStep: {
+        story: "4.1",
+        step: "bmad-dev-story",
+        epic: 4,
+        completedAt: "2026-05-02T00:00:00Z",
+      },
       lastAttempted: null,
       lastFailureReason: null,
       lastSnapshot: null,
       checkpoints: [],
       runHistory: [{ tokensIn: 60, tokensOut: 60 }],
     };
-    let callCount = 0;
+    let _callCount = 0;
     const stateSeq = () => {
-      callCount++;
+      _callCount++;
       return stateWithTokens;
     };
-    const result = await runLoop({
-      argv: ["--token-budget", "100"],
-      runNextOverride: stub,
-      // No tokensPerIter — exercises production reading path.
-      stateOverride: stateSeq,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--token-budget", "100"],
+        runNextOverride: stub,
+        // No tokensPerIter — exercises production reading path.
+        stateOverride: stateSeq,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("token-budget-reached");
   });
 });
@@ -1205,26 +1316,30 @@ describe("runLoop — Test SWEEP_45 (Story 4.5: AC-1 + AC-2 sweep)", () => {
       await Bun.sleep(50);
       return successResult();
     };
-    const result = await runLoop({
-      argv: ["--time-budget", "100"],
-      runNextOverride: slowStub,
-      stateOverride: () => null,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--time-budget", "100"],
+        runNextOverride: slowStub,
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("time-budget-reached");
   });
 
   it("Sweep-45-B: --token-budget fires (uses tokensPerIter)", async () => {
     const { stub } = countingStub(successResult());
-    const result = await runLoop({
-      argv: ["--token-budget", "200"],
-      runNextOverride: stub,
-      tokensPerIter: tokensStub({ in: 100, out: 100 }),
-      stateOverride: () => null,
-      sprintStatusOverride: () => null,
-      stderrOverride: () => {},
-    });
+    const result = asLoop(
+      await runLoop({
+        argv: ["--token-budget", "200"],
+        runNextOverride: stub,
+        tokensPerIter: tokensStub({ in: 100, out: 100 }),
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
     expect(result.stopReason.code).toBe("token-budget-reached");
   });
 });
@@ -1497,6 +1612,12 @@ describe("runLoop — Test CE_46_3 (Story 4.6: --continue-on-error + --max-iters
 describe("runLoop — Test CE_46_4 (Story 4.6 OQ-4: unbounded-iteration warning at loop entry)", () => {
   it("--continue-on-error alone emits stderr warning at loop entry about unbounded iteration", async () => {
     const stderrCapture: string[] = [];
+    // The unbounded-iteration warning is emitted SYNCHRONOUSLY at loop
+    // entry (before any iteration runs). To bound the test, we use the
+    // pre-parsed `args` injection seam: inject continueOnError=true
+    // with NO other stop condition (so default-cap is suppressed and
+    // the warning fires). The runNextOverride throws after a few halt
+    // iterations to bound the test; we catch and inspect stderr.
     let runCalls = 0;
     const boundedRunStub = async (): Promise<NextResult> => {
       runCalls++;
@@ -1586,6 +1707,319 @@ describe("runLoop — Test SWEEP_46 (Story 4.6: AC-1 + AC-2 sweep)", () => {
     expect(calls()).toBe(3);
     expect(result.stopReason.code).toBe("max-iters-reached");
     expect(result.exitCode).toBe(0);
+  });
+});
+
+// ─── Story 4.7 integration tests (AC-1 + AC-2 + AC-3) ─────────────────────
+
+// Helper: build a small fixture DAG for plan-mode integration tests.
+function seedTestDag(): DagAdjacency {
+  const node = (
+    name: string,
+    phase: Phase,
+    after: readonly string[],
+  ): DagNode => ({
+    name,
+    phase,
+    after,
+    before: [],
+    optional: false,
+    persona: "dev",
+  });
+  const nodes = new Map<string, DagNode>();
+  nodes.set("step-a", node("step-a", "analysis", []));
+  nodes.set("step-b", node("step-b", "planning", ["step-a"]));
+  nodes.set("step-c", node("step-c", "solutioning", ["step-b"]));
+  nodes.set("step-d", node("step-d", "implementation", ["step-c"]));
+  const edgesOut = new Map<string, ReadonlySet<string>>();
+  edgesOut.set("step-a", new Set(["step-b"]));
+  edgesOut.set("step-b", new Set(["step-c"]));
+  edgesOut.set("step-c", new Set(["step-d"]));
+  const edgesIn = new Map<string, ReadonlySet<string>>();
+  edgesIn.set("step-b", new Set(["step-a"]));
+  edgesIn.set("step-c", new Set(["step-b"]));
+  edgesIn.set("step-d", new Set(["step-c"]));
+  return { nodes, edgesOut, edgesIn };
+}
+
+// Helper: build a fresh State (zero-state path) for plan-mode tests.
+function freshTestState(): State {
+  return {
+    schemaVersion: 1,
+    project: { name: "bmad-stepper", bmadVersion: "v6.x" },
+    lastSuccessfulStep: null,
+    lastAttempted: null,
+    lastFailureReason: null,
+    lastSnapshot: null,
+    checkpoints: [],
+    runHistory: [],
+  };
+}
+
+describe("runLoop — Test PF_47_1 (Story 4.7 AC-1: --plan-first short-circuits BEFORE iteration body)", () => {
+  it("--plan-first does NOT call runNextOverride at all", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--plan-first"],
+      runNextOverride: stub,
+      stateOverride: () => freshTestState(),
+      sprintStatusOverride: () => null,
+      dagOverride: () => seedTestDag(),
+    });
+    expect(calls()).toBe(0); // ZERO iterations.
+    expect(result.mode).toBe("plan");
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+describe('runLoop — Test PF_47_2 (Story 4.7 AC-1: --plan-first emits AR9 "report" action)', () => {
+  it("plan-mode returns mode=plan with non-empty plan and formattedPlan", async () => {
+    const { stub } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--plan-first"],
+      runNextOverride: stub,
+      stateOverride: () => freshTestState(),
+      sprintStatusOverride: () => null,
+      dagOverride: () => seedTestDag(),
+    });
+    expect(result.mode).toBe("plan");
+    if (result.mode !== "plan") return;
+    expect(result.plan.totalEstimatedSteps).toBeGreaterThan(0);
+    expect(result.formattedPlan.length).toBeGreaterThan(0);
+    expect(result.exitCode).toBe(0);
+    // The formatted plan body contains the canonical structural pieces.
+    expect(result.formattedPlan).toContain("Plan:");
+    expect(result.formattedPlan).toContain("Total estimated steps:");
+    expect(result.formattedPlan).toContain("First stop condition:");
+  });
+});
+
+describe("runLoop — Test PF_47_3 (Story 4.7: plan-mode reads state ONCE)", () => {
+  it("stateOverride is called exactly ONCE in plan-mode", async () => {
+    let stateCalls = 0;
+    const stableState = freshTestState();
+    const result = await runLoop({
+      argv: ["--plan-first"],
+      stateOverride: () => {
+        stateCalls++;
+        return stableState;
+      },
+      sprintStatusOverride: () => null,
+      dagOverride: () => seedTestDag(),
+    });
+    expect(stateCalls).toBe(1);
+    expect(result.mode).toBe("plan");
+  });
+});
+
+describe("runLoop — Test PF_47_4 (Story 4.7: plan-mode reads sprint-status ONCE)", () => {
+  it("sprintStatusOverride is called exactly ONCE in plan-mode", async () => {
+    let sprintCalls = 0;
+    const result = await runLoop({
+      argv: ["--plan-first"],
+      stateOverride: () => freshTestState(),
+      sprintStatusOverride: () => {
+        sprintCalls++;
+        return null;
+      },
+      dagOverride: () => seedTestDag(),
+    });
+    expect(sprintCalls).toBe(1);
+    expect(result.mode).toBe("plan");
+  });
+});
+
+describe("runLoop — Test PF_47_5 (Story 4.7 AC-3: REPRODUCIBILITY)", () => {
+  it("--plan-first produces byte-identical formattedPlan across two invocations", async () => {
+    const stableState = freshTestState();
+    const stableDag = seedTestDag();
+    const result1 = await runLoop({
+      argv: ["--plan-first"],
+      stateOverride: () => stableState,
+      sprintStatusOverride: () => null,
+      dagOverride: () => stableDag,
+    });
+    const result2 = await runLoop({
+      argv: ["--plan-first"],
+      stateOverride: () => stableState,
+      sprintStatusOverride: () => null,
+      dagOverride: () => stableDag,
+    });
+    expect(result1.mode).toBe("plan");
+    expect(result2.mode).toBe("plan");
+    if (result1.mode !== "plan" || result2.mode !== "plan") return;
+    expect(result1.formattedPlan).toBe(result2.formattedPlan);
+  });
+});
+
+describe("runLoop — Test PF_47_6 (Story 4.7 OQ-4: DAG-build failure → graceful fallback)", () => {
+  it("plan-mode emits 'Plan unavailable' message and exits 0 when DAG build returns null", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--plan-first"],
+      runNextOverride: stub,
+      stateOverride: () => freshTestState(),
+      sprintStatusOverride: () => null,
+      dagOverride: () => null,
+    });
+    expect(result.mode).toBe("plan");
+    if (result.mode !== "plan") return;
+    expect(result.formattedPlan).toContain("Plan unavailable");
+    expect(result.exitCode).toBe(0);
+    expect(calls()).toBe(0); // ZERO iterations even on graceful fallback.
+  });
+
+  it("plan-mode emits 'Plan unavailable' message when stateOverride returns null", async () => {
+    const result = await runLoop({
+      argv: ["--plan-first"],
+      stateOverride: () => null,
+      sprintStatusOverride: () => null,
+      dagOverride: () => seedTestDag(),
+    });
+    expect(result.mode).toBe("plan");
+    if (result.mode !== "plan") return;
+    expect(result.formattedPlan).toContain("Plan unavailable");
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+describe("runLoop — Test PF_47_7 (Story 4.7 AC-2: --plan-first --checkpoint-each story surfaces checkpoint locations)", () => {
+  it("plan output contains 'Checkpoints' header and 'After step' lines", async () => {
+    const result = await runLoop({
+      argv: ["--plan-first", "--checkpoint-each", "story"],
+      stateOverride: () => freshTestState(),
+      sprintStatusOverride: () => null,
+      dagOverride: () => seedTestDag(),
+    });
+    expect(result.mode).toBe("plan");
+    if (result.mode !== "plan") return;
+    expect(result.plan.checkpointEachConfigured).toBe(true);
+    expect(result.plan.checkpoints.length).toBeGreaterThan(0);
+    expect(result.formattedPlan).toContain("Checkpoints");
+    expect(result.formattedPlan).toContain("After step");
+  });
+});
+
+describe("runLoop — Test PF_47_8 (Story 4.7: --plan-first + --max-iters 5 does NOT enter iteration body)", () => {
+  it("--plan-first --max-iters 5: ZERO runNext calls; mode=plan", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--plan-first", "--max-iters", "5"],
+      runNextOverride: stub,
+      stateOverride: () => freshTestState(),
+      sprintStatusOverride: () => null,
+      dagOverride: () => seedTestDag(),
+    });
+    expect(calls()).toBe(0);
+    expect(result.mode).toBe("plan");
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+describe("runLoop — Test PF_47_9 (Story 4.7: --plan-first alone does NOT trigger default 50-iter cap)", () => {
+  it("--plan-first alone returns mode=plan without iterating 50 times", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--plan-first"],
+      runNextOverride: stub,
+      stateOverride: () => freshTestState(),
+      sprintStatusOverride: () => null,
+      dagOverride: () => seedTestDag(),
+    });
+    expect(calls()).toBe(0); // The 50-iter cap is bypassed entirely.
+    expect(result.mode).toBe("plan");
+    if (result.mode !== "plan") return;
+    // The plan walked the seed DAG (4 nodes); plan steps should be <= 4.
+    expect(result.plan.steps.length).toBeLessThanOrEqual(4);
+    expect(result.plan.steps.length).toBeGreaterThan(0);
+  });
+});
+
+describe("runLoop — Test PF_47_10 (Story 4.7: --plan-first ignores state.lastFailureReason)", () => {
+  it("plan-mode walks regardless of state.lastFailureReason", async () => {
+    const verifierFailureFixture: State = {
+      schemaVersion: 1,
+      project: { name: "bmad-stepper", bmadVersion: "v6.x" },
+      lastSuccessfulStep: null,
+      lastAttempted: {
+        step: "failing-step",
+        epic: 1,
+        story: "1.1",
+        attemptedAt: "2026-05-04T00:00:00Z",
+      },
+      lastFailureReason: {
+        code: "VERIFIER_FAILURE",
+        message: "test verifier failed",
+        hint: "Run /bmad-loop --doctor.",
+        runId: "fail-run-id",
+      },
+      lastSnapshot: null,
+      checkpoints: [],
+      runHistory: [],
+    };
+    const result = await runLoop({
+      argv: ["--plan-first"],
+      stateOverride: () => verifierFailureFixture,
+      sprintStatusOverride: () => null,
+      dagOverride: () => seedTestDag(),
+    });
+    expect(result.mode).toBe("plan");
+    if (result.mode !== "plan") return;
+    expect(result.plan.steps.length).toBeGreaterThan(0);
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+describe("runLoop — Test SWEEP_47 (Story 4.7: AC-1 + AC-2 + AC-3 sweep)", () => {
+  it("Sweep-47-A (AC-1): --plan-first emits report action with exit 0 + ZERO runNext calls", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--plan-first"],
+      runNextOverride: stub,
+      stateOverride: () => freshTestState(),
+      sprintStatusOverride: () => null,
+      dagOverride: () => seedTestDag(),
+    });
+    expect(result.mode).toBe("plan");
+    expect(result.exitCode).toBe(0);
+    expect(calls()).toBe(0);
+  });
+
+  it("Sweep-47-B (AC-2): plan output includes total steps + total estimated tokens (null placeholder) + checkpoints (empty placeholder)", async () => {
+    const result = await runLoop({
+      argv: ["--plan-first"],
+      stateOverride: () => freshTestState(),
+      sprintStatusOverride: () => null,
+      dagOverride: () => seedTestDag(),
+    });
+    expect(result.mode).toBe("plan");
+    if (result.mode !== "plan") return;
+    expect(result.formattedPlan).toContain("Total estimated steps:");
+    expect(result.formattedPlan).toContain("<unknown — Story 6.3"); // null-token placeholder
+    expect(result.formattedPlan).toContain(
+      "(none — --checkpoint-each not supplied)",
+    );
+  });
+
+  it("Sweep-47-C (AC-3): formatted plan is byte-identical across two invocations with the same state", async () => {
+    const stableState = freshTestState();
+    const stableDag = seedTestDag();
+    const result1 = await runLoop({
+      argv: ["--plan-first"],
+      stateOverride: () => stableState,
+      sprintStatusOverride: () => null,
+      dagOverride: () => stableDag,
+    });
+    const result2 = await runLoop({
+      argv: ["--plan-first"],
+      stateOverride: () => stableState,
+      sprintStatusOverride: () => null,
+      dagOverride: () => stableDag,
+    });
+    if (result1.mode !== "plan" || result2.mode !== "plan") {
+      throw new Error("expected plan mode");
+    }
+    expect(result1.formattedPlan).toBe(result2.formattedPlan);
   });
 });
 
