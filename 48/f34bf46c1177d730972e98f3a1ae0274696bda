@@ -2,7 +2,7 @@ _bmad-output/implementation-artifacts/1-12-bmad-next-doctor-command.md
   5009f0c5e249d4bb 1,3-7,9-58,60-118,136-158,164-170,177-200,202-208,210-215,217-223,225-231,233,237-249,252-256,260-274,280-306,337-340,343-347,364-617,619-621,623-625,627-629,632-634
   5fb00e6f58230c7c 631
 _bmad-output/implementation-artifacts/sprint-status.yaml
-  90f48674fa47e4dc 1,3-37,39-44,59,62-113
+  90f48674fa47e4dc 1,3-37,39-44,63-113
   4f74eec1333ea527 46-49
   9dc93a5b91a2fe35 50-52
   deb89cf89d32a2b6 54-56
@@ -33,8 +33,8 @@ _bmad-output/implementation-artifacts/sprint-status.yaml
       },
       "human_author": "tomasz-gorka-endeavor",
       "messages": [],
-      "total_additions": 6646,
-      "total_deletions": 381,
+      "total_additions": 4,
+      "total_deletions": 4,
       "accepted_lines": 1,
       "overriden_lines": 0
     }
