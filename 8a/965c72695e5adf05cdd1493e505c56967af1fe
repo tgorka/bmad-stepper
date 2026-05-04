@@ -1,0 +1,46 @@
+src/verifiers/types.ts
+  5fb00e6f58230c7c 1-126
+src/verifiers/checks.test.ts
+  5fb00e6f58230c7c 1-555
+src/verifiers/defaults.ts
+  5fb00e6f58230c7c 1-97
+src/verifiers/checks.ts
+  5fb00e6f58230c7c 1-496
+src/verifiers/index.ts
+  5fb00e6f58230c7c 1-37
+src/verifiers/defaults.test.ts
+  5fb00e6f58230c7c 1-112
+_bmad-output/implementation-artifacts/2-1-verifier-configuration-registry.md
+  5fb00e6f58230c7c 1-725
+_bmad-output/implementation-artifacts/sprint-status.yaml
+  5fb00e6f58230c7c 2,38,60-61
+src/verifiers/registry.test.ts
+  5fb00e6f58230c7c 1-114
+src/verifiers/registry.ts
+  5fb00e6f58230c7c 1-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "8a965c72695e5adf05cdd1493e505c56967af1fe",
+  "prompts": {
+    "5fb00e6f58230c7c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e1a77b4d-47b1-4ba7-a9fd-a19b275b7d87",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 4,
+      "accepted_lines": 3256,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
