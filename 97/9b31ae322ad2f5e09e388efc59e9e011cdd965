@@ -1,0 +1,45 @@
+src/runs/watch.ts
+  1d4e065f7719b064 1-441
+src/runs/index.ts
+  1d4e065f7719b064 23-24
+src/runs/watch.test.ts
+  1d4e065f7719b064 1-493
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "979b31ae322ad2f5e09e388efc59e9e011cdd965",
+  "prompts": {
+    "1d4e065f7719b064": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8f5f4be1-15b5-4dd7-b3df-21f915f3eb5f",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 13063,
+      "overriden_lines": 0
+    },
+    "93427a1958b93e17": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7f976703-dd8d-45cd-890b-dffbeda155a9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 438,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
