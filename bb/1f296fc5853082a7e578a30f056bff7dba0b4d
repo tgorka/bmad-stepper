@@ -1,0 +1,23 @@
+_bmad-output/planning-artifacts/architecture.md
+  2d6bd7ec2f772b20 1-1785
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "bb1f296fc5853082a7e578a30f056bff7dba0b4d",
+  "prompts": {
+    "2d6bd7ec2f772b20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cd2f81f3-8791-4f43-8bb3-3d397971a52d",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 1793,
+      "total_deletions": 8,
+      "accepted_lines": 1785,
+      "overriden_lines": 0
+    }
+  }
+}
