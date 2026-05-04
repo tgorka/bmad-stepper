@@ -1,0 +1,19 @@
+{
+  "name": "bmad-stepper",
+  "version": "0.0.0",
+  "description": "Stateful workflow orchestrator for BMAD Method projects in Claude Code.",
+  "author": {
+    "name": "Tgorka"
+  },
+  "homepage": "https://github.com/Tgorka/bmad-stepper",
+  "repository": "https://github.com/Tgorka/bmad-stepper",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "bmad",
+    "bmad-method",
+    "agile",
+    "ai-development"
+  ]
+}

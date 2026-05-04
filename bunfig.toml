@@ -1,0 +1,4 @@
+# Bun runtime configuration.
+# See https://bun.sh/docs/runtime/bunfig for available options.
+# Defaults are intentionally accepted for v0.1; downstream stories may add
+# test runner tuning (preload scripts, parallel/isolate flags) as needed.
