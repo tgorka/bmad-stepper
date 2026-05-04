@@ -1,55 +1,55 @@
-src/schemas/run-log.ts
-  9dc93a5b91a2fe35 1-42
-_bmad-output/implementation-artifacts/1-5-schemas-migrations-skeleton.md
-  9dc93a5b91a2fe35 1-1129
-src/schemas/config.ts
-  9dc93a5b91a2fe35 1-44
+src/schemas/telemetry.ts
+  9dc93a5b91a2fe35 1-41
 src/schemas/verifier-result.test.ts
   9dc93a5b91a2fe35 1-78
 src/migrations/telemetry/index.ts
   9dc93a5b91a2fe35 1-25
+src/schemas/config.ts
+  9dc93a5b91a2fe35 1-44
+src/migrations/state/index.ts
+  9dc93a5b91a2fe35 1-23
+src/schemas/run-log.ts
+  9dc93a5b91a2fe35 1-42
+src/migrations/config/index.ts
+  9dc93a5b91a2fe35 1-19
+src/schemas/config.test.ts
+  9dc93a5b91a2fe35 1-83
+_bmad-output/implementation-artifacts/sprint-status.yaml
+  90f48674fa47e4dc 1,3-37,39-44,86-113
+  4f74eec1333ea527 46-49
+  9dc93a5b91a2fe35 50
+src/schemas/state.ts
+  9dc93a5b91a2fe35 1-6,11-20,22-33,52-69
+  e2616fc1fca66600 21
 src/schemas/verifier-result.ts
   9dc93a5b91a2fe35 1-35
 src/errors.ts
   4f74eec1333ea527 1-32,34-75,77-108,110-123,125-149,162-178,180-213,215-221,157-158,160-161
   9dc93a5b91a2fe35 150-151,153-154,33,76,124,155-156,159,214
-src/migrations/migration.test.ts
-  9dc93a5b91a2fe35 1-242
-_bmad-output/implementation-artifacts/sprint-status.yaml
-  90f48674fa47e4dc 1,3-37,39-44,85-113
-  4f74eec1333ea527 46-49
-  9dc93a5b91a2fe35 50
-src/schemas/telemetry.ts
-  9dc93a5b91a2fe35 1-41
-src/schemas/dispatch-spec.ts
-  9dc93a5b91a2fe35 1-47
-src/schemas/pid.ts
-  9dc93a5b91a2fe35 1-44
 src/schemas/state.test.ts
   9dc93a5b91a2fe35 1-16,18-94
-src/schemas/pid.test.ts
-  9dc93a5b91a2fe35 1-76
-src/errors.test.ts
-  4f74eec1333ea527 1-9,12-35,37-49,52-116
-src/migrations/run-log/index.ts
-  9dc93a5b91a2fe35 1-19
-src/migrations/load-and-migrate.ts
-  9dc93a5b91a2fe35 1-148
-src/migrations/state/index.ts
-  9dc93a5b91a2fe35 1-23
-src/migrations/config/index.ts
-  9dc93a5b91a2fe35 1-19
-src/schemas/dispatch-spec.test.ts
-  9dc93a5b91a2fe35 1-68
+src/schemas/pid.ts
+  9dc93a5b91a2fe35 1-44
+src/migrations/migration.test.ts
+  9dc93a5b91a2fe35 1-242
+_bmad-output/implementation-artifacts/1-5-schemas-migrations-skeleton.md
+  9dc93a5b91a2fe35 1-1129
 src/schemas/run-log.test.ts
   9dc93a5b91a2fe35 1-80
-src/schemas/state.ts
-  9dc93a5b91a2fe35 1-6,11-20,22-33,52-69
-  e2616fc1fca66600 21
-src/schemas/config.test.ts
-  9dc93a5b91a2fe35 1-83
+src/migrations/run-log/index.ts
+  9dc93a5b91a2fe35 1-19
 src/schemas/telemetry.test.ts
   9dc93a5b91a2fe35 1-86
+src/schemas/pid.test.ts
+  9dc93a5b91a2fe35 1-76
+src/schemas/dispatch-spec.ts
+  9dc93a5b91a2fe35 1-47
+src/migrations/load-and-migrate.ts
+  9dc93a5b91a2fe35 1-148
+src/errors.test.ts
+  4f74eec1333ea527 1-9,12-35,37-49,52-116
+src/schemas/dispatch-spec.test.ts
+  9dc93a5b91a2fe35 1-68
 ---
 {
   "schema_version": "authorship/3.0.0",
