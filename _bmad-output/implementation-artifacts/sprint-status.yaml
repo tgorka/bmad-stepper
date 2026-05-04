@@ -50,7 +50,7 @@ development_status:
   1-5-schemas-migrations-skeleton: done
   1-6-state-subsystem-load-save-recompute-skeleton: done
   1-7-cli-argument-parser: done
-  1-8-snapshot-branch-sha-detection: backlog
+  1-8-snapshot-branch-sha-detection: done
   1-9-bmad-detection: backlog
   1-10-dag-seed-three-tier-registry: backlog
   1-11-persona-resolution: backlog
