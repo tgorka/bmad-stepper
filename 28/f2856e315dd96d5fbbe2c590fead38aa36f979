@@ -1,0 +1,32 @@
+src/personas/resolve.ts
+  1d4e065f7719b064 586-718
+src/personas/resolve.test.ts
+  1d4e065f7719b064 22,329-480
+src/personas/index.ts
+  1d4e065f7719b064 21-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "28f2856e315dd96d5fbbe2c590fead38aa36f979",
+  "prompts": {
+    "1d4e065f7719b064": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8f5f4be1-15b5-4dd7-b3df-21f915f3eb5f",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 15492,
+      "total_deletions": 1214,
+      "accepted_lines": 14423,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
