@@ -105,3 +105,8 @@ _bmad-output/.runs/
 .release-state
 *.tgz
 .npm/
+
+# tmp ignore auto bmad commands 
+# TODO(tgorka): remove this after testing
+.bmad-stepper/
+.claude/
