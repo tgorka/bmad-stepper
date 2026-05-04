@@ -1,7 +1,7 @@
+_bmad-output/implementation-artifacts/1-9-bmad-detection.md
+  5009f0c5e249d4bb 1-778
 src/bmad-detect/detect-version.ts
   5009f0c5e249d4bb 1-203
-src/bmad-detect/index.ts
-  5009f0c5e249d4bb 1-24
 src/bmad-detect/detect-skills.test.ts
   5009f0c5e249d4bb 1-153
 _bmad-output/implementation-artifacts/sprint-status.yaml
@@ -13,8 +13,8 @@ src/bmad-detect/detect-skills.ts
   5009f0c5e249d4bb 1-104
 src/bmad-detect/detect-version.test.ts
   5009f0c5e249d4bb 1-204
-_bmad-output/implementation-artifacts/1-9-bmad-detection.md
-  5009f0c5e249d4bb 1-778
+src/bmad-detect/index.ts
+  5009f0c5e249d4bb 1-24
 ---
 {
   "schema_version": "authorship/3.0.0",
