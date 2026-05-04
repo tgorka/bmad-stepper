@@ -1,0 +1,55 @@
+src/state/diff.test.ts
+  1d4e065f7719b064 1-312
+src/state/export.test.ts
+  1d4e065f7719b064 1-225
+src/version.ts
+  1d4e065f7719b064 1-14
+src/schemas/state-export.test.ts
+  1d4e065f7719b064 1-122
+src/schemas/state-export.ts
+  1d4e065f7719b064 1-59
+src/state/diff.ts
+  1d4e065f7719b064 1-182
+src/state/recompute.ts
+  1d4e065f7719b064 222-261
+src/state/export.ts
+  1d4e065f7719b064 1-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "7b4f38194dccafc5e19f10548978659081d32d50",
+  "prompts": {
+    "1d4e065f7719b064": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8f5f4be1-15b5-4dd7-b3df-21f915f3eb5f",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 14131,
+      "overriden_lines": 0
+    },
+    "93427a1958b93e17": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7f976703-dd8d-45cd-890b-dffbeda155a9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 438,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
