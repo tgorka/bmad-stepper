@@ -92,6 +92,10 @@
  */
 
 import { z } from "zod";
+import {
+  type LastAttempted,
+  LastAttemptedSchema,
+} from "../../schemas/state.ts";
 
 // ─── Public types ──────────────────────────────────────────────────────────
 
@@ -312,4 +316,289 @@ export function parseNextArgs(
       issues: parsed.error.issues,
     },
   };
+}
+
+// ─── Story 2.6: parseVerifyAndAdvanceArgs ──────────────────────────────────
+
+/**
+ * Schema for the verify-and-advance argv. Per Story 2.6 epics.md AC + epic
+ * line 694 step 5 + architecture Critical Gap Resolution 6 line 1677,
+ * Layer 1's slash-command markdown invokes
+ * `bun run src/commands/next/verify-and-advance.ts -- --run-id <id>
+ * --tokens-in <n> --tokens-out <n>` after the Task tool returns the
+ * sub-agent's output + token counts. All three flags are REQUIRED — the
+ * runner has no defaults for them.
+ *
+ * Token counts are non-negative integers (the Task tool returns
+ * usage.input_tokens / output_tokens which are always >= 0). The schema
+ * uses `.strict()` to reject unknown keys per the parseNextArgs precedent.
+ */
+export const VerifyAndAdvanceArgsSchema = z
+  .object({
+    runId: z.string().min(1),
+    tokensIn: z.number().int().nonnegative(),
+    tokensOut: z.number().int().nonnegative(),
+    /**
+     * Story 3.1: optional `lastAttempted` payload forwarded by Layer 1's
+     * slash-command markdown from the AR9 dispatch line. When omitted (e.g.
+     * older bmad-next.md body, or programmatic invocation without the flag),
+     * the halt-path state-save sets `state.lastAttempted` to `null`
+     * (graceful degradation).
+     */
+    lastAttempted: LastAttemptedSchema.optional(),
+  })
+  .strict();
+
+export type VerifyAndAdvanceArgs = z.infer<typeof VerifyAndAdvanceArgsSchema>;
+
+// Re-export the LastAttempted type so the runner-tier (Story 3.1
+// `verify-and-advance.ts`) can consume it without an additional import path.
+export type { LastAttempted } from "../../schemas/state.ts";
+
+/**
+ * Parse the verify-and-advance argv into a structured `VerifyAndAdvanceArgs`.
+ * Returns `Result<VerifyAndAdvanceArgs, ParseError>` per the parseNextArgs
+ * precedent (architecture line 858 — sole exception to AR33 throw-everywhere
+ * applies to BOTH parsers).
+ *
+ * Algorithm:
+ *   1. Initialise `runId | tokensIn | tokensOut` to `undefined`.
+ *   2. Iterate argv (skip leading `--` separator if present, since
+ *      `bun run script.ts -- --flag` strips one `--` but the Task-tool
+ *      orchestration may pass another).
+ *   3. For each arg:
+ *      - `--run-id <id>` → store `id` (next arg consumed).
+ *      - `--tokens-in <n>` → parseInt; on NaN return INVALID_TOKENS_IN.
+ *      - `--tokens-out <n>` → analogous.
+ *      - Unknown flag → return UNKNOWN_FLAG.
+ *   4. After tokenizing, if any of `runId`/`tokensIn`/`tokensOut` is
+ *      undefined, return MISSING_REQUIRED.
+ *   5. Validate via `VerifyAndAdvanceArgsSchema.parse({...})`; on Zod
+ *      error, return ZOD_PARSE.
+ *   6. Return `{ ok: true, value: parsed }`.
+ *
+ * Per AR22, every error hint starts with a concrete next-action verb
+ * (`Pass` / `Run`). The hint is single-line.
+ *
+ * Sync-pure (no IO, no async) per the parseNextArgs precedent.
+ */
+export function parseVerifyAndAdvanceArgs(
+  argv: readonly string[],
+): Result<VerifyAndAdvanceArgs, ParseError> {
+  let runId: string | undefined;
+  let tokensIn: number | undefined;
+  let tokensOut: number | undefined;
+  let lastAttempted: LastAttempted | undefined;
+
+  // Skip a leading `--` separator if present (may appear when Layer 1
+  // passes the args through `bun run -- <argv>`). After Bun's own `--`
+  // strip we may still have a user-supplied separator.
+  let i = 0;
+  if (argv[0] === "--") {
+    i = 1;
+  }
+
+  for (; i < argv.length; i++) {
+    const tok = argv[i];
+    if (tok === undefined) continue;
+
+    if (tok === "--run-id") {
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith("--")) {
+        return {
+          ok: false,
+          error: {
+            code: "PARSE_ERROR",
+            message: "--run-id missing value",
+            hint: "Pass --run-id <id>; the value must follow the flag.",
+            issues: [],
+          },
+        };
+      }
+      runId = value;
+      i++;
+      continue;
+    }
+
+    if (tok === "--tokens-in") {
+      const value = argv[i + 1];
+      if (value === undefined) {
+        return {
+          ok: false,
+          error: {
+            code: "PARSE_ERROR",
+            message: "--tokens-in missing value",
+            hint: "Pass --tokens-in <integer>; the value must follow the flag.",
+            issues: [],
+          },
+        };
+      }
+      const parsed = Number.parseInt(value, 10);
+      if (
+        Number.isNaN(parsed) ||
+        !/^-?\d+$/.test(value.trim()) ||
+        String(parsed) !== value.trim()
+      ) {
+        return {
+          ok: false,
+          error: {
+            code: "PARSE_ERROR",
+            message: `--tokens-in expected integer, got "${value}"`,
+            hint: `Pass --tokens-in <integer> (got "${value}"); the value must be a non-negative integer.`,
+            issues: [],
+          },
+        };
+      }
+      tokensIn = parsed;
+      i++;
+      continue;
+    }
+
+    if (tok === "--tokens-out") {
+      const value = argv[i + 1];
+      if (value === undefined) {
+        return {
+          ok: false,
+          error: {
+            code: "PARSE_ERROR",
+            message: "--tokens-out missing value",
+            hint: "Pass --tokens-out <integer>; the value must follow the flag.",
+            issues: [],
+          },
+        };
+      }
+      const parsed = Number.parseInt(value, 10);
+      if (
+        Number.isNaN(parsed) ||
+        !/^-?\d+$/.test(value.trim()) ||
+        String(parsed) !== value.trim()
+      ) {
+        return {
+          ok: false,
+          error: {
+            code: "PARSE_ERROR",
+            message: `--tokens-out expected integer, got "${value}"`,
+            hint: `Pass --tokens-out <integer> (got "${value}"); the value must be a non-negative integer.`,
+            issues: [],
+          },
+        };
+      }
+      tokensOut = parsed;
+      i++;
+      continue;
+    }
+
+    // Story 3.1: optional --last-attempted-json '<JSON>' flag.
+    if (tok === "--last-attempted-json") {
+      const value = argv[i + 1];
+      if (value === undefined) {
+        return {
+          ok: false,
+          error: {
+            code: "PARSE_ERROR",
+            message: "--last-attempted-json missing value",
+            hint: "Pass --last-attempted-json '<JSON>'; the value must follow the flag.",
+            issues: [],
+          },
+        };
+      }
+      let payload: unknown;
+      try {
+        payload = JSON.parse(value);
+      } catch (err) {
+        return {
+          ok: false,
+          error: {
+            code: "PARSE_ERROR",
+            message: `--last-attempted-json payload was not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+            hint: "Pass --last-attempted-json '<JSON>'; the value must be a valid JSON object matching { step, epic, story, attemptedAt }.",
+            issues: [],
+          },
+        };
+      }
+      const result = LastAttemptedSchema.safeParse(payload);
+      if (!result.success) {
+        const firstIssue = result.error.issues[0];
+        const issueMessage = firstIssue?.message ?? "unknown shape error";
+        return {
+          ok: false,
+          error: {
+            code: "PARSE_ERROR",
+            message: `--last-attempted-json failed schema validation: ${issueMessage}`,
+            hint: `Pass --last-attempted-json '<JSON>' matching { step, epic, story, attemptedAt } (${issueMessage}).`,
+            issues: result.error.issues,
+          },
+        };
+      }
+      lastAttempted = result.data;
+      i++;
+      continue;
+    }
+
+    // Unknown flag.
+    return {
+      ok: false,
+      error: {
+        code: "PARSE_ERROR",
+        message: `Unknown flag: ${tok}`,
+        hint: `Run /bmad-next --doctor to see supported flags; "${tok}" is not recognised by verify-and-advance.`,
+        issues: [],
+      },
+    };
+  }
+
+  if (runId === undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "PARSE_ERROR",
+        message: "--run-id is required",
+        hint: "Pass --run-id <id> --tokens-in <n> --tokens-out <n>; --run-id is missing.",
+        issues: [],
+      },
+    };
+  }
+  if (tokensIn === undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "PARSE_ERROR",
+        message: "--tokens-in is required",
+        hint: "Pass --run-id <id> --tokens-in <n> --tokens-out <n>; --tokens-in is missing.",
+        issues: [],
+      },
+    };
+  }
+  if (tokensOut === undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "PARSE_ERROR",
+        message: "--tokens-out is required",
+        hint: "Pass --run-id <id> --tokens-in <n> --tokens-out <n>; --tokens-out is missing.",
+        issues: [],
+      },
+    };
+  }
+
+  const parsed = VerifyAndAdvanceArgsSchema.safeParse({
+    runId,
+    tokensIn,
+    tokensOut,
+    lastAttempted,
+  });
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    const issueMessage = firstIssue?.message ?? "unknown parse error";
+    return {
+      ok: false,
+      error: {
+        code: "PARSE_ERROR",
+        message: parsed.error.message,
+        hint: `Pass --run-id <id> --tokens-in <n> --tokens-out <n>; the args failed validation (${issueMessage}).`,
+        issues: parsed.error.issues,
+      },
+    };
+  }
+  return { ok: true, value: parsed.data };
 }

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "runId": "test-run",
+  "step": "analyst-research",
+  "epic": 0,
+  "story": "0.0",
+  "model": "sonnet",
+  "budget": {
+    "contextTokens": 60000,
+    "timeoutMs": 300000
+  },
+  "taskSpec": {
+    "persona": "analyst",
+    "context": [
+      {
+        "path": "staging/test-run/inputs/topic.md",
+        "kind": "input",
+        "description": "Topic to research (one short line)."
+      }
+    ],
+    "task": "Read the topic from staging/test-run/inputs/topic.md, then write a one-paragraph research brief about that topic to staging/test-run/outputs/research.md. Front the artifact with YAML frontmatter declaring `title:` (the topic verbatim).",
+    "outputFormat": {
+      "fileLocation": "staging/test-run/outputs/research.md",
+      "requiredSections": ["title"],
+      "schemaRef": "frontmatter-with-title"
+    },
+    "successCriteria": [
+      "Artifact at staging/test-run/outputs/research.md exists.",
+      "Artifact has YAML frontmatter with `title:` matching the input topic.",
+      "Body contains at least one paragraph of research content.",
+      "Verifier `analyst-research` passes (per Story 2.1 default registry)."
+    ],
+    "constraints": {
+      "allowedTools": ["Read", "Write"],
+      "scopeLimits": "Only files inside staging/test-run/ may be written."
+    }
+  }
+}
