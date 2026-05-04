@@ -1,6 +1,7 @@
 /**
  * src/commands/loop/run.test.ts — colocated unit tests for `runLoop`
- * (Story 4.1 AC-1; Story 4.2 AC-1/2; Story 4.3 AC-1/2/3; Story 4.4 AC-1/2/3).
+ * (Story 4.1 AC-1; Story 4.2 AC-1/2; Story 4.3 AC-1/2/3; Story 4.4 AC-1/2/3;
+ * Story 4.5 AC-1/2; Story 4.6 AC-1/2).
  *
  * Tests use the `runNextOverride` test-injection seam (per Story 1.6 +
  * Story 3.x precedent — runtime-injectable test seams are preferred over
@@ -24,6 +25,12 @@
  *   - LoopResult shape (Test G).
  *   - ConfigError on argv parse failure (Test H).
  *   - AR41 boundary check (Test I).
+ *   - AC-1 (Tests SE_46_1-5 + Sweep-46-A): Story 4.6 default `--stop-on-error`
+ *     policy halts on first verifier-failure with `error-stop` exit
+ *     (`error (verifier failure on <step>) — see <run-log-path>`).
+ *   - AC-2 (Tests CE_46_1-5 + Sweep-46-B): Story 4.6 `--continue-on-error`
+ *     allows subsequent iterations to run; integration test asserts iter
+ *     2 still runs after iter 1 halt.
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
@@ -31,6 +38,16 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { NextResult } from "../next/run.ts";
 import { runLoop } from "./run.ts";
+
+// Story 4.6 tests use `asLoop` to narrow the `LoopResult` return shape.
+// Story 4.7 will change `runLoop` to return `LoopResult | PlanResult`;
+// this helper is prep for that transition.
+function asLoop<T extends { mode: "loop" }>(result: T): T {
+  if (result.mode !== "loop") {
+    throw new Error(`Expected mode === "loop", got "${String((result as { mode: unknown }).mode)}"`);
+  }
+  return result;
+}
 
 // Helper: build a stub NextResult that returns success.
 function successResult(runId = "iter-test-1"): NextResult {
@@ -1209,6 +1226,366 @@ describe("runLoop — Test SWEEP_45 (Story 4.5: AC-1 + AC-2 sweep)", () => {
       stderrOverride: () => {},
     });
     expect(result.stopReason.code).toBe("token-budget-reached");
+  });
+});
+
+// ─── Story 4.6 — runLoop integration tests (AC-1 + AC-2) ────────────────
+
+/**
+ * Story 4.6 fixture: build a State with a `lastFailureReason` containing
+ * a `VERIFIER_FAILURE` code + `lastAttempted.step` pointing at the
+ * failing step. The `error-stop` short-circuit in run.ts:735+ reads
+ * these fields to compose the AC-1 verbatim message
+ * `error (verifier failure on <step>) — see <run-log-path>`.
+ */
+function verifierFailureState(step: string, runId: string): State {
+  return {
+    schemaVersion: 1,
+    project: { name: "bmad-stepper", bmadVersion: "v6.x" },
+    lastSuccessfulStep: null,
+    lastAttempted: {
+      step,
+      epic: 4,
+      story: "4.6",
+      attemptedAt: "2026-05-03T12:00:00Z",
+    },
+    lastFailureReason: {
+      code: "VERIFIER_FAILURE",
+      message: `verifier reported fail on ${step}`,
+      hint: `Run /bmad-next --resume after addressing the failure on ${step}.`,
+      runId,
+    },
+    lastSnapshot: null,
+    checkpoints: [],
+    runHistory: [],
+  };
+}
+
+describe("runLoop — Test SE_46_1 (Story 4.6 AC-1: default --stop-on-error halts on first verifier failure)", () => {
+  it("argv=[--max-iters 5] with verifier-failure stub halts at iter 1 with error-stop", async () => {
+    const { stub, calls } = countingStub(haltResult("verifier failure"));
+    const state = verifierFailureState("4-6-test-step", "test-run-id-1");
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "5"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
+    expect(result.iterations.length).toBe(1);
+    expect(calls()).toBe(1);
+    expect(result.stopReason.code).toBe("error-stop");
+    if (result.stopReason.code !== "error-stop") return;
+    expect(result.stopReason.failureCode).toBe("EXIT_1");
+    expect(result.stopReason.iterCount).toBe(1);
+    expect(result.stopReason.step).toBe("4-6-test-step");
+    expect(result.stopReason.runLogPath).toBe(
+      "_bmad-output/.stepper/runs/test-run-id-1/",
+    );
+    expect(result.exitCode).toBe(1);
+  });
+});
+
+describe("runLoop — Test SE_46_2 (Story 4.6: explicit --stop-on-error is a no-op affirmation)", () => {
+  it("--stop-on-error --max-iters 5 with success stub runs 5 iters and exits with max-iters-reached", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--stop-on-error", "--max-iters", "5"],
+        runNextOverride: stub,
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
+    expect(result.iterations.length).toBe(5);
+    expect(calls()).toBe(5);
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    if (result.stopReason.code !== "max-iters-reached") return;
+    expect(result.stopReason.maxIters).toBe(5);
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+describe("runLoop — Test SE_46_3 (Story 4.6: non-verifier halt falls back to halt-on-error)", () => {
+  it("when state.lastFailureReason.code !== 'VERIFIER_FAILURE', falls back to halt-on-error semantics", async () => {
+    const { stub } = countingStub(haltResult("lock contention"));
+    // State carries a non-VERIFIER_FAILURE code (e.g., LOCK_CONTENTION).
+    const stateLockContention: State = {
+      schemaVersion: 1,
+      project: { name: "bmad-stepper", bmadVersion: "v6.x" },
+      lastSuccessfulStep: null,
+      lastAttempted: {
+        step: "bmad-dev-story",
+        epic: 4,
+        story: "4.6",
+        attemptedAt: "2026-05-03T12:00:00Z",
+      },
+      lastFailureReason: {
+        code: "LOCK_CONTENTION",
+        message: "lock acquisition failed",
+        hint: "Try again after the other process releases the lock.",
+        runId: "lock-run",
+      },
+      lastSnapshot: null,
+      checkpoints: [],
+      runHistory: [],
+    };
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "5"],
+        runNextOverride: stub,
+        stateOverride: () => stateLockContention,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
+    // Falls back to v0.1 halt-on-error semantics.
+    expect(result.stopReason.code).toBe("halt-on-error");
+    expect(result.exitCode).toBe(1);
+  });
+});
+
+describe("runLoop — Test SE_46_4 (Story 4.6 AC-1: exit message format byte-identical)", () => {
+  it("stopReason.message is byte-identical to AC-1 format with em-dash U+2014 + trailing slash", async () => {
+    const { stub } = countingStub(haltResult("verifier failure"));
+    const state = verifierFailureState("4-6-test-step", "test-run-id-1");
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "5"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
+    expect(result.stopReason.code).toBe("error-stop");
+    if (result.stopReason.code !== "error-stop") return;
+    // AC-1 byte-identical: lowercase `error`, parens, em-dash U+2014,
+    // trailing slash on run-log-path.
+    expect(result.stopReason.message).toBe(
+      "error (verifier failure on 4-6-test-step) — see _bmad-output/.stepper/runs/test-run-id-1/",
+    );
+    // Belt-and-suspenders: assert the em-dash character is present.
+    expect(result.stopReason.message).toContain("—");
+  });
+});
+
+describe("runLoop — Test SE_46_5 (Story 4.6 AC-1: stderr emission of message + hint)", () => {
+  it("stderr captures both the AC-1 message line and the lastFailureReason.hint line", async () => {
+    const stderrCapture: string[] = [];
+    const { stub } = countingStub(haltResult("verifier failure"));
+    const state = verifierFailureState("4-6-test-step", "test-run-id-1");
+    asLoop(
+      await runLoop({
+        argv: ["--max-iters", "5"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: (chunk: string) => {
+          stderrCapture.push(chunk);
+        },
+      }),
+    );
+    const combined = stderrCapture.join("");
+    // Message line (AC-1 verbatim).
+    expect(combined).toContain(
+      "error (verifier failure on 4-6-test-step) — see _bmad-output/.stepper/runs/test-run-id-1/",
+    );
+    // Hint line (Story 3.1 lastFailureReason.hint).
+    expect(combined).toContain(
+      "Run /bmad-next --resume after addressing the failure on 4-6-test-step.",
+    );
+  });
+});
+
+describe("runLoop — Test CE_46_1 (Story 4.6 AC-2: --continue-on-error allows iter 2 after iter 1 halt — INTEGRATION TEST)", () => {
+  it("--continue-on-error --max-iters 2 runs both iterations even when iter 1 halts", async () => {
+    let count = 0;
+    const alternatingStub = async (): Promise<NextResult> => {
+      count++;
+      if (count === 1) return haltResult("iter-1-verifier-fail");
+      return successResult(`iter-${count}-runid`);
+    };
+    const result = asLoop(
+      await runLoop({
+        argv: ["--continue-on-error", "--max-iters", "2"],
+        runNextOverride: alternatingStub,
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
+    // Both iterations ran.
+    expect(result.iterations.length).toBe(2);
+    expect(count).toBe(2);
+    // Iter 1's record is action: "halt"; iter 2 is action: "dispatch".
+    expect(result.iterations[0]?.action).toBe("halt");
+    expect(result.iterations[0]?.exitCode).toBe(1);
+    expect(result.iterations[1]?.action).toBe("dispatch");
+    expect(result.iterations[1]?.exitCode).toBe(0);
+    // Final stopReason is max-iters-reached (cap hit, NOT error-stop).
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    if (result.stopReason.code !== "max-iters-reached") return;
+    expect(result.stopReason.maxIters).toBe(2);
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+describe("runLoop — Test CE_46_2 (Story 4.6 AC-2: stderr warning emitted on each continued halt)", () => {
+  it("stub sequence halt/success/halt with --continue-on-error --max-iters 3 emits exactly TWO warnings", async () => {
+    const stderrCapture: string[] = [];
+    let count = 0;
+    const seqStub = async (): Promise<NextResult> => {
+      count++;
+      if (count === 1 || count === 3) {
+        return haltResult(`iter-${count}-fail`);
+      }
+      return successResult(`iter-${count}-runid`);
+    };
+    asLoop(
+      await runLoop({
+        argv: ["--continue-on-error", "--max-iters", "3"],
+        runNextOverride: seqStub,
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: (chunk: string) => {
+          stderrCapture.push(chunk);
+        },
+      }),
+    );
+    const continueWarnings = stderrCapture.filter((c) =>
+      /^Warning: iteration \d+ halted with EXIT_1; continuing per --continue-on-error\.\n$/.test(
+        c,
+      ),
+    );
+    expect(continueWarnings.length).toBe(2);
+  });
+});
+
+describe("runLoop — Test CE_46_3 (Story 4.6: --continue-on-error + --max-iters 5 runs all 5 iters even with halts)", () => {
+  it("all-halt stub sequence with --continue-on-error --max-iters 5 runs 5 iters; exits via max-iters cap", async () => {
+    const { stub, calls } = countingStub(haltResult("test-halt"));
+    const result = asLoop(
+      await runLoop({
+        argv: ["--continue-on-error", "--max-iters", "5"],
+        runNextOverride: stub,
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
+    // All 5 iterations attempted; each halted but continue-on-error
+    // allowed loop progression.
+    expect(result.iterations.length).toBe(5);
+    expect(calls()).toBe(5);
+    // All 5 records are action: "halt".
+    for (const rec of result.iterations) {
+      expect(rec.action).toBe("halt");
+      expect(rec.exitCode).toBe(1);
+    }
+    // Final exit: max-iters-reached (not halt-on-error / error-stop).
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    if (result.stopReason.code !== "max-iters-reached") return;
+    expect(result.stopReason.maxIters).toBe(5);
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+describe("runLoop — Test CE_46_4 (Story 4.6 OQ-4: unbounded-iteration warning at loop entry)", () => {
+  it("--continue-on-error alone emits stderr warning at loop entry about unbounded iteration", async () => {
+    const stderrCapture: string[] = [];
+    let runCalls = 0;
+    const boundedRunStub = async (): Promise<NextResult> => {
+      runCalls++;
+      if (runCalls > 5) {
+        throw new Error("test runaway: bounded-run-stub > 5 calls");
+      }
+      return haltResult("bounded-run");
+    };
+    let caught: unknown = null;
+    try {
+      asLoop(
+        await runLoop({
+          args: { continueOnError: true },
+          runNextOverride: boundedRunStub,
+          stateOverride: () => null,
+          sprintStatusOverride: () => null,
+          stderrOverride: (chunk: string) => {
+            stderrCapture.push(chunk);
+          },
+        }),
+      );
+    } catch (err) {
+      caught = err;
+    }
+    // The throw bound the loop; verify the warning fired at entry.
+    expect(caught).toBeDefined();
+    const matchedWarning = stderrCapture.some((c) =>
+      c.includes("may run indefinitely"),
+    );
+    expect(matchedWarning).toBe(true);
+  });
+});
+
+describe("runLoop — Test CE_46_5 (Story 4.6: --continue-on-error + --until-epic-end NO unbounded warning)", () => {
+  it("when combined with --until-epic-end, no unbounded-iteration warning is emitted", async () => {
+    const stderrCapture: string[] = [];
+    const { stub } = countingStub(successResult());
+    const state = makeStateFixture(3, "3.10");
+    const sprintStatus = makeSprintStatusEpic3Done();
+    asLoop(
+      await runLoop({
+        argv: ["--continue-on-error", "--until-epic-end"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => sprintStatus,
+        stderrOverride: (chunk: string) => {
+          stderrCapture.push(chunk);
+        },
+      }),
+    );
+    const matchedWarning = stderrCapture.some((c) =>
+      c.includes("may run indefinitely"),
+    );
+    expect(matchedWarning).toBe(false);
+  });
+});
+
+describe("runLoop — Test SWEEP_46 (Story 4.6: AC-1 + AC-2 sweep)", () => {
+  it("Sweep-46-A (AC-1): default --stop-on-error halts on first verifier failure with error-stop", async () => {
+    const { stub } = countingStub(haltResult("verifier failure"));
+    const state = verifierFailureState("sweep-step", "sweep-run-id");
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "5"],
+        runNextOverride: stub,
+        stateOverride: () => state,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
+    expect(result.stopReason.code).toBe("error-stop");
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("Sweep-46-B (AC-2): --continue-on-error --max-iters 3 runs 3 iters even with all-halt stub", async () => {
+    const { stub, calls } = countingStub(haltResult("test-halt"));
+    const result = asLoop(
+      await runLoop({
+        argv: ["--continue-on-error", "--max-iters", "3"],
+        runNextOverride: stub,
+        stateOverride: () => null,
+        sprintStatusOverride: () => null,
+        stderrOverride: () => {},
+      }),
+    );
+    expect(result.iterations.length).toBe(3);
+    expect(calls()).toBe(3);
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    expect(result.exitCode).toBe(0);
   });
 });
 

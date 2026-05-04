@@ -30,7 +30,13 @@
  *   - 0 — clean exit (one of `max-iters-reached`, `epic-end-reached`,
  *         `until-story-reached`, `next-story-reached`, `phase-end-reached`,
  *         `time-budget-reached`, `token-budget-reached`).
- *   - 1 — `halt-on-error` (per-iteration `runNext` halt; relayed verbatim).
+ *   - 1 — `halt-on-error` OR `error-stop` (Story 4.6 — verifier failure
+ *         under default `--stop-on-error` policy). Both variants surface
+ *         exit code `1` per FR53 `halt-with-actionable-error`; the
+ *         AR22-conformant message text is the differentiator (the
+ *         `error-stop` variant emits `error (verifier failure on <step>)
+ *         — see <run-log-path>` per AC-1; `halt-on-error` retains the
+ *         v0.1 generic-halt message format for non-verifier halts).
  *   - 2 — argv parse error (configuration error).
  *
  * Architecture cross-references:
@@ -73,8 +79,16 @@ export interface IterationRecord {
   readonly iterCount: number;
   /** runId from runNext result; `null` if the dispatch action carried none. */
   readonly runId: string | null;
-  /** Discriminator from runNext's AR9 action variant. */
-  readonly action: "dispatch" | "report" | "halt" | "unknown";
+  /**
+   * Discriminator from runNext's AR9 action variant. Story 4.6 SF-2
+   * cleanup: REMOVED the v0.1 defensive `"unknown"` member because no
+   * production code emits it. The dispatch protocol at
+   * `src/schemas/dispatch-protocol.ts` is closed-set per AR9 (Story 2.2)
+   * — any future variant requires a state-schema bump that would also
+   * extend this discriminator. Keeping the type honest avoids
+   * defensive default-branches in `formatExitReason` consumers.
+   */
+  readonly action: "dispatch" | "report" | "halt";
   /** Exit code from the per-iteration runNext invocation. */
   readonly exitCode: number;
   /** Wall-clock duration of the iteration in milliseconds (Bun.nanoseconds-derived). */
@@ -101,8 +115,12 @@ export interface IterationRecord {
  * (`time-budget-reached`, `token-budget-reached`) emitted by the new
  * pure-function predicates `timeBudgetStopCondition` +
  * `tokenBudgetStopCondition` (see `./stop-conditions.ts`). Story 4.6
- * (`--stop-on-error`, `--continue-on-error`) will extend further
- * following the same shape.
+ * (`--stop-on-error`, `--continue-on-error`) extends with ONE MORE
+ * variant (`error-stop`) emitted by the runner's halt-on-error short-
+ * circuit at run.ts:735-745 when the failure source is a verifier
+ * failure (`state.lastFailureReason.code === "VERIFIER_FAILURE"`);
+ * other halt sources (e.g., `LOCK_CONTENTION`) continue to surface as
+ * `halt-on-error` to preserve tooling-consumer compatibility.
  */
 export type StopReason =
   | { code: "max-iters-reached"; maxIters: number; iterCount: number }
@@ -138,6 +156,14 @@ export type StopReason =
       tokensIn: number;
       tokensOut: number;
       message: string;
+    }
+  | {
+      code: "error-stop";
+      failureCode: string;
+      iterCount: number;
+      step: string | null;
+      runLogPath: string | null;
+      message: string;
     };
 
 /**
@@ -145,8 +171,12 @@ export type StopReason =
  * without mutating stdout / process state. The `import.meta.main` block
  * emits the AR9 line via `emitDispatchAction` and exits with
  * `result.exitCode`.
+ *
+ * Story 4.7 will add a `mode: "loop"` discriminator to distinguish this
+ * from a future `PlanResult` union variant (`--plan-first`).
  */
 export interface LoopResult {
+  readonly mode: "loop";
   readonly stopReason: StopReason;
   readonly exitCode: 0 | 1 | 2;
   readonly iterations: readonly IterationRecord[];
@@ -436,7 +466,8 @@ function extractFailureCode(
  *   - AR9: per-iteration AR9 lines are captured in-process; the loop's
  *          OWN AR9 line is emitted by `import.meta.main` only.
  *   - AR41: imports only top-tier sibling `runNext` (next/run.ts);
- *          intra-module `./args.ts`; foundational `errors.ts` + `io/log.ts`
+ *          intra-module `./args.ts` + `./stop-conditions.ts`;
+ *          foundational `errors.ts` + `io/log.ts`
  *          + `schemas/dispatch-protocol.ts`; mid-tier `dispatch/index.ts`
  *          for the AR9 emit helper.
  */
@@ -467,12 +498,10 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
   // is applied (AC-3 explicit-overrides-default). When `--max-iters`
   // is explicitly set, this is a no-op.
   //
-  // Forward-tracker: Stories 4.6/4.7 will EXTEND this stanza with
-  // their flags as they become RUNTIME-WIRED:
-  //   - 4.6: && args.stopOnError !== true && args.continueOnError !== true
-  //   - 4.7: && args.planFirst !== true
-  //
-  // Story 4.5 wired the time-budget + token-budget clauses below.
+  // Story 4.5 wired the time-budget + token-budget clauses; Story 4.6
+  // wired the stop-on-error + continue-on-error clauses. Story 4.7
+  // (`--plan-first`) will short-circuit before this stanza — no clause
+  // needed here for that flag.
   //
   // The default value (50) matches PRD §Bounded Loop Execution line 589
   // and epics.md §Story 4.4 AC-1 line 947.
@@ -483,12 +512,47 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
     args.nextStory !== true &&
     args.phaseEnd !== true &&
     args.timeBudgetMs === undefined &&
-    args.tokenBudget === undefined
+    args.tokenBudget === undefined &&
+    args.stopOnError !== true &&
+    args.continueOnError !== true
   ) {
     args = { ...args, maxIters: 50 };
   }
 
   const runNextFn = opts?.runNextOverride ?? runNext;
+  // Story 4.2: per-iteration state/sprint-status loaders. Tests inject
+  // overrides; production reads `_bmad-output/.stepper/state.yaml` (via
+  // `loadStateUnlocked` — the loop runner is read-only per AR8) +
+  // `_bmad-output/implementation-artifacts/sprint-status.yaml`.
+  const stderrFn =
+    opts?.stderrOverride ??
+    ((chunk: string) => {
+      process.stderr.write(chunk);
+    });
+
+  // Story 4.6 OQ-4: when --continue-on-error is supplied alone (no
+  // --max-iters and no other stop condition), the loop has no natural
+  // exit. Emit a stderr warning at loop entry to alert the user that
+  // they may have created an unbounded loop. The warning is single-
+  // line per FR54 and fires AT MOST ONCE per loop run (loop-entry; no
+  // per-iteration repetition). The default-cap stanza above already
+  // suppresses the implicit 50-iter cap when --continue-on-error is
+  // supplied — so this warning is the user-facing notification of
+  // that suppression.
+  if (
+    args.continueOnError === true &&
+    args.maxIters === undefined &&
+    args.untilEpicEnd !== true &&
+    args.untilStory === undefined &&
+    args.nextStory !== true &&
+    args.phaseEnd !== true &&
+    args.timeBudgetMs === undefined &&
+    args.tokenBudget === undefined
+  ) {
+    stderrFn(
+      "Warning: --continue-on-error supplied without any stop condition; the loop may run indefinitely. Combine with --max-iters or another stop condition for safety.\n",
+    );
+  }
   // Story 4.2: per-iteration state/sprint-status loaders. Tests inject
   // overrides; production reads `_bmad-output/.stepper/state.yaml` (via
   // `loadStateUnlocked` — the loop runner is read-only per AR8) +
@@ -503,11 +567,6 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
       }
     });
   const sprintStatusFn = opts?.sprintStatusOverride ?? loadSprintStatusForLoop;
-  const stderrFn =
-    opts?.stderrOverride ??
-    ((chunk: string) => {
-      process.stderr.write(chunk);
-    });
   // Story 4.3: opt-in DAG loader for `--phase-end`. Tests inject overrides;
   // production calls `buildDag({ skillNames: [] })` only when
   // `args.phaseEnd === true`. The seed-only DAG (Tier 1 of the three-tier
@@ -732,15 +791,66 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
       loopContext = { startStory: nextStartStory, startPhase: nextStartPhase };
     }
 
-    // halt-on-error short-circuit. Any non-zero exitCode OR explicit
-    // "halt" action stops the loop. Story 4.6 (--continue-on-error)
-    // will gate this short-circuit on args.continueOnError.
+    // Story 4.6 AC-1/AC-2: halt-on-error short-circuit, GATED on
+    // args.continueOnError. Default policy (--stop-on-error implicit OR
+    // explicit) halts the loop on first verifier failure. Explicit
+    // --continue-on-error logs the failure to stderr but does NOT set
+    // stopReason — the loop proceeds to the next iteration. The two
+    // variants of failure halt (`error-stop` for verifier failures vs
+    // `halt-on-error` for other halt sources) are dispatched by reading
+    // state.lastFailureReason.code post-halt.
     if (nextResult.exitCode !== 0 || nextResult.action.action === "halt") {
-      stopReason = {
-        code: "halt-on-error",
-        iterCount,
-        failureCode: extractFailureCode(nextResult.action, nextResult.exitCode),
-      };
+      const failureCode = extractFailureCode(
+        nextResult.action,
+        nextResult.exitCode,
+      );
+      if (args.continueOnError === true) {
+        // AC-2: log + continue. The IterationRecord still carries
+        // action: "halt" + exitCode: 1 for forensic visibility (recorded
+        // earlier in the loop body); we just don't set stopReason. The
+        // stderr warning is single-line per FR54.
+        stderrFn(
+          `Warning: iteration ${iterCount} halted with ${failureCode}; continuing per --continue-on-error.\n`,
+        );
+        continue;
+      }
+      // AC-1: --stop-on-error (default) — halt the loop. Detect verifier-
+      // failure path via state.lastFailureReason.code; otherwise fall back
+      // to the existing halt-on-error semantics for non-verifier halts
+      // (e.g., LOCK_CONTENTION, BMAD_INCOMPATIBLE).
+      const postState = await stateFn();
+      const failureReasonCode = postState?.lastFailureReason?.code;
+      const lastAttemptedStep = postState?.lastAttempted?.step ?? null;
+      const failureRunId = postState?.lastFailureReason?.runId ?? null;
+      if (
+        failureReasonCode === "VERIFIER_FAILURE" &&
+        lastAttemptedStep !== null
+      ) {
+        const runLogPath =
+          failureRunId !== null
+            ? `_bmad-output/.stepper/runs/${failureRunId}/`
+            : null;
+        const message =
+          runLogPath !== null
+            ? `error (verifier failure on ${lastAttemptedStep}) — see ${runLogPath}`
+            : `error (verifier failure on ${lastAttemptedStep})`;
+        // FR26 + AR22 stderr emission: halt+resume hint analogous to
+        // Story 4.2's --until-epic-end pointer + Story 3.1's hint.
+        stderrFn(`${message}\n`);
+        if (postState?.lastFailureReason?.hint !== undefined) {
+          stderrFn(`${postState.lastFailureReason.hint}\n`);
+        }
+        stopReason = {
+          code: "error-stop",
+          failureCode,
+          iterCount,
+          step: lastAttemptedStep,
+          runLogPath,
+          message,
+        };
+      } else {
+        stopReason = { code: "halt-on-error", iterCount, failureCode };
+      }
       break;
     }
   }
@@ -748,8 +858,13 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
   const completedAt = new Date().toISOString();
   const durationMs = (Bun.nanoseconds() - loopStartNs) / 1_000_000;
 
-  // Compute exit code per FR53 mapping.
-  const exitCode: 0 | 1 | 2 = stopReason?.code === "halt-on-error" ? 1 : 0;
+  // Compute exit code per FR53 mapping. Story 4.6: `error-stop` and
+  // `halt-on-error` both map to exit code `1` (`halt-with-actionable-
+  // error` per FR53); the AR22-conformant message is the differentiator.
+  const exitCode: 0 | 1 | 2 =
+    stopReason?.code === "halt-on-error" || stopReason?.code === "error-stop"
+      ? 1
+      : 0;
 
   // Defensive: stopReason cannot be null because the default-cap
   // injection (Story 4.4) ensures `args.maxIters` is non-undefined
@@ -768,6 +883,7 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
   }
 
   return {
+    mode: "loop",
     stopReason,
     exitCode,
     iterations,
@@ -798,6 +914,13 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
  *                         (Xh) reached, partial work committed" /
  *                         "token-budget (N) reached, used X tokensIn +
  *                         Y tokensOut").
+ *   - error-stop:         Story 4.6 AC-1 verbatim: "error (verifier
+ *                         failure on <step>) — see <run-log-path>"
+ *                         (epics.md line 982). The message is composed
+ *                         by the runner from `state.lastFailureReason`
+ *                         + `state.lastAttempted.step`; we delegate to
+ *                         the stored message field for AC-byte-
+ *                         identical text.
  */
 function formatExitReason(stopReason: StopReason): string {
   switch (stopReason.code) {
@@ -828,6 +951,12 @@ function formatExitReason(stopReason: StopReason): string {
       // Story 4.5 AC-2: "the exit reason includes the actual usage
       // stats" — the predicate composes the message using budget +
       // tokensIn + tokensOut.
+      return stopReason.message;
+    case "error-stop":
+      // Story 4.6 AC-1 verbatim: "error (verifier failure on <step>) —
+      // see <run-log-path>" (epics.md line 982). The message is
+      // composed by the runner via state.lastFailureReason; we delegate
+      // to the stored message field for AC-byte-identical text.
       return stopReason.message;
   }
 }
