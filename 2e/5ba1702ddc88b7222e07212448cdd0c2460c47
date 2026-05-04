@@ -1,5 +1,11 @@
-src/verifiers/registry.ts
-  5fb00e6f58230c7c 1-69
+src/verifiers/defaults.ts
+  5fb00e6f58230c7c 1-97
+_bmad-output/implementation-artifacts/2-1-verifier-configuration-registry.md
+  5fb00e6f58230c7c 1-725
+src/verifiers/index.ts
+  5fb00e6f58230c7c 1-37
+src/verifiers/registry.test.ts
+  5fb00e6f58230c7c 1-114
 src/verifiers/checks.ts
   5fb00e6f58230c7c 1-496
 _bmad-output/implementation-artifacts/sprint-status.yaml
@@ -8,20 +14,14 @@ _bmad-output/implementation-artifacts/sprint-status.yaml
   9dc93a5b91a2fe35 50-52
   deb89cf89d32a2b6 54-56
   5fb00e6f58230c7c 57-58,61
-src/verifiers/checks.test.ts
-  5fb00e6f58230c7c 1-555
 src/verifiers/defaults.test.ts
   5fb00e6f58230c7c 1-112
-_bmad-output/implementation-artifacts/2-1-verifier-configuration-registry.md
-  5fb00e6f58230c7c 1-725
-src/verifiers/registry.test.ts
-  5fb00e6f58230c7c 1-114
-src/verifiers/defaults.ts
-  5fb00e6f58230c7c 1-97
+src/verifiers/registry.ts
+  5fb00e6f58230c7c 1-69
+src/verifiers/checks.test.ts
+  5fb00e6f58230c7c 1-555
 src/verifiers/types.ts
   5fb00e6f58230c7c 1-126
-src/verifiers/index.ts
-  5fb00e6f58230c7c 1-37
 ---
 {
   "schema_version": "authorship/3.0.0",

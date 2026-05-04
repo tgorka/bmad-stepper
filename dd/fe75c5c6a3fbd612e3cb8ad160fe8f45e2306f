@@ -1,12 +1,12 @@
-src/personas/resolve.test.ts
-  5009f0c5e249d4bb 1-21,23-326
-  1d4e065f7719b064 327-480
-src/personas/index.ts
-  5009f0c5e249d4bb 1-20
-  1d4e065f7719b064 21-26
 src/personas/resolve.ts
   5009f0c5e249d4bb 1-585
   1d4e065f7719b064 586-718
+src/personas/index.ts
+  5009f0c5e249d4bb 1-20
+  1d4e065f7719b064 21-26
+src/personas/resolve.test.ts
+  5009f0c5e249d4bb 1-21,23-326
+  1d4e065f7719b064 327-480
 ---
 {
   "schema_version": "authorship/3.0.0",
