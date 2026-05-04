@@ -1,0 +1,48 @@
+src/commands/doctor/run.test.ts
+  5fb00e6f58230c7c 1-227
+src/commands/doctor/run.ts
+  5fb00e6f58230c7c 1-259
+commands/bmad-doctor.md
+  5fb00e6f58230c7c 1-27
+src/commands/doctor/args.ts
+  5fb00e6f58230c7c 1-155
+src/commands/doctor/checks.test.ts
+  5fb00e6f58230c7c 1-321
+src/commands/index.ts
+  5fb00e6f58230c7c 24
+_bmad-output/implementation-artifacts/1-12-bmad-next-doctor-command.md
+  5fb00e6f58230c7c 2,8,59,119-135,159,161-163,171-172,174-176,201,209,216,224,232,234-236,250-251,257-259,275-276,278-279,307-336,341-343,349-364,619,623-628,632-661,665-759,764-765
+_bmad-output/implementation-artifacts/sprint-status.yaml
+  5fb00e6f58230c7c 2,38,57
+src/integration/doctor-marketplace.test.ts
+  5fb00e6f58230c7c 1-195
+src/commands/doctor/index.ts
+  5fb00e6f58230c7c 1-30
+src/commands/doctor/checks.ts
+  5fb00e6f58230c7c 1-534
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "6096ac3b50c3a463fd95b9744b8ac90fc4946f0d",
+  "prompts": {
+    "5fb00e6f58230c7c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e1a77b4d-47b1-4ba7-a9fd-a19b275b7d87",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 6646,
+      "total_deletions": 381,
+      "accepted_lines": 6366,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
