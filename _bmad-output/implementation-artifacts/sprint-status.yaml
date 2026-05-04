@@ -1,0 +1,113 @@
+# generated: 2026-04-30
+# last_updated: 2026-04-30
+# project: bmad-stepper
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-04-30
+last_updated: 2026-04-30
+project: bmad-stepper
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  epic-1: backlog
+  1-1-initialize-repository-scaffold: backlog
+  1-2-errors-module-registry-ci-gate: backlog
+  1-3-logger-path-helpers-atomic-write: backlog
+  1-4-file-lock-with-heartbeat: backlog
+  1-5-schemas-migrations-skeleton: backlog
+  1-6-state-subsystem-load-save-recompute-skeleton: backlog
+  1-7-cli-argument-parser: backlog
+  1-8-snapshot-branch-sha-detection: backlog
+  1-9-bmad-detection: backlog
+  1-10-dag-seed-three-tier-registry: backlog
+  1-11-persona-resolution: backlog
+  1-12-bmad-next-doctor-command: backlog
+  1-13-quick-start-documentation: backlog
+  epic-1-retrospective: optional
+  epic-2: backlog
+  2-1-verifier-configuration-registry: backlog
+  2-2-dispatch-spec-generator: backlog
+  2-3-generic-sub-agent-bmad-step-runner-md: backlog
+  2-4-lock-free-run-ts-for-bmad-next: backlog
+  2-5-markdown-transcript-json-run-log-writers: backlog
+  2-6-verify-and-advance-ts-with-state-hash-check: backlog
+  2-7-slash-command-for-bmad-next-layer-1-markdown: backlog
+  2-8-smoke-test-for-bmad-next-happy-path: backlog
+  epic-2-retrospective: optional
+  epic-3: backlog
+  3-1-record-last-attempted-last-failure-reason-on-halt: backlog
+  3-2-resume-flag: backlog
+  3-3-dry-run-flag: backlog
+  3-4-step-id-and-scope-flags: backlog
+  3-5-persona-override-include-optional-no-optional: backlog
+  3-6-explain-reasoning-trace: backlog
+  3-7-list-candidate-next-steps: backlog
+  3-8-diff-state-and-export-state: backlog
+  3-9-watch-live-transcript-tail: backlog
+  3-10-non-locking-read-flags: backlog
+  epic-3-retrospective: optional
+  epic-4: backlog
+  4-1-bmad-loop-command-skeleton: backlog
+  4-2-stop-condition-epic-end-and-story-x-y: backlog
+  4-3-stop-condition-next-story-and-phase-end: backlog
+  4-4-stop-condition-max-iters-and-default-cap: backlog
+  4-5-stop-condition-time-budget-and-token-budget: backlog
+  4-6-stop-condition-error-with-stop-on-error-continue-on-error: backlog
+  4-7-plan-first-dry-run-preview: backlog
+  4-8-checkpoint-each-step-type: backlog
+  4-9-sigint-graceful-exit: backlog
+  4-10-loop-exit-reason-resume-hint: backlog
+  epic-4-retrospective: optional
+  epic-5: backlog
+  5-1-retry-failure-mode: backlog
+  5-2-skip-failure-mode-skip-flag: backlog
+  5-3-route-to-fixer-mode-auto-fix-flag: backlog
+  5-4-escalate-failure-mode: backlog
+  5-5-interactive-pause-between-steps: backlog
+  5-6-per-step-failure-policy-via-config-actionable-errors: backlog
+  epic-5-retrospective: optional
+  epic-6: backlog
+  6-1-bmad-stepper-config-yaml-schema-loader: backlog
+  6-2-dag-overrides-block: backlog
+  6-3-models-per-step-config: backlog
+  6-4-budgets-per-step-config: backlog
+  6-5-verifiers-per-step-config-override: backlog
+  6-6-telemetry-opt-in-collection: backlog
+  6-7-telemetry-aggregation-report: backlog
+  6-8-auto-archival-of-runs-and-telemetry: backlog
+  6-9-upgrade-flow: backlog
+  6-10-repo-files-v0-1-0-marketplace-release: backlog
+  epic-6-retrospective: optional
