@@ -1,13 +1,13 @@
+_bmad-output/implementation-artifacts/1-2-errors-module-registry-ci-gate.md
+  4f74eec1333ea527 1-884
+_bmad-output/implementation-artifacts/sprint-status.yaml
+  90f48674fa47e4dc 1,3-37,39-44,59-113
+  4f74eec1333ea527 46-47
 src/errors.ts
   4f74eec1333ea527 1-74,76-107,109-122,124-148,154-170,172-212
   9dc93a5b91a2fe35 149-150,152-153
 src/errors.test.ts
   4f74eec1333ea527 1-9,11-47,50-114
-_bmad-output/implementation-artifacts/1-2-errors-module-registry-ci-gate.md
-  4f74eec1333ea527 1-884
-_bmad-output/implementation-artifacts/sprint-status.yaml
-  90f48674fa47e4dc 1,3-37,39-44,58-113
-  4f74eec1333ea527 45-47
 ---
 {
   "schema_version": "authorship/3.0.0",
