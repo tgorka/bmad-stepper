@@ -45,7 +45,7 @@ development_status:
   epic-1: in-progress
   1-1-initialize-repository-scaffold: done
   1-2-errors-module-registry-ci-gate: done
-  1-3-logger-path-helpers-atomic-write: backlog
+  1-3-logger-path-helpers-atomic-write: done
   1-4-file-lock-with-heartbeat: backlog
   1-5-schemas-migrations-skeleton: backlog
   1-6-state-subsystem-load-save-recompute-skeleton: backlog
