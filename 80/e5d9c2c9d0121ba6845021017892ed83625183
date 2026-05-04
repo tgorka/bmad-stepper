@@ -1,87 +1,87 @@
 src/schemas/dispatch-protocol.test.ts
   e2616fc1fca66600 1-275
-src/commands/next/index.ts
-  e2616fc1fca66600 4,11-17,23,26-29,39,41-42,44-53
-tests/fixtures/bmad-step-runner/dispatch-spec.json
-  e2616fc1fca66600 1-38
-tests/fixtures/minimal-bmad-project/_bmad/config.yaml
-  e2616fc1fca66600 1-2
-src/schemas/state.test.ts
-  9dc93a5b91a2fe35 1-16,23-99,182
-  e2616fc1fca66600 17-22,103-181
-src/runs/render-markdown.ts
-  e2616fc1fca66600 1-127
-src/dispatch/promote.test.ts
-  e2616fc1fca66600 1-367
-src/runs/types.ts
-  e2616fc1fca66600 1-114
-src/dispatch/generate-spec.ts
-  e2616fc1fca66600 1-245
-src/runs/build-run-log.test.ts
-  e2616fc1fca66600 1-169
-src/dispatch/index.ts
-  e2616fc1fca66600 1-46
-src/runs/index.ts
-  e2616fc1fca66600 1-23
-src/runs/render-markdown.test.ts
-  e2616fc1fca66600 1-222
-src/commands/next/args.ts
-  e2616fc1fca66600 95-98,320-603
-src/dispatch/emit.test.ts
-  e2616fc1fca66600 1-141
-src/runs/write-step.ts
-  e2616fc1fca66600 1-150
-src/schemas/state.ts
-  9dc93a5b91a2fe35 1-6,15-18,38-40,42-44,92-103,109-123,63-64,87-88,91
-  e2616fc1fca66600 45,7-14,19-37,41,46-62,65-86,89-90,107-108
-src/smoke/next.test.ts
-  e2616fc1fca66600 1-376
+agents/bmad-step-runner.md
+  e2616fc1fca66600 1-173
 src/commands/next/args.test.ts
   e2616fc1fca66600 25-30,336-622
-src/commands/next/verify-and-advance.ts
-  e2616fc1fca66600 1-864
-src/commands/next/run.test.ts
-  e2616fc1fca66600 1-1224
-tests/fixtures/bmad-step-runner/inputs/topic.md
-  e2616fc1fca66600 1
-src/runs/build-run-log.ts
-  e2616fc1fca66600 1-57
-src/dispatch/types.ts
-  e2616fc1fca66600 1-60
-src/dispatch/generate-spec.test.ts
-  e2616fc1fca66600 1-479
+src/dispatch/staging-cleanup.test.ts
+  e2616fc1fca66600 1-258
+src/dispatch/emit.ts
+  e2616fc1fca66600 1-51
+src/dispatch/promote.ts
+  e2616fc1fca66600 1-275
 src/runs/write-step.test.ts
   e2616fc1fca66600 1-390
-src/schemas/dispatch-protocol.ts
-  e2616fc1fca66600 1-74
+src/commands/next/run.ts
+  e2616fc1fca66600 1-1075
+src/runs/index.ts
+  e2616fc1fca66600 1-23
+src/runs/types.ts
+  e2616fc1fca66600 1-114
+src/dispatch/promote.test.ts
+  e2616fc1fca66600 1-367
+src/integration/no-write-outside-scope.test.ts
+  e2616fc1fca66600 1-252
+src/runs/write-step.ts
+  e2616fc1fca66600 1-150
+tests/fixtures/bmad-step-runner/inputs/topic.md
+  e2616fc1fca66600 1
+tests/fixtures/minimal-bmad-project/_bmad/config.yaml
+  e2616fc1fca66600 1-2
+src/dispatch/generate-spec.ts
+  e2616fc1fca66600 1-245
+tests/fixtures/bmad-step-runner/README.md
+  e2616fc1fca66600 1-80
+src/commands/next/verify-and-advance.ts
+  e2616fc1fca66600 1-864
 src/io/paths.ts
   4f74eec1333ea527 1-3,10-22,24-27,44-63,67-91,93-96,33,37,40,42
   e2616fc1fca66600 29-32,34-36,38-39,41
-src/dispatch/promote.ts
-  e2616fc1fca66600 1-275
-tests/fixtures/bmad-step-runner/README.md
-  e2616fc1fca66600 1-80
-src/dispatch/staging-cleanup.ts
-  e2616fc1fca66600 1-140
-agents/bmad-step-runner.md
-  e2616fc1fca66600 1-173
-src/integration/no-write-outside-scope.test.ts
-  e2616fc1fca66600 1-252
 src/integration/halt-records-state.test.ts
   e2616fc1fca66600 1-436
-src/commands/next/verify-and-advance.test.ts
-  e2616fc1fca66600 1-1502
-tests/fixtures/minimal-bmad-project/README.md
-  e2616fc1fca66600 1-34
-src/commands/next/run.ts
-  e2616fc1fca66600 1-1075
-src/dispatch/emit.ts
-  e2616fc1fca66600 1-51
+src/dispatch/index.ts
+  e2616fc1fca66600 1-46
+src/runs/render-markdown.ts
+  e2616fc1fca66600 1-127
+src/dispatch/emit.test.ts
+  e2616fc1fca66600 1-141
+src/runs/render-markdown.test.ts
+  e2616fc1fca66600 1-222
+src/dispatch/types.ts
+  e2616fc1fca66600 1-60
+src/schemas/state.test.ts
+  9dc93a5b91a2fe35 1-16,23-99,182
+  e2616fc1fca66600 17-22,103-181
+src/schemas/state.ts
+  9dc93a5b91a2fe35 1-6,15-18,38-40,42-44,92-103,109-123,63-64,87-88,91
+  e2616fc1fca66600 45,7-14,19-37,41,46-62,65-86,89-90,107-108
+src/commands/next/index.ts
+  e2616fc1fca66600 4,11-17,23,26-29,39,41-42,44-53
+src/dispatch/staging-cleanup.ts
+  e2616fc1fca66600 1-140
 commands/bmad-next.md
   4f74eec1333ea527 1,3-6,8
   e2616fc1fca66600 2,7,9-291
-src/dispatch/staging-cleanup.test.ts
-  e2616fc1fca66600 1-258
+src/commands/next/verify-and-advance.test.ts
+  e2616fc1fca66600 1-1502
+src/dispatch/generate-spec.test.ts
+  e2616fc1fca66600 1-479
+src/smoke/next.test.ts
+  e2616fc1fca66600 1-376
+tests/fixtures/minimal-bmad-project/README.md
+  e2616fc1fca66600 1-34
+src/commands/next/run.test.ts
+  e2616fc1fca66600 1-1224
+tests/fixtures/bmad-step-runner/dispatch-spec.json
+  e2616fc1fca66600 1-38
+src/runs/build-run-log.ts
+  e2616fc1fca66600 1-57
+src/commands/next/args.ts
+  e2616fc1fca66600 95-98,320-603
+src/runs/build-run-log.test.ts
+  e2616fc1fca66600 1-169
+src/schemas/dispatch-protocol.ts
+  e2616fc1fca66600 1-74
 ---
 {
   "schema_version": "authorship/3.0.0",

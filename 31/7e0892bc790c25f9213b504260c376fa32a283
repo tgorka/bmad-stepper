@@ -1,19 +1,19 @@
 src/state/export.test.ts
   1d4e065f7719b064 1-225
+src/state/export.ts
+  1d4e065f7719b064 1-114
 src/state/diff.ts
   1d4e065f7719b064 1-182
 src/state/recompute.ts
   1d4e065f7719b064 222-261
-src/schemas/state-export.ts
-  1d4e065f7719b064 1-59
-src/version.ts
-  1d4e065f7719b064 1-14
 src/schemas/state-export.test.ts
   1d4e065f7719b064 1-122
+src/version.ts
+  1d4e065f7719b064 1-14
 src/state/diff.test.ts
   1d4e065f7719b064 1-312
-src/state/export.ts
-  1d4e065f7719b064 1-114
+src/schemas/state-export.ts
+  1d4e065f7719b064 1-59
 ---
 {
   "schema_version": "authorship/3.0.0",
