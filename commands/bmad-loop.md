@@ -13,9 +13,10 @@ Bash verify-and-advance) → final-summary report.
 Story 4.1 wired `--max-iters` (with a default-50 cap added in Story 4.4);
 Stories 4.2 + 4.3 wired the four condition flags `--until-epic-end`,
 `--until-story X.Y`, `--next-story`, `--phase-end`. Story 4.5 wired the
-two budget flags (`--time-budget MS`, `--token-budget N`); Stories 4.6+
-will wire the remaining flags (`--stop-on-error`, `--continue-on-error`,
-`--plan-first`).
+two budget flags (`--time-budget MS`, `--token-budget N`); Story 4.6
+wired the failure-policy flags (`--stop-on-error`, `--continue-on-error`);
+Stories 4.7+ will wire the remaining flags (`--plan-first`,
+`--checkpoint-each <type>`, SIGINT, exit-reason format).
 
 ## Usage examples
 
@@ -27,7 +28,7 @@ will wire the remaining flags (`--stop-on-error`, `--continue-on-error`,
 /bmad-loop --next-story              # Story 4.3 — runtime-wired
 /bmad-loop --phase-end               # Story 4.3 — runtime-wired
 /bmad-loop --time-budget 7200000 --token-budget 200000  # Story 4.5
-/bmad-loop --plan-first              # Story 4.7 — dry-run preview
+/bmad-loop --plan-first              # Story 4.7 — dry-run preview (wired in 4.7)
 /bmad-loop --checkpoint-each story   # Story 4.8 — per-iteration snapshot
 /bmad-loop --interactive             # Story 5.5 — pause-between-steps
 /bmad-loop --auto-fix                # Story 5.3 — route-to-fixer
@@ -70,10 +71,10 @@ iteration loop. Each iteration:
    `--phase-end`); Story 4.5 wired two budget flags (`--time-budget MS`,
    `--token-budget N`); Stories 4.6-4.10 will wire the remaining flags.
 2. If stop-condition fires, breaks with the StopReason (one of
-   `max-iters-reached`, `halt-on-error`, OR any of the six
-   Story-4.2/4.3/4.5 variants `epic-end-reached` / `until-story-reached` /
-   `next-story-reached` / `phase-end-reached` / `time-budget-reached` /
-   `token-budget-reached`).
+   `max-iters-reached`, `halt-on-error`, OR any of the seven
+   Story-4.2/4.3/4.5/4.6 variants `epic-end-reached` /
+   `until-story-reached` / `next-story-reached` / `phase-end-reached` /
+   `time-budget-reached` / `token-budget-reached` / `error-stop`).
 3. Else, invokes `runNext` once via in-process function call.
 4. Captures the per-iteration result into an `IterationRecord`
    (`{ iterCount, runId, action, exitCode, durationMs, startedAt }`).
@@ -97,8 +98,13 @@ Exit-code mapping per FR53 + Story 4.1:
 - `0` — clean exit (one of `max-iters-reached`, `epic-end-reached`,
   `until-story-reached`, `next-story-reached`, `phase-end-reached`,
   `time-budget-reached`, `token-budget-reached`).
-- `1` — `halt-on-error` (per-iteration runNext halt; failureCode
-  encoded in the iteration record).
+- `1` — `halt-on-error` OR `error-stop` (Story 4.6 — verifier failure
+  under default `--stop-on-error` policy). Both variants surface exit
+  code `1` per FR53 `halt-with-actionable-error`; the AR22-conformant
+  message text is the differentiator (the `error-stop` variant emits
+  `error (verifier failure on <step>) — see <run-log-path>` per AC-1;
+  `halt-on-error` retains the v0.1 generic-halt message format for
+  non-verifier halts).
 - `2` — argument parse error (configuration error per FR53).
 
 ### 2. Parse the single stdout JSON line.
@@ -178,8 +184,8 @@ drive runtime branching:
 | `--phase-end`          | 4.3      | RUNTIME-WIRED in 4.3                |
 | `--time-budget MS`     | 4.5      | RUNTIME-WIRED in 4.5                |
 | `--token-budget N`     | 4.5      | RUNTIME-WIRED in 4.5                |
-| `--stop-on-error`      | 4.6      | parsed only                         |
-| `--continue-on-error`  | 4.6      | parsed only                         |
+| `--stop-on-error`      | 4.6      | RUNTIME-WIRED in 4.6                |
+| `--continue-on-error`  | 4.6      | RUNTIME-WIRED in 4.6                |
 | `--plan-first`         | 4.7      | parsed only                         |
 | `--checkpoint-each X`  | 4.8      | parsed only                         |
 | `--interactive`        | 5.5      | parsed only                         |
@@ -327,13 +333,81 @@ halt time (per AC-2 "the exit reason includes the actual usage stats").
 Exit code: `0`. Constraint: positive integer only (Zod schema rejects
 zero / negative).
 
+### `--stop-on-error` (Story 4.6)
+
+The DEFAULT failure policy. When any per-iteration `runNext` halts
+because a verifier returned `status: "fail"`, the loop exits cleanly
+with reason `error (verifier failure on <step>) — see <run-log-path>`
+where `<step>` is `state.lastAttempted.step` and `<run-log-path>` is
+`_bmad-output/.stepper/runs/<runId>/`. The flag is OPTIONAL — supplying
+it explicitly is a no-op affirmation per UX symmetry with
+`--continue-on-error`.
+
+```
+/bmad-loop --stop-on-error --max-iters 50    # explicit affirmation
+/bmad-loop --max-iters 50                    # implicit default — same
+```
+
+Exit message: `error (verifier failure on <step>) — see <run-log-path>`
+(byte-identical to AC-1 verbatim per epics.md line 982; em-dash is
+U+2014). Exit code: `1` (per FR53 `halt-with-actionable-error`).
+
+Stderr emission per FR26: BEFORE the loop's final AR9 line on stdout,
+the runner emits the AC-1 message line + the `state.lastFailureReason.hint`
+line on stderr — analogous to Story 4.2's `--until-epic-end` state-
+snapshot pointer. Tooling consumers should consult
+`_bmad-output/.stepper/runs/<runId>/` for forensic detail (per FR43 +
+FR44).
+
+Non-verifier halts (e.g., `LOCK_CONTENTION`, `BMAD_INCOMPATIBLE`)
+preserve the v0.1 `halt-on-error` semantics — the differentiator is
+`state.lastFailureReason.code`. The two variants coexist in the
+StopReason union: tooling consumers branching on `halt-on-error`
+continue to work unchanged.
+
+### `--continue-on-error` (Story 4.6)
+
+Opt INTO continuation past per-iteration verifier failures. When
+supplied, every halt iteration is logged to stderr (`Warning:
+iteration N halted with <failureCode>; continuing per
+--continue-on-error.`) but the loop CONTINUES — the next iteration's
+`runNext` is invoked normally. Exit code is `0` when the loop exits
+via a stop condition AFTER continuing past halts (e.g., a
+`--max-iters` cap).
+
+```
+/bmad-loop --continue-on-error --max-iters 10
+```
+
+Per-iteration `IterationRecord` STILL carries `action: "halt"` +
+`exitCode: 1` for forensic visibility — tooling consumers can inspect
+`result.iterations[]` to see all halt records, even when the loop
+ultimately exited via a non-error stop condition.
+
+**Unbounded-iteration warning**: when `--continue-on-error` is supplied
+WITHOUT any other stop condition, the loop has no natural exit. The
+runner emits a single-line stderr warning at loop entry alerting the
+user to combine with `--max-iters` or another stop condition for
+safety:
+
+```
+Warning: --continue-on-error supplied without any stop condition; the loop may run indefinitely. Combine with --max-iters or another stop condition for safety.
+```
+
+The warning fires AT MOST ONCE per loop run (loop-entry; no per-
+iteration repetition). When `--continue-on-error` is combined with
+ANY other stop condition (`--max-iters`, `--until-epic-end`,
+`--until-story X.Y`, `--next-story`, `--phase-end`, `--time-budget`,
+`--token-budget`), the warning does NOT fire.
+
 When NEITHER `--max-iters` nor any other stop condition is supplied,
 the loop runner injects `--max-iters=50` as a DEFAULT cap per FR25,
 preventing accidental infinite loops (Story 4.4 AC-1). When the user
 supplies an explicit stop condition (e.g., `--until-epic-end`,
 `--until-story X.Y`, `--next-story`, `--phase-end`, `--time-budget MS`,
-`--token-budget N`) WITHOUT `--max-iters`, NO default cap is applied —
-the explicit condition controls the loop's lifetime.
+`--token-budget N`, `--stop-on-error`, `--continue-on-error`) WITHOUT
+`--max-iters`, NO default cap is applied — the explicit condition
+controls the loop's lifetime.
 
 ## Tool restrictions
 
