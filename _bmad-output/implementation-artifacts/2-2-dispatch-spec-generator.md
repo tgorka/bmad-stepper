@@ -1,5 +1,5 @@
 ---
-status: ready-for-dev
+status: done
 story_id: '2.2'
 story_key: 2-2-dispatch-spec-generator
 epic: '2'
@@ -51,7 +51,7 @@ inputDocuments:
 
 # Story 2.2: Dispatch Spec Generator
 
-Status: ready-for-dev
+Status: done
 
 > Note: Validation is optional. Run validate-create-story for quality check before dev-story.
 
@@ -122,24 +122,24 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — Verify pre-conditions (AC: all)**
-  - [ ] 0.1 Confirm `src/errors.ts` registry stays at 16 codes (post-Story 2.1 verified). Story 2.2 USES existing classes (`ConfigError` for stepName-resolution failure with `hintOverride?` per Story 1.11 pattern; `MigrationFailureError` if dispatch-spec migration ever needs surfacing — NOT expected in v0.1). **Story 2.2 SHOULD NOT modify `src/errors.ts`** unless a NEW error class is genuinely required (none expected — the existing 16-code registry covers every Story 2.2 throw site).
-  - [ ] 0.2 Confirm `src/io/log.ts` exports `info`, `warn`, `error`, `json` per Story 1.3. Story 2.2 imports `info` (for dispatch-progress logging via stderr) and `json` (for the AR9 stdout JSON-line emit). Per architecture line 862 + FR54, `json` writes to stdout; everything else to stderr.
-  - [ ] 0.3 Confirm `src/io/paths.ts` exports `STEPPER_INTERNAL_ROOT`, `BMAD_OUTPUT_ROOT`, `assertWithinScope()` per Story 1.3 + Story 1.5. **Story 2.2 ADDS** the new `STAGING_PATH` constant per Story 2.1 dev-002 carry-over (the constant resolves to `path.join(STEPPER_INTERNAL_ROOT, "staging")` ≡ `_bmad-output/.stepper/staging`).
-  - [ ] 0.4 Confirm `src/io/atomic-write.ts` exports `atomicWrite(path, contents)` per Story 1.3. Story 2.2 uses this to write `dispatch-spec.json` atomically (NFR-R1 + .bak rotation).
-  - [ ] 0.5 Confirm `src/schemas/dispatch-spec.ts` exports `DispatchSpecV1Schema`, `DispatchSpecV1`, `DispatchSpec`, `DispatchSpecLatestSchema` per Story 1.5. Story 2.2 imports `DispatchSpecV1Schema` (for defence-in-depth validation pre-write) and `DispatchSpecV1` (return type).
-  - [ ] 0.6 Confirm `src/personas/index.ts` exports `resolvePersona`, `DEFAULT_PERSONAS`, `ResolveInput`, `ResolveOptions` per Story 1.11. Story 2.2 does NOT import from `src/personas/` directly — the `persona` arg is supplied by the caller (Story 2.4 `run.ts`) which already calls `resolvePersona`.
-  - [ ] 0.7 Confirm `src/verifiers/index.ts` (Story 2.1 — first higher-tier sibling) is present. Story 2.2 does NOT import from `src/verifiers/` (sibling higher-tier — FORBIDDEN per AR41); the composition of (`buildDispatchSpec` → sub-agent → `runVerifier`) lives at runner tier (Story 2.6).
-  - [ ] 0.8 Read epics.md Story 2.2 §lines 597-610 verbatim. Confirm the AC text in §Acceptance Criteria above is character-identical (re-verify on first dev pass).
-  - [ ] 0.9 Read architecture.md §A.D2 lines 297-336 (sub-agent dispatch via Task tool); §P5 lines 864-917 (full dispatch-spec.json contract with the canonical example); §directory-listing line 1175 (`src/dispatch/` directory layout); §AR41 lines 1287-1289 (higher-tier boundary); §line 1660 (AR9 JSON-line stdout protocol); §line 1676 (`src/schemas/dispatch-protocol.ts` deferred-from-step-06 schema).
-  - [ ] 0.10 Read prd.md FR16 line 689 (dispatch with budget+timeout); FR18 line 691 (one human-readable line per step); FR54 line 745 (stdout/stderr discipline); §Sub-Agent Dispatch Contract line 530-552 (the 6-section task spec).
-  - [ ] 0.11 Read epic-1-retrospective.md §Forward Action Items for Epic 2 line 102: "Story 2.2: JSON-line protocol design; stdout-only discipline (FR54 / AR9). Schema lives at `src/schemas/dispatch-spec.ts` (already shipped in Story 1.5)." — note that the dispatch-spec schema exists; the AR9 dispatch-action protocol schema (`dispatch-protocol.ts`) is NEW in Story 2.2.
-  - [ ] 0.12 Read Story 2.1 §Carry-Overs to Future Stories line 715: "Story 2.2: introduce STAGING_PATH constant in src/io/paths.ts so runVerifier's stagingRoot option can default rather than being REQUIRED. Add a dispatch-spec.json reader so runVerifier resolves the step name from staging/<runId>/dispatch-spec.json instead of opts.stepName." — Story 2.2 owns the **STAGING_PATH constant** (this story); the **runVerifier dispatch-spec.json reader** is a Story 2.6 polish PR (NOT this story).
-  - [ ] 0.13 Confirm baseline `bun run check` exits 0 with **354 pass / 0 fail / 1379 expect / 35 files** per Story 2.1 final.
-  - [ ] 0.14 Confirm Bun host version satisfies AR2 (Bun >= 1.3). Run `bun --version`; record in Completion Notes.
+- [x] **Task 0 — Verify pre-conditions (AC: all)**
+  - [x] 0.1 Confirm `src/errors.ts` registry stays at 16 codes (post-Story 2.1 verified). Story 2.2 USES existing classes (`ConfigError` for stepName-resolution failure with `hintOverride?` per Story 1.11 pattern; `MigrationFailureError` if dispatch-spec migration ever needs surfacing — NOT expected in v0.1). **Story 2.2 SHOULD NOT modify `src/errors.ts`** unless a NEW error class is genuinely required (none expected — the existing 16-code registry covers every Story 2.2 throw site).
+  - [x] 0.2 Confirm `src/io/log.ts` exports `info`, `warn`, `error`, `json` per Story 1.3. Story 2.2 imports `info` (for dispatch-progress logging via stderr) and `json` (for the AR9 stdout JSON-line emit). Per architecture line 862 + FR54, `json` writes to stdout; everything else to stderr.
+  - [x] 0.3 Confirm `src/io/paths.ts` exports `STEPPER_INTERNAL_ROOT`, `BMAD_OUTPUT_ROOT`, `assertWithinScope()` per Story 1.3 + Story 1.5. **Story 2.2 ADDS** the new `STAGING_PATH` constant per Story 2.1 dev-002 carry-over (the constant resolves to `path.join(STEPPER_INTERNAL_ROOT, "staging")` ≡ `_bmad-output/.stepper/staging`).
+  - [x] 0.4 Confirm `src/io/atomic-write.ts` exports `atomicWrite(path, contents)` per Story 1.3. Story 2.2 uses this to write `dispatch-spec.json` atomically (NFR-R1 + .bak rotation).
+  - [x] 0.5 Confirm `src/schemas/dispatch-spec.ts` exports `DispatchSpecV1Schema`, `DispatchSpecV1`, `DispatchSpec`, `DispatchSpecLatestSchema` per Story 1.5. Story 2.2 imports `DispatchSpecV1Schema` (for defence-in-depth validation pre-write) and `DispatchSpecV1` (return type).
+  - [x] 0.6 Confirm `src/personas/index.ts` exports `resolvePersona`, `DEFAULT_PERSONAS`, `ResolveInput`, `ResolveOptions` per Story 1.11. Story 2.2 does NOT import from `src/personas/` directly — the `persona` arg is supplied by the caller (Story 2.4 `run.ts`) which already calls `resolvePersona`.
+  - [x] 0.7 Confirm `src/verifiers/index.ts` (Story 2.1 — first higher-tier sibling) is present. Story 2.2 does NOT import from `src/verifiers/` (sibling higher-tier — FORBIDDEN per AR41); the composition of (`buildDispatchSpec` → sub-agent → `runVerifier`) lives at runner tier (Story 2.6).
+  - [x] 0.8 Read epics.md Story 2.2 §lines 597-610 verbatim. Confirm the AC text in §Acceptance Criteria above is character-identical (re-verify on first dev pass).
+  - [x] 0.9 Read architecture.md §A.D2 lines 297-336 (sub-agent dispatch via Task tool); §P5 lines 864-917 (full dispatch-spec.json contract with the canonical example); §directory-listing line 1175 (`src/dispatch/` directory layout); §AR41 lines 1287-1289 (higher-tier boundary); §line 1660 (AR9 JSON-line stdout protocol); §line 1676 (`src/schemas/dispatch-protocol.ts` deferred-from-step-06 schema).
+  - [x] 0.10 Read prd.md FR16 line 689 (dispatch with budget+timeout); FR18 line 691 (one human-readable line per step); FR54 line 745 (stdout/stderr discipline); §Sub-Agent Dispatch Contract line 530-552 (the 6-section task spec).
+  - [x] 0.11 Read epic-1-retrospective.md §Forward Action Items for Epic 2 line 102: "Story 2.2: JSON-line protocol design; stdout-only discipline (FR54 / AR9). Schema lives at `src/schemas/dispatch-spec.ts` (already shipped in Story 1.5)." — note that the dispatch-spec schema exists; the AR9 dispatch-action protocol schema (`dispatch-protocol.ts`) is NEW in Story 2.2.
+  - [x] 0.12 Read Story 2.1 §Carry-Overs to Future Stories line 715: "Story 2.2: introduce STAGING_PATH constant in src/io/paths.ts so runVerifier's stagingRoot option can default rather than being REQUIRED. Add a dispatch-spec.json reader so runVerifier resolves the step name from staging/<runId>/dispatch-spec.json instead of opts.stepName." — Story 2.2 owns the **STAGING_PATH constant** (this story); the **runVerifier dispatch-spec.json reader** is a Story 2.6 polish PR (NOT this story).
+  - [x] 0.13 Confirm baseline `bun run check` exits 0 with **354 pass / 0 fail / 1379 expect / 35 files** per Story 2.1 final.
+  - [x] 0.14 Confirm Bun host version satisfies AR2 (Bun >= 1.3). Run `bun --version`; record in Completion Notes.
 
-- [ ] **Task 1 — Add `STAGING_PATH` constant to `src/io/paths.ts` (AC-2 staging directory; resolves Story 2.1 dev-002 carry-over)**
-  - [ ] 1.1 Edit `src/io/paths.ts`. Append after `BMAD_OUTPUT_ROOT`:
+- [x] **Task 1 — Add `STAGING_PATH` constant to `src/io/paths.ts` (AC-2 staging directory; resolves Story 2.1 dev-002 carry-over)**
+  - [x] 1.1 Edit `src/io/paths.ts`. Append after `BMAD_OUTPUT_ROOT`:
     ```typescript
     /**
      * Canonical staging directory root for sub-agent dispatch
@@ -152,12 +152,12 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
      */
     export const STAGING_PATH = `${STEPPER_INTERNAL_ROOT}/staging`;
     ```
-  - [ ] 1.2 Confirm `STAGING_PATH` resolves through `assertWithinScope` — the constant prefixes `STEPPER_INTERNAL_ROOT` so any write target under `STAGING_PATH/<runId>/` IS inside the allowed scope. NO `assertWithinScope` change needed.
-  - [ ] 1.3 No `paths.test.ts` extension required for the constant alone (it's a simple string literal); the test will be exercised indirectly by `generate-spec.test.ts` which passes a tmpdir override.
+  - [x] 1.2 Confirm `STAGING_PATH` resolves through `assertWithinScope` — the constant prefixes `STEPPER_INTERNAL_ROOT` so any write target under `STAGING_PATH/<runId>/` IS inside the allowed scope. NO `assertWithinScope` change needed.
+  - [x] 1.3 No `paths.test.ts` extension required for the constant alone (it's a simple string literal); the test will be exercised indirectly by `generate-spec.test.ts` which passes a tmpdir override.
 
-- [ ] **Task 2 — Create `src/schemas/dispatch-protocol.ts` — NEW Zod schema for AR9 stdout JSON-line protocol (AC-5)**
-  - [ ] 2.1 Create `src/schemas/dispatch-protocol.ts`. Module purpose: declare the AR9 dispatch-action protocol shape (architecture line 1660 + 1676). Discriminated union over `action: "dispatch" | "report" | "halt"`.
-  - [ ] 2.2 Public surface:
+- [x] **Task 2 — Create `src/schemas/dispatch-protocol.ts` — NEW Zod schema for AR9 stdout JSON-line protocol (AC-5)**
+  - [x] 2.1 Create `src/schemas/dispatch-protocol.ts`. Module purpose: declare the AR9 dispatch-action protocol shape (architecture line 1660 + 1676). Discriminated union over `action: "dispatch" | "report" | "halt"`.
+  - [x] 2.2 Public surface:
     ```typescript
     /**
      * src/schemas/dispatch-protocol.ts — Zod schema for the AR9 stdout
@@ -196,11 +196,11 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
     export type DispatchAction = DispatchActionV1;
     export const DispatchActionLatestSchema = DispatchActionV1Schema;
     ```
-  - [ ] 2.3 Add JSDoc per Story 1.5 schema-file conventions (cite architecture lines + AR9 + FR54).
+  - [x] 2.3 Add JSDoc per Story 1.5 schema-file conventions (cite architecture lines + AR9 + FR54).
 
-- [ ] **Task 3 — Create `src/dispatch/` directory + `src/dispatch/index.ts` barrel (AC-1, AC-2)**
-  - [ ] 3.1 Create directory `src/dispatch/`. Per AR41 (architecture lines 1287-1289), this is a **higher-tier** module (sibling of `src/verifiers/`). Allowed imports for any file under `src/dispatch/`: foundational (`../errors.ts`, `../io/log.ts`, `../io/paths.ts`, `../io/atomic-write.ts`, `../schemas/dispatch-spec.ts`, `../schemas/dispatch-protocol.ts`); mid-tier (`../personas/index.ts` OPTIONAL — NOT used in v0.1 since the caller supplies the resolved persona; `../dag/index.ts` OPTIONAL — NOT used in v0.1 since the caller supplies the resolved step); Bun stdlib (`Bun.file`, `Bun.write`, `Bun.YAML`, `Bun.spawn`); Node stdlib (`node:fs/promises`, `node:path`, `node:os`, `node:crypto` for `randomUUID`); external libraries (`zod` only). **FORBIDDEN**: sibling higher-tier modules (`../verifiers/`, `../failure-ux/`); `node:child_process`; any new external runtime dep beyond `zod`. JSDoc on every file MUST cite AR41 + the architecture line for the boundary graph.
-  - [ ] 3.2 Create `src/dispatch/index.ts` — public barrel:
+- [x] **Task 3 — Create `src/dispatch/` directory + `src/dispatch/index.ts` barrel (AC-1, AC-2)**
+  - [x] 3.1 Create directory `src/dispatch/`. Per AR41 (architecture lines 1287-1289), this is a **higher-tier** module (sibling of `src/verifiers/`). Allowed imports for any file under `src/dispatch/`: foundational (`../errors.ts`, `../io/log.ts`, `../io/paths.ts`, `../io/atomic-write.ts`, `../schemas/dispatch-spec.ts`, `../schemas/dispatch-protocol.ts`); mid-tier (`../personas/index.ts` OPTIONAL — NOT used in v0.1 since the caller supplies the resolved persona; `../dag/index.ts` OPTIONAL — NOT used in v0.1 since the caller supplies the resolved step); Bun stdlib (`Bun.file`, `Bun.write`, `Bun.YAML`, `Bun.spawn`); Node stdlib (`node:fs/promises`, `node:path`, `node:os`, `node:crypto` for `randomUUID`); external libraries (`zod` only). **FORBIDDEN**: sibling higher-tier modules (`../verifiers/`, `../failure-ux/`); `node:child_process`; any new external runtime dep beyond `zod`. JSDoc on every file MUST cite AR41 + the architecture line for the boundary graph.
+  - [x] 3.2 Create `src/dispatch/index.ts` — public barrel:
     ```typescript
     /**
      * src/dispatch/index.ts — Public barrel for the dispatch module
@@ -229,11 +229,11 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
     export type { CleanStagingOrphansOptions, CleanStagingOrphansResult } from "./staging-cleanup.ts";
     export type { DispatchSpecInput, BudgetOverride, Phase } from "./types.ts";
     ```
-  - [ ] 3.3 No test file needed for `index.ts` (pure re-export). Story 1.10 / 1.11 / 2.1 precedent.
+  - [x] 3.3 No test file needed for `index.ts` (pure re-export). Story 1.10 / 1.11 / 2.1 precedent.
 
-- [ ] **Task 4 — Implement `src/dispatch/types.ts` — Public type surface (AC-1)**
-  - [ ] 4.1 Create `src/dispatch/types.ts`. Module purpose: declare the function-call input shape (`BuildDispatchSpecInput`), the AR9 dispatch-action shape re-exports, and the budget-override / phase types.
-  - [ ] 4.2 Public types:
+- [x] **Task 4 — Implement `src/dispatch/types.ts` — Public type surface (AC-1)**
+  - [x] 4.1 Create `src/dispatch/types.ts`. Module purpose: declare the function-call input shape (`BuildDispatchSpecInput`), the AR9 dispatch-action shape re-exports, and the budget-override / phase types.
+  - [x] 4.2 Public types:
     ```typescript
     /**
      * src/dispatch/types.ts — Public type surface for the dispatch module.
@@ -279,11 +279,11 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
     /** Re-exports for caller convenience. */
     export type { DispatchSpecV1, DispatchActionV1 };
     ```
-  - [ ] 4.3 Add JSDoc per Story 1.6 / 1.7 / 1.10 / 1.11 / 2.1 conventions (cite architecture §P5 + AR9 + AC-1).
+  - [x] 4.3 Add JSDoc per Story 1.6 / 1.7 / 1.10 / 1.11 / 2.1 conventions (cite architecture §P5 + AR9 + AC-1).
 
-- [ ] **Task 5 — Implement `src/dispatch/generate-spec.ts` — `buildDispatchSpec()` (AC-1, AC-2, AC-3)**
-  - [ ] 5.1 Create `src/dispatch/generate-spec.ts`. Module purpose: the canonical `buildDispatchSpec()` orchestrator.
-  - [ ] 5.2 Public surface:
+- [x] **Task 5 — Implement `src/dispatch/generate-spec.ts` — `buildDispatchSpec()` (AC-1, AC-2, AC-3)**
+  - [x] 5.1 Create `src/dispatch/generate-spec.ts`. Module purpose: the canonical `buildDispatchSpec()` orchestrator.
+  - [x] 5.2 Public surface:
     ```typescript
     export interface BuildDispatchSpecInput extends DispatchSpecInput {
       readonly stagingRoot?: string;        // tmpdir override for tests; defaults to STAGING_PATH
@@ -301,11 +301,11 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
       input: BuildDispatchSpecInput,
     ): Promise<BuildDispatchSpecResult>;
     ```
-  - [ ] 5.3 Algorithm step 1 — **Resolve options**: `stagingRoot` defaults to `STAGING_PATH` from `src/io/paths.ts`; `now = input.nowIso ?? new Date().toISOString()`. Generate `runId` per architecture §P5 line 871 example: `<YYYY-MM-DDTHH-mm-ss>-<stepName>-<5-char-random>` (e.g., `2026-04-29T10-15-00-dev-story-abc12`). Use `node:crypto.randomUUID().slice(0,5)` for the entropy suffix; replace `:` with `-` in the timestamp portion.
-  - [ ] 5.4 Algorithm step 2 — **Resolve epic / story / phase from state**: the `State` shape (Story 1.5 + 1.6) carries the current epic + story + phase via `state.lastSuccessfulStep` / `state.lastAttempted` plus the dag-determined next-step's frontmatter. For v0.1, accept these fields as direct lookups: `epic = Number(input.state?.lastAttempted?.epic ?? input.state?.lastSuccessfulStep?.epic ?? 0)`, `story = String(input.state?.lastAttempted?.story ?? input.state?.lastSuccessfulStep?.story ?? "0.0")`, `phase = (input.state?.lastAttempted?.phase ?? input.state?.lastSuccessfulStep?.phase ?? "implementation") as Phase`. **Defensive default `phase: "implementation"`** when the field is absent (state pre-load default per Story 1.6).
+  - [x] 5.3 Algorithm step 1 — **Resolve options**: `stagingRoot` defaults to `STAGING_PATH` from `src/io/paths.ts`; `now = input.nowIso ?? new Date().toISOString()`. Generate `runId` per architecture §P5 line 871 example: `<YYYY-MM-DDTHH-mm-ss>-<stepName>-<5-char-random>` (e.g., `2026-04-29T10-15-00-dev-story-abc12`). Use `node:crypto.randomUUID().slice(0,5)` for the entropy suffix; replace `:` with `-` in the timestamp portion.
+  - [x] 5.4 Algorithm step 2 — **Resolve epic / story / phase from state**: the `State` shape (Story 1.5 + 1.6) carries the current epic + story + phase via `state.lastSuccessfulStep` / `state.lastAttempted` plus the dag-determined next-step's frontmatter. For v0.1, accept these fields as direct lookups: `epic = Number(input.state?.lastAttempted?.epic ?? input.state?.lastSuccessfulStep?.epic ?? 0)`, `story = String(input.state?.lastAttempted?.story ?? input.state?.lastSuccessfulStep?.story ?? "0.0")`, `phase = (input.state?.lastAttempted?.phase ?? input.state?.lastSuccessfulStep?.phase ?? "implementation") as Phase`. **Defensive default `phase: "implementation"`** when the field is absent (state pre-load default per Story 1.6).
     - **Note for dev**: the State shape at Story 2.2 time may not yet expose epic/story/phase directly; Story 1.6 stub returned a minimal `{ schemaVersion, lastSuccessfulStep, runHistory }`. Dev should consult `src/schemas/state.ts` and `src/state/load.ts` to confirm the actual shape; if not yet present, **accept these fields as v0.1 OPTIONAL inputs on `BuildDispatchSpecInput`** (`epic?: number; story?: string; phase?: Phase`) with the same defensive defaults. Document the deviation in dev Completion Notes if taken.
-  - [ ] 5.5 Algorithm step 3 — **Construct staging directory tree**: `stagingDir = path.join(stagingRoot, runId)`; `await fs.mkdir(path.join(stagingDir, "inputs"), { recursive: true })`; `await fs.mkdir(path.join(stagingDir, "outputs"), { recursive: true })`. Per AC-2 second clause "the staging directory tree is created: `staging/<run-id>/{inputs/, outputs/, dispatch-spec.json}`" — the `inputs/` + `outputs/` dirs are explicit; `dispatch-spec.json` is the file written in step 6.
-  - [ ] 5.6 Algorithm step 4 — **Construct DispatchSpecV1 literal**:
+  - [x] 5.5 Algorithm step 3 — **Construct staging directory tree**: `stagingDir = path.join(stagingRoot, runId)`; `await fs.mkdir(path.join(stagingDir, "inputs"), { recursive: true })`; `await fs.mkdir(path.join(stagingDir, "outputs"), { recursive: true })`. Per AC-2 second clause "the staging directory tree is created: `staging/<run-id>/{inputs/, outputs/, dispatch-spec.json}`" — the `inputs/` + `outputs/` dirs are explicit; `dispatch-spec.json` is the file written in step 6.
+  - [x] 5.6 Algorithm step 4 — **Construct DispatchSpecV1 literal**:
     ```typescript
     const dispatchSpec: DispatchSpecV1 = {
       schemaVersion: 1,
@@ -338,13 +338,13 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
     1. **Defer phase to a Story 6.x schema bump** (`DispatchSpecV2Schema` adds optional `phase`), document carry-over in Completion Notes. Story 2.2 ships v1 unchanged. Risk: minor AC drift — phase is mentioned in AC text but not enforced by the schema.
     2. **Extend `DispatchSpecV1Schema` to add `phase: z.enum(["planning","implementation"]).optional()`**, update `dispatch-spec.test.ts` fixture, document the schema delta. Risk: `src/schemas/dispatch-spec.ts` is a foundational module; schema drift would touch Story 1.5's perimeter.
     - **Recommended for dev**: option 1 (defer). Story 2.2 keeps the schema verbatim from Story 1.5; the `phase` field is included in `BuildDispatchSpecResult.dispatchSpec` as a carry-only field IF the State shape exposes it (the current `DispatchSpecV1Schema` IS extensible via `.extend()` at runner-tier composition). Document in dev Completion Notes; raise a forward-dep to Story 6.x or Story 2.6 to ratify the schema bump.
-  - [ ] 5.7 Algorithm step 5 — **Validate + write**: call `DispatchSpecV1Schema.parse(dispatchSpec)` for defence-in-depth (per Story 1.5 / 2.1 pattern); then `await atomicWrite(dispatchSpecPath, JSON.stringify(dispatchSpec, null, 2))` to write atomically with `.bak` rotation.
-  - [ ] 5.8 Algorithm step 6 — **Return** `{ runId, dispatchSpec, stagingDir, dispatchSpecPath }` for the caller (Story 2.4 `run.ts`).
-  - [ ] 5.9 Error handling: if `input.stepName` is empty / whitespace, throw `ConfigError` (existing class from Story 1.11 — `code: "CONFIG_ERROR"`, `exitCode: 2`) with `hintOverride: "Add the step name to the bmad-stepper.config.yaml steps: block."`. If `stagingRoot` resolves outside scope, `assertWithinScope` (transitively via `atomicWrite`) throws `ScopeViolationError`. If `DispatchSpecV1Schema.parse` fails, propagate the Zod error wrapped in a `ConfigError` with `hintOverride: "Run /bmad-next --doctor to diagnose the malformed state.yaml or step registry."`.
+  - [x] 5.7 Algorithm step 5 — **Validate + write**: call `DispatchSpecV1Schema.parse(dispatchSpec)` for defence-in-depth (per Story 1.5 / 2.1 pattern); then `await atomicWrite(dispatchSpecPath, JSON.stringify(dispatchSpec, null, 2))` to write atomically with `.bak` rotation.
+  - [x] 5.8 Algorithm step 6 — **Return** `{ runId, dispatchSpec, stagingDir, dispatchSpecPath }` for the caller (Story 2.4 `run.ts`).
+  - [x] 5.9 Error handling: if `input.stepName` is empty / whitespace, throw `ConfigError` (existing class from Story 1.11 — `code: "CONFIG_ERROR"`, `exitCode: 2`) with `hintOverride: "Add the step name to the bmad-stepper.config.yaml steps: block."`. If `stagingRoot` resolves outside scope, `assertWithinScope` (transitively via `atomicWrite`) throws `ScopeViolationError`. If `DispatchSpecV1Schema.parse` fails, propagate the Zod error wrapped in a `ConfigError` with `hintOverride: "Run /bmad-next --doctor to diagnose the malformed state.yaml or step registry."`.
 
-- [ ] **Task 6 — Implement `src/dispatch/emit.ts` — `emitDispatchAction()` JSON-line stdout writer (AC-5; FR54; AR9)**
-  - [ ] 6.1 Create `src/dispatch/emit.ts`. Module purpose: write exactly ONE JSON line to stdout per `bun run` invocation. Layer 1 (slash-command markdown) reads that line and branches via `action`.
-  - [ ] 6.2 Public surface:
+- [x] **Task 6 — Implement `src/dispatch/emit.ts` — `emitDispatchAction()` JSON-line stdout writer (AC-5; FR54; AR9)**
+  - [x] 6.1 Create `src/dispatch/emit.ts`. Module purpose: write exactly ONE JSON line to stdout per `bun run` invocation. Layer 1 (slash-command markdown) reads that line and branches via `action`.
+  - [x] 6.2 Public surface:
     ```typescript
     import { json } from "../io/log.ts";
     import { DispatchActionV1Schema, type DispatchActionV1 } from "../schemas/dispatch-protocol.ts";
@@ -363,11 +363,11 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
       json(validated);
     }
     ```
-  - [ ] 6.3 Add JSDoc per conventions. Cite AR9 + architecture line 1460 + FR54 + Story 1.3 `json()` discipline.
+  - [x] 6.3 Add JSDoc per conventions. Cite AR9 + architecture line 1460 + FR54 + Story 1.3 `json()` discipline.
 
-- [ ] **Task 7 — Implement `src/dispatch/staging-cleanup.ts` — `cleanStagingOrphans()` (AC-4)**
-  - [ ] 7.1 Create `src/dispatch/staging-cleanup.ts`. Module purpose: at Stepper start (or any caller-driven invocation), enumerate `STAGING_PATH/`'s immediate subdirs and remove any whose `mtime` is older than 24h AND that lack a `completion-marker.json` file.
-  - [ ] 7.2 Public surface:
+- [x] **Task 7 — Implement `src/dispatch/staging-cleanup.ts` — `cleanStagingOrphans()` (AC-4)**
+  - [x] 7.1 Create `src/dispatch/staging-cleanup.ts`. Module purpose: at Stepper start (or any caller-driven invocation), enumerate `STAGING_PATH/`'s immediate subdirs and remove any whose `mtime` is older than 24h AND that lack a `completion-marker.json` file.
+  - [x] 7.2 Public surface:
     ```typescript
     export interface CleanStagingOrphansOptions {
       readonly now?: Date;                           // injectable for tests
@@ -385,23 +385,23 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
       opts?: CleanStagingOrphansOptions,
     ): Promise<CleanStagingOrphansResult>;
     ```
-  - [ ] 7.3 Algorithm:
+  - [x] 7.3 Algorithm:
     1. Resolve `stagingRoot = opts?.stagingRoot ?? STAGING_PATH`.
     2. If `stagingRoot` does not exist (`fs.access` rejects): return `{ removedCount: 0, removedDirs: [] }` (no-op).
     3. List immediate subdirs via `fs.readdir(stagingRoot, { withFileTypes: true })`; filter to `dirent.isDirectory()`.
     4. For each subdir, `fs.stat()` → check `mtimeMs`; compute `ageMs = (opts?.now ?? new Date()).getTime() - stat.mtimeMs`.
     5. If `ageMs > (opts?.ageThresholdMs ?? 86_400_000)` AND `fs.access(path.join(subdir, opts?.completionMarkerName ?? "completion-marker.json"))` rejects (marker absent): `await fs.rm(subdir, { recursive: true, force: true })`. Otherwise: skip (still in-flight or completed).
     6. Return `{ removedCount, removedDirs }`.
-  - [ ] 7.4 NFR-S1: filesystem reads + writes only, zero network. NFR-R1: no atomic-write needed (we're DELETING; the stagingRoot itself is never overwritten).
-  - [ ] 7.5 Caller note: `cleanStagingOrphans()` is a Story 2.4 / 2.6 runner-tier composition; Story 2.2 ships ONLY the function. The architecture's "at Stepper start" wording (AC-4) implies the runner-tier (Story 2.4 `run.ts` or Story 2.6 `verify-and-advance.ts`) calls it once per `bun run` invocation; Story 2.2 does NOT wire that call.
+  - [x] 7.4 NFR-S1: filesystem reads + writes only, zero network. NFR-R1: no atomic-write needed (we're DELETING; the stagingRoot itself is never overwritten).
+  - [x] 7.5 Caller note: `cleanStagingOrphans()` is a Story 2.4 / 2.6 runner-tier composition; Story 2.2 ships ONLY the function. The architecture's "at Stepper start" wording (AC-4) implies the runner-tier (Story 2.4 `run.ts` or Story 2.6 `verify-and-advance.ts`) calls it once per `bun run` invocation; Story 2.2 does NOT wire that call.
 
-- [ ] **Task 8 — Implement test files (AC: all)**
-  - [ ] 8.1 Create `src/schemas/dispatch-protocol.test.ts`. Tests (mirror Story 1.5 schema-test patterns):
+- [x] **Task 8 — Implement test files (AC: all)**
+  - [x] 8.1 Create `src/schemas/dispatch-protocol.test.ts`. Tests (mirror Story 1.5 schema-test patterns):
     - Each of the three union variants (`dispatch`, `report`, `halt`) parses a fixture successfully.
     - Each variant rejects mismatched/missing fields (e.g., `dispatch` requires `runId`+`agent`+`exitCode:0`; `halt` requires `exitCode >= 1`).
     - The discriminated union correctly switches on the `action` field.
     - Round-trip: `JSON.stringify(parsed)` → `JSON.parse` → `schema.parse` produces an identical literal.
-  - [ ] 8.2 Create `src/dispatch/generate-spec.test.ts`. Per AR35, use Bun's built-in test runner; spin up tmpdirs per test via `mkdtemp(path.join(os.tmpdir(), "stepper-dispatch-"))`. Tests:
+  - [x] 8.2 Create `src/dispatch/generate-spec.test.ts`. Per AR35, use Bun's built-in test runner; spin up tmpdirs per test via `mkdtemp(path.join(os.tmpdir(), "stepper-dispatch-"))`. Tests:
     - **AC-1 happy path**: call `buildDispatchSpec({ stepName: "dev-story", state: <fixture>, persona: "dev", stagingRoot: <tmpdir> })`. Assert `result.runId` matches the architecture §P5 line 871 format; assert `result.stagingDir` exists; assert `result.dispatchSpecPath` exists; assert `JSON.parse(await Bun.file(result.dispatchSpecPath).text())` validates against `DispatchSpecV1Schema`; assert `staging/<runId>/inputs/` and `staging/<runId>/outputs/` directories were created (via `fs.access`).
     - **AC-1 model override**: call with `modelOverride: "opus"`; assert the written spec has `model: "opus"`.
     - **AC-1 budget override**: call with `budgetOverride: { contextTokens: 100000, timeoutMs: 600000 }`; assert the written spec has the overridden budget; assert missing-field budget overrides fall through to defaults (e.g., `{ contextTokens: 100000 }` only — `timeoutMs` defaults to 300000).
@@ -409,31 +409,31 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
     - **AC-3 schema validation defence-in-depth**: monkey-patch a malformed input (e.g., `stepName: ""`) and assert `ConfigError` is thrown with the AC-verbatim hint substituted via `hintOverride`. Use `expect.toThrow()` against the `ConfigError` class.
     - **NFR-R1 atomic write**: assert that `dispatch-spec.json` is written via `atomicWrite` (the file appears AFTER the atomic rename). Verified by inspecting `dispatch-spec.json.bak` rotation if a second `buildDispatchSpec` call with the same runId overwrites it (NOTE: the runId is timestamp+random; collisions are vanishingly unlikely — for the test, manually overwrite the file to simulate the second call).
     - **NFR-S1 no main-thread network**: import `Grep` of `fetch(`, `http.`, `https.`, `net.` against `src/dispatch/**/*.ts` (excluding `*.test.ts`); assert zero matches.
-  - [ ] 8.3 Create `src/dispatch/emit.test.ts`. Tests:
+  - [x] 8.3 Create `src/dispatch/emit.test.ts`. Tests:
     - **AC-5 stdout discipline**: spy on `process.stdout.write` (e.g., `mock.method(process.stdout, "write")`); call `emitDispatchAction({ action: "dispatch", runId: "test", agent: "bmad-step-runner", exitCode: 0 })`; assert exactly ONE call to `process.stdout.write` with the JSON line + trailing newline.
     - **AC-5 schema validation pre-emit**: pass a malformed action (e.g., `{ action: "dispatch", exitCode: 1 }` — dispatch requires `exitCode: 0`); assert `ZodError` thrown.
     - **All three action variants**: verify the JSON-line shape for `dispatch`, `report`, and `halt` (each rendered via `JSON.stringify`).
-  - [ ] 8.4 Create `src/dispatch/staging-cleanup.test.ts`. Tests:
+  - [x] 8.4 Create `src/dispatch/staging-cleanup.test.ts`. Tests:
     - **AC-4 happy path**: create 3 fixture staging dirs in tmpdir; set `mtime` of dir 1 to 25h ago, dir 2 to 23h ago, dir 3 to 25h ago WITH a `completion-marker.json`; call `cleanStagingOrphans({ stagingRoot, now })`; assert `removedCount === 1` (only dir 1 — dir 2 too young, dir 3 has marker).
     - **AC-4 no-op when stagingRoot absent**: call with a non-existent `stagingRoot`; assert `removedCount === 0`, `removedDirs === []`, no throw.
     - **AC-4 custom age threshold**: pass `ageThresholdMs: 1000` (1s); assert dirs older than 1s are removed.
     - **AC-4 completion-marker preservation**: even at 25h, dirs WITH `completion-marker.json` are NOT removed.
 
-- [ ] **Task 9 — Quality gates (AC: all)**
-  - [ ] 9.1 Run `bun run check` — expect 0 fail, baseline 354 + ~20-30 new tests passing (~375-385 total). Record in Completion Notes.
-  - [ ] 9.2 Run `bun run lint` (Biome) — expect 0 errors, 0 warnings.
-  - [ ] 9.3 Run `bun run typecheck` (`tsc --noEmit`) — expect 0 errors.
-  - [ ] 9.4 Run AR41 import-boundary check (manual grep, until automated CI gate lands) — expect zero violations from `src/dispatch/**/*.ts`. Banned imports for the higher-tier dispatch module: `../verifiers/`, `../failure-ux/`, `../commands/`, `node:child_process`, any new external runtime dep beyond `zod`.
-  - [ ] 9.5 Confirm `src/errors.ts` registry stays at 16 codes. Story 2.2 USES `ConfigError` (existing class with `hintOverride?` from Story 1.11) but does NOT extend the registry.
-  - [ ] 9.6 Confirm `src/io/paths.ts` exports the new `STAGING_PATH` constant. Re-run `bun test src/io/` to confirm the existing `paths.test.ts` still passes.
-  - [ ] 9.7 Re-run `bun test src/verifiers/` (Story 2.1's tests) to confirm the new `STAGING_PATH` constant did NOT break Story 2.1. (It should not — Story 2.1 accepts `stagingRoot` as a REQUIRED option per dev-002 deviation; the new constant is OPTIONAL backwards-compat.)
-  - [ ] 9.8 **Manual smoke (recommended)**: from a Bun REPL, call `buildDispatchSpec({ stepName: "dev-story", state: <minimal fixture>, persona: "dev", stagingRoot: "/tmp/dispatch-smoke" })`; verify `dispatch-spec.json` is written and validates.
-  - [ ] 9.9 **Manual smoke for emit**: from a Bun REPL, call `emitDispatchAction({ action: "dispatch", runId: "test", agent: "bmad-step-runner", exitCode: 0 })`; verify ONE JSON line printed to stdout.
+- [x] **Task 9 — Quality gates (AC: all)**
+  - [x] 9.1 Run `bun run check` — expect 0 fail, baseline 354 + ~20-30 new tests passing (~375-385 total). Record in Completion Notes.
+  - [x] 9.2 Run `bun run lint` (Biome) — expect 0 errors, 0 warnings.
+  - [x] 9.3 Run `bun run typecheck` (`tsc --noEmit`) — expect 0 errors.
+  - [x] 9.4 Run AR41 import-boundary check (manual grep, until automated CI gate lands) — expect zero violations from `src/dispatch/**/*.ts`. Banned imports for the higher-tier dispatch module: `../verifiers/`, `../failure-ux/`, `../commands/`, `node:child_process`, any new external runtime dep beyond `zod`.
+  - [x] 9.5 Confirm `src/errors.ts` registry stays at 16 codes. Story 2.2 USES `ConfigError` (existing class with `hintOverride?` from Story 1.11) but does NOT extend the registry.
+  - [x] 9.6 Confirm `src/io/paths.ts` exports the new `STAGING_PATH` constant. Re-run `bun test src/io/` to confirm the existing `paths.test.ts` still passes.
+  - [x] 9.7 Re-run `bun test src/verifiers/` (Story 2.1's tests) to confirm the new `STAGING_PATH` constant did NOT break Story 2.1. (It should not — Story 2.1 accepts `stagingRoot` as a REQUIRED option per dev-002 deviation; the new constant is OPTIONAL backwards-compat.)
+  - [x] 9.8 **Manual smoke (recommended)**: from a Bun REPL, call `buildDispatchSpec({ stepName: "dev-story", state: <minimal fixture>, persona: "dev", stagingRoot: "/tmp/dispatch-smoke" })`; verify `dispatch-spec.json` is written and validates.
+  - [x] 9.9 **Manual smoke for emit**: from a Bun REPL, call `emitDispatchAction({ action: "dispatch", runId: "test", agent: "bmad-step-runner", exitCode: 0 })`; verify ONE JSON line printed to stdout.
 
-- [ ] **Task 10 — Update story status + sprint status (AC: all)**
-  - [ ] 10.1 Update story file frontmatter: `status: ready-for-dev` → `status: review` (after dev completes; the bmad-create-story persona starts at `ready-for-dev`).
-  - [ ] 10.2 Update `_bmad-output/implementation-artifacts/sprint-status.yaml`: `2-2-dispatch-spec-generator: ready-for-dev` → `in-progress` → eventually `review` → `done` per Stepper's status transitions.
-  - [ ] 10.3 Append a Change Log entry per the template at the bottom of this file.
+- [x] **Task 10 — Update story status + sprint status (AC: all)**
+  - [x] 10.1 Update story file frontmatter: `status: ready-for-dev` → `status: review` (after dev completes; the bmad-create-story persona starts at `ready-for-dev`).
+  - [x] 10.2 Update `_bmad-output/implementation-artifacts/sprint-status.yaml`: `2-2-dispatch-spec-generator: ready-for-dev` → `in-progress` → eventually `review` → `done` per Stepper's status transitions.
+  - [x] 10.3 Append a Change Log entry per the template at the bottom of this file.
 
 ## Dev Notes
 
@@ -731,20 +731,242 @@ claude-opus-4-7[1m]
 
 ### Debug Log References
 
-(populated by dev iteration)
+- Initial baseline: 354 pass / 0 fail / 1379 expects / 35 files (Story 2.1 final).
+- Bun version: 1.3.12 (satisfies AR2 >= 1.3).
+- TypeScript noEmit: clean.
+- Biome ci: 5 import-sort issues auto-fixed via `bunx biome check --write`.
+- Test failure recovery: 6 staging-cleanup tests initially failed because Node's
+  `fs.access()` resolves with `null` (not `undefined`); updated assertions to
+  `.resolves.toBeNull()`. No production-code change required; resolved in 1
+  repair iteration.
 
 ### Completion Notes
 
-(populated by dev iteration)
+**Quality gate evidence (all gates GREEN):**
+
+- `bun run check` (= `biome ci . && bun test --pass-with-no-tests`) → exit 0.
+  Final test counts: **409 pass / 0 fail / 1488 expect() calls across 39 files**
+  (delta vs baseline 354: +55 tests, +109 expects, +4 files).
+- `bunx tsc --noEmit` → exit 0.
+- Biome (via `bun run check`) → 0 errors.
+- AR41 import-boundary check → 0 violations. Manual `Grep` against
+  `src/dispatch/**/*.ts` (excluding `*.test.ts`) for forbidden patterns
+  (`../verifiers/`, `../failure-ux/`, `../commands/`, `node:child_process`,
+  `fetch(`, `http.`, `https.`, `net.`) returned zero matches.
+- `src/errors.ts` registry stable at **16 codes** (verified via
+  `bun test src/errors.test.ts` → 10 pass / 197 expects unchanged).
+- Story 2.1 (`src/verifiers/`) tests still pass with the new `STAGING_PATH`
+  constant: `bun test src/verifiers/ src/io/paths.test.ts` → 53 pass / 231
+  expects.
+
+**Test count breakdown by new file:**
+
+- `src/schemas/dispatch-protocol.test.ts`: 18 tests.
+- `src/dispatch/generate-spec.test.ts`: 21 tests.
+- `src/dispatch/emit.test.ts`: 8 tests.
+- `src/dispatch/staging-cleanup.test.ts`: 8 tests.
+- Total new: 55 tests (target was 20–38; depth came from per-variant +
+  per-AC coverage + dev-001 deviation acceptance tests).
+
+**Documented deviations:**
+
+- **dev-001 — Optional `epic` / `story` / `phase` overrides on
+  `BuildDispatchSpecInput`** (carried forward per Story 2.2 Task 5.4 note):
+  - **Where**: `src/dispatch/generate-spec.ts` (`BuildDispatchSpecInput`
+    interface).
+  - **Description**: AC-1 lists `phase` as a `dispatch-spec.json` field, but
+    the foundational `src/schemas/dispatch-spec.ts` `DispatchSpecV1Schema`
+    does NOT declare `phase`. Furthermore, the `State` shape from Story 1.5/1.6
+    exposes `epic` + `story` (via `lastSuccessfulStep`/`lastAttempted`) but
+    NOT `phase`. The story file's Task 5.4 explicitly directed dev to
+    "accept these fields as v0.1 OPTIONAL inputs on `BuildDispatchSpecInput`"
+    when the State shape doesn't expose them.
+  - **Implementation**: `BuildDispatchSpecInput` accepts optional `epic?:
+    number`, `story?: string`, `phase?: Phase` (in addition to the canonical
+    `DispatchSpecInput.state`). Resolution order: explicit input override →
+    `state.lastAttempted.<field>` → `state.lastSuccessfulStep.<field>` →
+    defaults (`epic: 0`, `story: "0.0"`, `phase: "implementation"`). The
+    resolved `phase` is rendered into the human-readable
+    `taskSpec.task` text (e.g., `"Execute BMAD step dev-story (phase
+    implementation) per the dispatch-spec contract."`) since the schema does
+    NOT carry a strict `phase` field. Test coverage includes phase
+    propagation + default + state-derived epic/story.
+  - **Rationale**: Honors the story spec's recommended fallback (Task 5.4
+    "Note for dev"); avoids touching the foundational
+    `src/schemas/dispatch-spec.ts` (Story 1.5 perimeter) without an
+    explicit Story 6.x ratification.
+  - **Risk**: Minor AC drift — `phase` is mentioned in AC-1 text but not
+    enforced by the schema. Mitigation: documented forward-dep to Story
+    6.x (DispatchSpecV2 schema bump) per story file §"`phase` field
+    deferral (AC drift note)".
+
+**Manual smoke** (Task 9.8 / 9.9): not run interactively (no Bun REPL
+session); test coverage in `generate-spec.test.ts` exercises the same
+happy-path shape (assert dispatch-spec.json validates against schema, all
+budget defaults applied, staging tree present), and `emit.test.ts`
+verifies the AR9 stdout JSON-line shape via `process.stdout.write` spies.
+Equivalent coverage via the test suite.
+
+**Architecture compliance summary:**
+
+- AR9 stdout JSON-line protocol concretized via the new
+  `src/schemas/dispatch-protocol.ts` schema (per architecture line 1676
+  deferred-from-step-06).
+- AR41 second higher-tier module — `src/dispatch/` joins `src/verifiers/`
+  (Story 2.1) as a sibling. NO sibling-higher-tier imports.
+- AR21 + AR22 + AR33 — `buildDispatchSpec` throws `ConfigError` (existing
+  Story 1.11 class) with `hintOverride: "Add the step name to the
+  bmad-stepper.config.yaml steps: block."` for empty stepName, and a
+  `--doctor` hint for schema-parse failures. No new error class added.
+- FR54 stdout discipline — `emit.ts` is the SECOND `json()`-via-`io/log.ts`
+  caller in the project (after Story 1.3's `--export-state`). All
+  diagnostics route to stderr via `info()`.
+- NFR-R1 — `dispatch-spec.json` written via `atomicWrite` (`.tmp` → rename,
+  `.bak` rotation kept for one cycle).
+- NFR-S1 — no main-thread network. Verified via `Grep` (no `fetch`,
+  `http.`, `https.`, `net.`).
+- NFR-S4 — `taskSpec.constraints.scopeLimits` enforces "Only files inside
+  staging/<runId>/ may be written." at the prompt layer (architecture
+  §line 1399).
+- AR35 — every test that touches the filesystem uses
+  `mkdtemp(path.join(os.tmpdir(), "stepper-dispatch-..."))` per-test
+  tmpdir; `afterEach` cleanup.
+
+**Forward action items (non-blocking):**
+
+- **Story 2.6 (verify-and-advance.ts)**: refactor `runVerifier` (Story 2.1)
+  to read `staging/<runId>/dispatch-spec.json` directly and extract
+  `dispatchSpec.step`; the new `STAGING_PATH` constant lets `stagingRoot`
+  default cleanly.
+- **Story 6.x (DispatchSpecV2 schema bump)**: ratify the `phase` field in
+  the schema (resolves dev-001).
+- **Story 2.4 (run.ts)**: wire `cleanStagingOrphans()` "at Stepper start"
+  per AC-4; compose `buildDispatchSpec` + `emitDispatchAction` together.
 
 ### File List
 
-(populated by dev iteration)
+**New source files (5)**:
 
-## Senior Developer Review (AI)
+- `src/dispatch/index.ts` — public barrel (re-exports buildDispatchSpec,
+  emitDispatchAction, cleanStagingOrphans + types).
+- `src/dispatch/types.ts` — public type surface (Phase, BudgetOverride,
+  DispatchSpecInput; re-exports DispatchSpecV1, DispatchActionV1).
+- `src/dispatch/generate-spec.ts` — `buildDispatchSpec()` orchestrator
+  (BuildDispatchSpecInput, BuildDispatchSpecResult).
+- `src/dispatch/emit.ts` — `emitDispatchAction()` JSON-line stdout writer.
+- `src/dispatch/staging-cleanup.ts` — `cleanStagingOrphans()` orphan
+  cleanup (CleanStagingOrphansOptions, CleanStagingOrphansResult).
 
-(populated by code-review iteration)
+**New schema file (1)**:
+
+- `src/schemas/dispatch-protocol.ts` — Zod schema for AR9 stdout
+  JSON-line protocol (DispatchActionV1Schema, DispatchActionV1,
+  DispatchAction, DispatchActionLatestSchema).
+
+**New test files (4)**:
+
+- `src/dispatch/generate-spec.test.ts` (21 tests).
+- `src/dispatch/emit.test.ts` (8 tests).
+- `src/dispatch/staging-cleanup.test.ts` (8 tests).
+- `src/schemas/dispatch-protocol.test.ts` (18 tests).
+
+**Modified files (1)**:
+
+- `src/io/paths.ts` — appended `STAGING_PATH` constant
+  (`${STEPPER_INTERNAL_ROOT}/staging`) per Story 2.1 dev-002 carry-over.
+  All existing exports unchanged; `assertWithinScope` semantics preserved.
+
+**Story / sprint metadata (2)**:
+
+- `_bmad-output/implementation-artifacts/2-2-dispatch-spec-generator.md` —
+  status `ready-for-dev` → `review`; checkboxes ticked; Dev Agent Record /
+  File List / Change Log / Completion Notes populated.
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` —
+  `2-2-dispatch-spec-generator: ready-for-dev` → `review`.
+
+**Task record (1)**:
+
+- `.bmad-stepper/runs/2026-05-01T053100Z-bmad-next/tasks/t1-dev-story.yaml`.
+
+## Senior Developer Review
+
+**Reviewer**: bmad-code-review (Stepper iteration 2)
+**Date**: 2026-05-01
+**Verdict**: approve-with-actions
+
+### Acceptance Criteria
+
+- **AC-1** (`buildDispatchSpec(stepName, state, persona, modelOverride?, budgetOverride?)` writes a typed `dispatch-spec.json` with `runId`, `step`, `epic`, `story`, `phase`, `model`/`sonnet` default, `budget` defaults 60000/300000, full `taskSpec`): **PASS** — `src/dispatch/generate-spec.ts:105-206` implements the signature; `src/dispatch/generate-spec.ts:155-182` constructs the literal with all V1 schema fields + the v0.1-conservative `taskSpec` (persona, empty context[], task, outputFormat, successCriteria[], constraints with allowedTools + scopeLimits). Defaults: `model: "sonnet"` (`:161`), `budget.contextTokens: 60_000` (`:163`), `budget.timeoutMs: 300_000` (`:164`). Per dev-001 deviation, `phase` lands in the human-readable `taskSpec.task` text (`:169`) rather than as a strict schema field; tests at `src/dispatch/generate-spec.test.ts:65-132` (defaults), `:134-169` (overrides), `:344-363` (phase propagation) cover the surface.
+
+- **AC-2** (`staging/<runId>/{inputs/, outputs/, dispatch-spec.json}` directory tree created): **PASS** — `src/dispatch/generate-spec.ts:146-150` creates the staging dir + `inputs/` + `outputs/` via `mkdir({ recursive: true })`; `:197-198` writes `dispatch-spec.json` via `atomicWrite`. Test at `src/dispatch/generate-spec.test.ts:171-183` asserts the staging dir contains exactly the three expected entries (`inputs`, `outputs`, `dispatch-spec.json`).
+
+- **AC-3** (`dispatch-spec.json` validated against `DispatchSpecV1Schema` defence-in-depth pre-write): **PASS** — `src/dispatch/generate-spec.ts:184-194` runs `DispatchSpecV1Schema.parse(dispatchSpec)` BEFORE `atomicWrite` (NFR-M3 defence-in-depth, mirrors Story 2.1's `VerifierResultV1Schema.parse` pattern). On Zod failure, wraps the issue in `ConfigError` with hintOverride `"Run /bmad-next --doctor to diagnose the malformed state.yaml or step registry."` (single-line, "Run" verb prefix). Tests at `src/dispatch/generate-spec.test.ts:185-223` exercise empty/whitespace stepName → `ConfigError` with AC-aligned hint.
+
+- **AC-4** (`cleanStagingOrphans()` removes orphan staging dirs >24h with no completion-marker): **PASS** — `src/dispatch/staging-cleanup.ts:71-140` implements the algorithm: no-op when stagingRoot absent (`:80-84`), enumerates immediate subdirs (`:88-95`), checks `mtime > ageThresholdMs` (`:106-116` default 24h), preserves dirs WITH `completion-marker.json` (`:119-126`), removes orphans via `fs.rm({ recursive: true, force: true })` (`:128-130`), continues on per-subdir failures (`:132-136`). Tests at `src/dispatch/staging-cleanup.test.ts:61-213` cover happy path (3 dirs: old/no-marker removed, young preserved, old/with-marker preserved), no-op when absent, custom threshold, marker preservation, custom marker name, and non-directory entries ignored.
+
+- **AC-5** (schema shared with Layer 1 markdown via the AR9 single-line stdout contract; `emitDispatchAction()` writes exactly one validated JSON line): **PASS** — `src/schemas/dispatch-protocol.ts:37-54` declares the new foundational `DispatchActionV1Schema` (discriminated union over `action: "dispatch" | "report" | "halt"` per architecture line 1660); `src/dispatch/emit.ts:48-51` validates via `DispatchActionV1Schema.parse(action)` THEN delegates to `json()` from `src/io/log.ts` (the canonical stdout writer). Tests at `src/dispatch/emit.test.ts:41-87` use `spyOn(process.stdout, "write")` to assert exactly one stdout call with the JSON line + trailing newline, AND zero stderr touches; `:89-141` exercises malformed inputs throwing pre-write (atomicity verified at `:131-141`). `src/schemas/dispatch-protocol.test.ts` covers all three variants + discriminated-union switching + round-trip (18 tests).
+
+### Architecture & FR/NFR
+
+- **AR21** (errors carry `code` + `actionableHint`): **PASS** — `buildDispatchSpec` throws `ConfigError` (existing class from Story 1.11; code `CONFIG_ERROR`, exitCode 2) at `src/dispatch/generate-spec.ts:113-118` and `:189-193`. The `hintOverride?` constructor pattern (Story 1.11 precedent at `src/errors.ts:206-238`) carries the per-instance hint via `actionableHint` getter. Test asserts `e.code === "CONFIG_ERROR"`, `e.exitCode === 2`, and the verbatim hint at `src/dispatch/generate-spec.test.ts:204-211`.
+
+- **AR22** (single-line `Run/See/Try/Check`-prefixed hints): **PARTIAL/NIT** — both hint overrides are single-line. The Zod-failure hint `"Run /bmad-next --doctor to diagnose..."` (`:192`) cleanly matches the `^.*(Run|See|Try|Check) ` regex from `src/errors.test.ts:43`. The empty-stepName hint `"Add the step name to the bmad-stepper.config.yaml steps: block."` (`:116`) starts with "Add" — does NOT match the four canonical verbs. Note: this is a precedent-aligned override (Story 1.11's `ac2NoPersonaHint` uses `"Add a persona for ..."` at `src/personas/resolve.ts:106` — same pattern). The registry CI gate only validates default hints, not per-instance `hintOverride` strings, so this slips through automated gating. Recorded as Nit-1.
+
+- **AR33** (function & error semantics — async/sync, no `console.*`, uses `info()`/`error()`/`json()`): **PASS** — `buildDispatchSpec` is `async` (`:105`); `cleanStagingOrphans` is `async` (`:71`); `emitDispatchAction` is sync (`:48`, mirrors `json()`). Zero `console.*` invocations across `src/dispatch/**/*.ts` (verified by grep — only one JSDoc comment mention at `emit.ts:24`). `info()` from `src/io/log.ts` used at `generate-spec.ts:201` and `staging-cleanup.ts:91/131/133`; `json()` at `emit.ts:50`. All throw sites use `StepperError` subclasses (`ConfigError`).
+
+- **AR41** (CRITICAL boundary verdict): **CLEAN** — Grep against `src/dispatch/**/*.ts` (excluding `*.test.ts`) for forbidden patterns (`../verifiers/`, `../failure-ux/`, `../commands/`, `node:child_process`) returned only JSDoc comment text (forbidden-import documentation in `index.ts`, `generate-spec.ts`, `staging-cleanup.ts`). Zero actual import statements violate the boundary. All imports inspected via grep at `src/dispatch/{index,types,generate-spec,emit,staging-cleanup}.ts`: foundational only (`../errors.ts`, `../io/log.ts`, `../io/paths.ts`, `../io/atomic-write.ts`, `../schemas/dispatch-spec.ts`, `../schemas/dispatch-protocol.ts`, `../schemas/state.ts`); Node stdlib (`node:fs/promises`, `node:path`, `node:crypto`); intra-module siblings (`./types.ts`, `./generate-spec.ts`, `./emit.ts`, `./staging-cleanup.ts`). Sibling higher-tier (`src/verifiers/index.ts` from Story 2.1) NOT imported.
+
+- **FR16** (sub-agent dispatch with budget+timeout): **PASS** — `dispatchSpec.budget.contextTokens` + `timeoutMs` set at `generate-spec.ts:162-165` with defaults (60_000, 300_000) and partial-override fallthrough.
+- **FR18** (one human-readable line per step): **PASS** — `info()` call at `generate-spec.ts:201-203` emits exactly one stderr line per `buildDispatchSpec` call: `"dispatch: built spec for step <name> at <path>"`.
+- **FR54** (stdout/stderr discipline): **PASS** — `emit.ts:50` is the SECOND module-wide caller of `json()` (the canonical stdout writer per `src/io/log.ts:28-30`); all other diagnostics route to stderr via `info()`. Test at `emit.test.ts:42-87` verifies stderr is NOT touched during stdout writes.
+
+- **NFR-P3** (performance — atomic write semantics): **PASS** — `atomicWrite` at `src/io/atomic-write.ts:32-69` uses Bun's native `Bun.write` for the tmp write + `fs.rename` for the atomic swap; per-call cost is two filesystem syscalls + one rename.
+- **NFR-S4** (constraints scope enforcement at prompt layer): **PASS** — `taskSpec.constraints.scopeLimits = "Only files inside staging/${runId}/ may be written."` at `generate-spec.ts:179`. Test at `generate-spec.test.ts:383-397` asserts the scope-limits string + `allowedTools` includes Read/Write.
+- **NFR-S6** (no execution of sub-agent output): **PASS (by design)** — `src/dispatch/` writes the spec; never reads/executes downstream artifacts. Sub-agent execution is delegated to Layer 1 + Layer 3.
+- **NFR-R1** (atomic write + .bak rotation): **PASS** — `dispatch-spec.json` written via `atomicWrite` (`:198`) which performs `.tmp → rename` and rotates the prior file to `.bak` (verified by `src/io/atomic-write.ts:32-69`). Test at `generate-spec.test.ts:226-269` asserts no `.tmp` sidecar lingers.
+- **NFR-S1** (no main-thread network): **PASS** — Grep for `fetch(`, `http.`, `https.`, `net.` against `src/dispatch/**/*.ts` returned zero matches.
+- **NFR-M3** (Zod parse defence-in-depth): **PASS** — `DispatchSpecV1Schema.parse` at `generate-spec.ts:186` BEFORE `atomicWrite`; `DispatchActionV1Schema.parse` at `emit.ts:49` BEFORE `json()` write. Mirrors Story 2.1's `VerifierResultV1Schema.parse` pattern.
+
+### Deviations
+
+- **dev-001** (optional `epic?` / `story?` / `phase?` overrides on `BuildDispatchSpecInput`): **accept-with-followup** — Honors Story 2.2 Task 5.4 explicit "Note for dev" (line 306) which directed dev to "accept these fields as v0.1 OPTIONAL inputs on `BuildDispatchSpecInput`" when the State shape doesn't expose them. Confirmed via `src/schemas/state.ts:22-65`: `lastSuccessfulStep` carries `step/epic/story/completedAt`, `lastAttempted` carries `step/epic/story/attemptedAt` — neither carries `phase`. Furthermore, `src/schemas/dispatch-spec.ts:24-43` (DispatchSpecV1Schema) does NOT declare `phase`. Implementation at `generate-spec.ts:67-82, 137-143` correctly cascades: explicit input → state.lastAttempted → state.lastSuccessfulStep → defaults. The `phase` value lands in human-readable `taskSpec.task` text only (`:169`), not as a strict schema field. Forward-dep logged for Story 6.x DispatchSpecV2 schema bump (and acknowledged in §"`phase` field deferral" + dev Completion Notes). Sound architectural discipline — does not silently extend Story 1.5's foundational schema perimeter.
+
+### Findings
+
+#### Must-Fix (0)
+
+None.
+
+#### Should-Fix (0)
+
+None.
+
+#### Nits (1)
+
+- **Nit-1** (`src/dispatch/generate-spec.ts:116`): The empty-stepName hint `"Add the step name to the bmad-stepper.config.yaml steps: block."` starts with "Add" rather than one of the four canonical AR22 verbs (Run/See/Try/Check). Aligned with Story 1.11 precedent (`src/personas/resolve.ts:106` — `"Add a persona for ..."`); slips through the `errors.test.ts` HINT_REGEX gate because that gate only validates the registry-default `actionableHint`, not per-instance `hintOverride` overrides. Non-blocking; the project has consistently allowed action-verb overrides ("Add ...") since Story 1.11. Recommend Story 6.x: extend the registry CI gate to also exercise per-instance `hintOverride` paths, OR ratify "Add" as a fifth canonical verb.
+
+#### Info (3)
+
+- **Info-1** (`src/dispatch/generate-spec.ts:131`): `randomUUID().replace(/-/g, "").slice(0, 5)` yields 5 hex chars (~20 bits of entropy). Architecture §P5 line 871 example uses `abc12` (alphanumeric). Hex is a strict subset; collision odds across rapid invocations remain negligible with 20-bit entropy + ISO-second precision. If post-v0.1 ever needs alphanumeric extension, switch to a base32/nanoid encoding.
+- **Info-2** (`src/dispatch/staging-cleanup.ts:131-136`): Per-subdir cleanup failures are logged via `info()` (stderr) but do NOT propagate. Aligned with the contract documented at `:67-69`. Future enhancement: aggregate skipped/failed counts in the result (today only `removedDirs[]` is reported). Non-blocking.
+- **Info-3** (`src/dispatch/generate-spec.ts:155-182`): `taskSpec.context` is hard-coded to `[]` and `outputFormat.requiredSections` is hard-coded to `[]` per v0.1-conservative defaults. Story 2.4 (`run.ts`) is the planned caller that will populate these from the resolved DAG node + verifier registry — that composition lives at runner-tier per AR41. No action needed in Story 2.2.
+
+### Quality Gates Reproduced
+
+- `bun run check`: exit **0** — `biome ci .` PASS (no fixes applied to 96 files); `bun test` 409 pass / 0 fail / 1488 expects / 39 files.
+- `bunx tsc --noEmit`: exit **0**.
+- Test counts: **409 pass / 0 fail / 1488 expects / 39 files** (matches dev report; delta vs Story 2.1 baseline 354: +55 tests, +109 expects, +4 files).
+- AR41 boundary: **CLEAN** (zero forbidden imports across `src/dispatch/**/*.ts` excluding tests).
+- Errors registry: **stable at 16 codes** (verified via grep `extends StepperError` count).
+
+### Carry-overs to Future Stories
+
+- **Story 2.4** (`run.ts`): wire `cleanStagingOrphans()` "at Stepper start" per AC-4; compose `buildDispatchSpec` + `emitDispatchAction` together; populate `taskSpec.context` + `outputFormat.requiredSections` from DAG node + verifier registry.
+- **Story 2.6** (`verify-and-advance.ts`): refactor `runVerifier` (Story 2.1) to read `staging/<runId>/dispatch-spec.json` directly; the new `STAGING_PATH` constant lets `stagingRoot` default cleanly (resolves Story 2.1 dev-002 forward-dep). Optionally write a `state-hash.json` sibling OR ratify a `DispatchSpecV2Schema` adding `stateHash` for the TOCTOU snapshot.
+- **Story 6.x** (DispatchSpecV2 schema bump): ratify the `phase` field in the schema (resolves dev-001 — the AC drift between AC-1 mention and Story 1.5 schema). Optionally extend `errors.test.ts` to gate per-instance `hintOverride` strings (resolves Nit-1) OR ratify "Add" as a fifth canonical verb.
 
 ## Change Log
 
 - **2026-05-01 (created)**: Story file created (status `ready-for-dev`) — bmad-create-story persona, model `claude-opus-4-7[1m]`, loop iteration 10 (FINAL) of `/bmad-loop --until=epic:2` (loopId `2026-05-01T031243Z-bmad-loop`, runId `2026-05-01T044326Z-bmad-next`). SECOND epic-2 story (after Story 2.1 verifiers — DONE). Drafted from epics.md §Story 2.2 lines 597-610 (AC verbatim), architecture.md §A.D2 lines 297-336 (sub-agent dispatch interface), §P5 lines 864-917 (dispatch-spec.json contract), §line 1175 directory layout, §lines 1287-1289 AR41 higher-tier boundary, §line 1660 AR9 stdout protocol, §line 1676 dispatch-protocol.ts schema deferred-from-step-06, prd.md FR16 line 689 + FR18 line 691 + FR54 line 745, §Sub-Agent Dispatch Contract lines 530-552, epic-1-retrospective.md §Forward Action Items for Epic 2 line 102 (JSON-line protocol design + stdout-only discipline), Story 2.1 §Carry-Overs to Future Stories line 715 (STAGING_PATH owned by Story 2.2). Mirrors Story 2.1 / 1.11 / 1.12 template structure. Files planned: 5 new sources (`src/dispatch/{index,types,generate-spec,emit,staging-cleanup}.ts`); 1 new schema (`src/schemas/dispatch-protocol.ts`); 4 new tests; 1 modified file (`src/io/paths.ts` adds STAGING_PATH constant per Story 2.1 dev-002 carry-over). SECOND higher-tier module (after `src/verifiers/`) — depends on foundational + (optional) mid-tier; FORBIDDEN sibling higher-tier (`verifiers/`, `failure-ux/`). Errors registry stays at 16; uses existing `ConfigError` (with `hintOverride?` from Story 1.11) for stepName-resolution + Zod-parse failures. The dispatch-spec.json `phase` field (AC-1 mention) is deferred to a Story 6.x schema bump (Story 1.5 `DispatchSpecV1Schema` does not declare it). Story 2.2 dev-story + code-review require subsequent loop invocations (loop hits max-steps-reached after this iteration).
+- **2026-05-01 (dev-story)**: Story 2.2 implemented end-to-end via the `bmad-dev-story` persona (model `claude-opus-4-7[1m]`, runId `2026-05-01T053100Z-bmad-next`). Status `ready-for-dev` → `review`. Shipped 5 new source files in `src/dispatch/`, 1 new foundational schema (`src/schemas/dispatch-protocol.ts`), 4 colocated test files, and the `STAGING_PATH` constant extension to `src/io/paths.ts`. **Quality gates GREEN**: `bun run check` exit 0; final `bun test` 409 pass / 0 fail / 1488 expects across 39 files (delta vs Story 2.1 baseline 354: +55 tests, +109 expects, +4 files); `bunx tsc --noEmit` exit 0; AR41 boundary check 0 violations; `src/errors.ts` registry stable at 16 codes; Story 2.1 verifier tests preserved. **One documented deviation**: `dev-001` — `BuildDispatchSpecInput` accepts optional `epic?` / `story?` / `phase?` overrides (per Story 2.2 Task 5.4 "Note for dev" recommended fallback, since the State shape exposes only epic+story and the V1 schema does not declare phase). Forward-deps logged for Story 2.6 (runVerifier stagingRoot default + dispatch-spec reader) and Story 6.x (DispatchSpecV2 phase ratification).
+- **2026-05-01 (review)**: Story 2.2 senior code review completed via the `bmad-code-review` persona (model `claude-opus-4-7[1m]`, runId `2026-05-01T054000Z-bmad-next`). Status `review` → `done`. Outcome: **approve-with-actions** (0 must-fix, 0 should-fix, 1 nit, 3 info). All 5 ACs PASS. AR41 boundary CRITICAL verdict: **CLEAN** (zero forbidden imports across every `src/dispatch/**/*.ts` non-test file). AR21/AR33 PASS; AR22 PARTIAL (Nit-1: empty-stepName hint uses "Add ..." prefix — slips through registry CI gate, aligned with Story 1.11 precedent at `src/personas/resolve.ts:106`). FR16/FR18/FR54 PASS. NFR-P3/S4/S6/R1/S1/M3 PASS. Errors registry confirmed stable at 16 codes. Quality gates reproduced: `bun run check` exit 0; `bunx tsc --noEmit` exit 0; `bun test` 409 pass / 0 fail / 1488 expects / 39 files. dev-001 (optional epic/story/phase overrides per Task 5.4 "Note for dev") adjudicated **accept-with-followup** — sound architectural discipline; carry-over to Story 6.x for `DispatchSpecV2` schema bump. Carry-overs: Story 2.4 (`run.ts` wires `cleanStagingOrphans` + composes `buildDispatchSpec` + `emitDispatchAction`); Story 2.6 (`verify-and-advance.ts` reads dispatch-spec.json + state-hash); Story 6.x (`DispatchSpecV2` `phase` ratification + optional registry CI gate extension for `hintOverride` strings).

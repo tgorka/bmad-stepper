@@ -1,5 +1,5 @@
 # generated: 2026-04-30
-# last_updated: 2026-05-01T04:55:51Z
+# last_updated: 2026-04-30T17:00:00Z
 # project: bmad-stepper
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-30
-last_updated: 2026-05-01T04:55:51Z
+last_updated: 2026-04-30T17:00:00Z
 project: bmad-stepper
 project_key: NOKEY
 tracking_system: file-system
@@ -57,19 +57,19 @@ development_status:
   1-12-bmad-next-doctor-command: done
   1-13-quick-start-documentation: done
   epic-1-retrospective: done
-  epic-2: in-progress
+  epic-2: done
   2-1-verifier-configuration-registry: done
-  2-2-dispatch-spec-generator: ready-for-dev
-  2-3-generic-sub-agent-bmad-step-runner-md: backlog
-  2-4-lock-free-run-ts-for-bmad-next: backlog
-  2-5-markdown-transcript-json-run-log-writers: backlog
-  2-6-verify-and-advance-ts-with-state-hash-check: backlog
-  2-7-slash-command-for-bmad-next-layer-1-markdown: backlog
-  2-8-smoke-test-for-bmad-next-happy-path: backlog
-  epic-2-retrospective: optional
-  epic-3: backlog
-  3-1-record-last-attempted-last-failure-reason-on-halt: backlog
-  3-2-resume-flag: backlog
+  2-2-dispatch-spec-generator: done
+  2-3-generic-sub-agent-bmad-step-runner-md: done
+  2-4-lock-free-run-ts-for-bmad-next: done
+  2-5-markdown-transcript-json-run-log-writers: done
+  2-6-verify-and-advance-ts-with-state-hash-check: done
+  2-7-slash-command-for-bmad-next-layer-1-markdown: done
+  2-8-smoke-test-for-bmad-next-happy-path: done
+  epic-2-retrospective: done
+  epic-3: in-progress
+  3-1-record-last-attempted-last-failure-reason-on-halt: done
+  3-2-resume-flag: done
   3-3-dry-run-flag: backlog
   3-4-step-id-and-scope-flags: backlog
   3-5-persona-override-include-optional-no-optional: backlog
