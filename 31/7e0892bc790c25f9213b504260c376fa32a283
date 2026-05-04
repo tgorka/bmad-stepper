@@ -1,0 +1,37 @@
+src/state/recompute.ts
+  1d4e065f7719b064 222-261
+src/schemas/state-export.ts
+  1d4e065f7719b064 1-59
+src/state/diff.test.ts
+  1d4e065f7719b064 1-312
+src/state/export.test.ts
+  1d4e065f7719b064 1-225
+src/state/diff.ts
+  1d4e065f7719b064 1-182
+src/version.ts
+  1d4e065f7719b064 1-14
+src/schemas/state-export.test.ts
+  1d4e065f7719b064 1-122
+src/state/export.ts
+  1d4e065f7719b064 1-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "317e0892bc790c25f9213b504260c376fa32a283",
+  "prompts": {
+    "1d4e065f7719b064": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8f5f4be1-15b5-4dd7-b3df-21f915f3eb5f",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1068,
+      "overriden_lines": 0
+    }
+  }
+}
