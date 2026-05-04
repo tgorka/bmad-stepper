@@ -1,0 +1,58 @@
+# BMAD Project Configuration (shared)
+# Source: bmad@bmad-method plugin v6.5.0.1 (Claude Code)
+#
+# This file is COMMITTED to the repository — it captures project-wide BMAD
+# settings (paths, frameworks, output locations) that every contributor shares.
+#
+# User-specific settings (user_name, communication_language) live in
+# `config.user.yaml`, which is gitignored. Copy `config.user.yaml.example` to
+# `config.user.yaml` and personalize it after cloning the repo.
+
+# ─── Core (shared across all modules) ───────────────────────────────────────
+output_folder: "{project-root}/_bmad-output"
+document_output_language: English
+
+# ─── Module: core ───────────────────────────────────────────────────────────
+core:
+  name: BMAD Core
+  description: Foundational BMAD primitives shared by all modules.
+
+# ─── Module: bmm (BMAD Method — planning, PRD, architecture, dev) ───────────
+bmm:
+  name: BMAD Method
+  description: Planning, PRD, architecture, story creation, dev, retrospective.
+  project_name: bmad-stepper-cc
+  user_skill_level: intermediate
+  planning_artifacts: "{project-root}/_bmad-output/planning-artifacts"
+  implementation_artifacts: "{project-root}/_bmad-output/implementation-artifacts"
+  project_knowledge: "{project-root}/docs"
+
+# ─── Module: tea (Test Architecture Enterprise) ─────────────────────────────
+tea:
+  name: Test Architecture Enterprise
+  description: Test design, NFR assessment, traceability, automation.
+  test_artifacts: "{project-root}/_bmad-output/test-artifacts"
+  test_framework: bun-test
+  tea_use_playwright_utils: false
+  tea_use_mcp_enhancements: true
+  risk_threshold: p1
+  test_design_output: _bmad-output/test-artifacts/test-design
+  test_review_output: _bmad-output/test-artifacts/test-reviews
+  trace_output: _bmad-output/test-artifacts/traceability
+
+# ─── Module: bmb (BMad Builder — meta-tooling for skills/agents/modules) ────
+bmb:
+  name: BMad Builder
+  description: Build skills, agents, and modules. Relevant for this project as we are building a Claude Code plugin.
+  bmb_creations_output_folder: "{project-root}/_bmad-output/bmb-creations"
+
+# ─── Module: cis (Creative Intelligence Suite) ──────────────────────────────
+cis:
+  name: Creative Intelligence Suite
+  description: Brainstorming, design thinking, storytelling, innovation strategy.
+  visual_tools: intermediate
+
+# ─── Module: _memory (cross-skill persistent memory) ────────────────────────
+_memory:
+  name: BMAD Memory
+  description: Persistent memory shared across skills (sidecars, preferences).

@@ -1,0 +1,14 @@
+# BMAD Personal Configuration (template — copy to config.user.yaml)
+# Source: bmad@bmad-method plugin v6.5.0.1 (Claude Code)
+#
+# Each contributor maintains their own `config.user.yaml`. Steps to set up:
+#   1. cp _bmad/config.user.yaml.example _bmad/config.user.yaml
+#   2. Edit values below to match your preferences
+#   3. config.user.yaml is gitignored, so personal changes stay local
+#
+# Project-wide BMAD settings (paths, frameworks) live in `config.yaml`, which
+# is committed. User-only keys (`user_name`, `communication_language`) and
+# any module variable marked `user_setting: true` belong here.
+
+user_name: YourName
+communication_language: English
