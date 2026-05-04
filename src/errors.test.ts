@@ -7,7 +7,8 @@
  *   (b) every hint matches /^.*(Run|See|Try|Check) /
  *   (c) every code is unique
  *   (d) every exitCode ∈ {0,1,2,3,4,5}
- * plus the AC-2 fixed-list assertion (15 specific codes registered).
+ * plus the AC-2 fixed-list assertion (16 codes registered — the AC-2
+ * baseline of 15 plus `SCOPE_VIOLATION` added in Story 1.5).
  *
  * This test is the FIRST source-code test of the project and the FIRST
  * release-blocker gate enforced by `bun run check` (AR36).
@@ -32,6 +33,7 @@ const REQUIRED_CODES: ReadonlyArray<StepperErrorCode> = [
   "STATE_CHANGED_DURING_DISPATCH",
   "VERIFIER_FAILURE",
   "PATHOLOGICAL_INPUT",
+  "SCOPE_VIOLATION",
   "BUDGET_EXCEEDED",
   "TIMEOUT",
   "CONFIG_ERROR",
@@ -45,8 +47,8 @@ describe("errorRegistry", () => {
   const constructors = Object.values(errorRegistry);
   const instances = constructors.map((Ctor) => new Ctor("test message"));
 
-  it("contains exactly 15 entries", () => {
-    expect(constructors).toHaveLength(15);
+  it("contains exactly 16 entries", () => {
+    expect(constructors).toHaveLength(16);
   });
 
   it("registers all required codes (AC-2 fixed list)", () => {

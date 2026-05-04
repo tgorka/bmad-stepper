@@ -30,6 +30,7 @@ export type StepperErrorCode =
   | "STATE_CHANGED_DURING_DISPATCH"
   | "VERIFIER_FAILURE"
   | "PATHOLOGICAL_INPUT"
+  | "SCOPE_VIOLATION"
   | "BUDGET_EXCEEDED"
   | "TIMEOUT"
   | "CONFIG_ERROR"
@@ -72,7 +73,7 @@ export abstract class StepperError extends Error {
   }
 }
 
-// ─── Concrete subclasses (15 codes from AC-2) ───────────────────────────────
+// ─── Concrete subclasses (16 codes — AC-2 fixed list + Story 1.5 ScopeViolationError) ───────
 
 export class LockContentionError extends StepperError {
   override readonly code = "LOCK_CONTENTION" as const;
@@ -120,7 +121,7 @@ export class CorruptStateError extends StepperError {
   override readonly code = "CORRUPT_STATE" as const;
   override readonly exitCode = 1 as const;
   override readonly actionableHint =
-    "Run /bmad-next --doctor to inspect _bmad-output/.stepper/state.yaml; restore from .bak if needed.";
+    "Run /bmad-next --recompute-state to rebuild the cache from project files.";
 }
 
 export class StateTooNewError extends StepperError {
@@ -149,6 +150,13 @@ export class PathologicalInputError extends StepperError {
   override readonly exitCode = 5 as const;
   override readonly actionableHint =
     "Check the input shape against the schema in _bmad-output/.stepper/runs/<latest>/log.md.";
+}
+
+export class ScopeViolationError extends StepperError {
+  override readonly code = "SCOPE_VIOLATION" as const;
+  override readonly exitCode = 5 as const;
+  override readonly actionableHint =
+    "Check that the target path is inside _bmad-output/, _bmad-output/.stepper/, or the test tmpdir; see src/io/paths.ts assertWithinScope() for the allowed roots.";
 }
 
 export class BudgetExceededError extends StepperError {
@@ -203,6 +211,7 @@ export const errorRegistry = {
   StateChangedDuringDispatchError,
   VerifierFailureError,
   PathologicalInputError,
+  ScopeViolationError,
   BudgetExceededError,
   TimeoutError,
   ConfigError,
