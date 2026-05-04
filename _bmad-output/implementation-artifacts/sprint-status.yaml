@@ -1,5 +1,5 @@
 # generated: 2026-04-30
-# last_updated: 2026-05-01T02:12:37Z
+# last_updated: 2026-05-01T03:40:33Z
 # project: bmad-stepper
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-30
-last_updated: 2026-05-01T02:12:37Z
+last_updated: 2026-05-01T03:40:33Z
 project: bmad-stepper
 project_key: NOKEY
 tracking_system: file-system
@@ -54,7 +54,7 @@ development_status:
   1-9-bmad-detection: done
   1-10-dag-seed-three-tier-registry: done
   1-11-persona-resolution: done
-  1-12-bmad-next-doctor-command: backlog
+  1-12-bmad-next-doctor-command: done
   1-13-quick-start-documentation: backlog
   epic-1-retrospective: optional
   epic-2: backlog

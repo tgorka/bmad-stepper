@@ -21,4 +21,5 @@
  * - architecture.md "Complete Project Directory Structure" (lines 1102–1123).
  */
 
+export * as doctor from "./doctor/index.ts";
 export * as next from "./next/index.ts";
