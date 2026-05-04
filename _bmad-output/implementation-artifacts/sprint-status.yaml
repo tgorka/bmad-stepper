@@ -1,5 +1,5 @@
 # generated: 2026-04-30
-# last_updated: 2026-04-30T17:00:00Z
+# last_updated: 2026-05-01T23:55:00Z
 # project: bmad-stepper
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-30
-last_updated: 2026-04-30T17:00:00Z
+last_updated: 2026-05-01T23:55:00Z
 project: bmad-stepper
 project_key: NOKEY
 tracking_system: file-system
@@ -67,18 +67,18 @@ development_status:
   2-7-slash-command-for-bmad-next-layer-1-markdown: done
   2-8-smoke-test-for-bmad-next-happy-path: done
   epic-2-retrospective: done
-  epic-3: in-progress
+  epic-3: done
   3-1-record-last-attempted-last-failure-reason-on-halt: done
   3-2-resume-flag: done
-  3-3-dry-run-flag: backlog
-  3-4-step-id-and-scope-flags: backlog
-  3-5-persona-override-include-optional-no-optional: backlog
-  3-6-explain-reasoning-trace: backlog
-  3-7-list-candidate-next-steps: backlog
-  3-8-diff-state-and-export-state: backlog
-  3-9-watch-live-transcript-tail: backlog
-  3-10-non-locking-read-flags: backlog
-  epic-3-retrospective: optional
+  3-3-dry-run-flag: done
+  3-4-step-id-and-scope-flags: done
+  3-5-persona-override-include-optional-no-optional: done
+  3-6-explain-reasoning-trace: done
+  3-7-list-candidate-next-steps: done
+  3-8-diff-state-and-export-state: done
+  3-9-watch-live-transcript-tail: done
+  3-10-non-locking-read-flags: done
+  epic-3-retrospective: done
   epic-4: backlog
   4-1-bmad-loop-command-skeleton: backlog
   4-2-stop-condition-epic-end-and-story-x-y: backlog
