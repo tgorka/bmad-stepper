@@ -1,0 +1,103 @@
+# BMAD Stepper
+
+BMAD Stepper is a Claude Code plugin that runs the [BMAD method](https://github.com/bmad-code-org/BMAD-METHOD) one verifiable step at a time. It is **zero-config** — `/bmad-next` works out of the box on any BMAD project — keeps **atomic state on disk** at `_bmad-output/.stepper/`, and emits **human-readable transcripts** so every advance is auditable. Built on top of BMAD-Method (`bmad@bmad-method`).
+
+## Quick Start
+
+> Target: from a clean machine to a green `/bmad-next --doctor` in under 10 minutes (NFR-M4).
+
+1. **Install Bun ≥ 1.3.** Stepper runs on Bun.
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   # or:  brew install oven-sh/bun/bun
+   bun --version   # expect: 1.3.x or newer
+   ```
+
+2. **Install BMAD.**
+   ```bash
+   npx bmad-method install --tools claude-code
+   ```
+   This lands the plugin under `~/.claude/plugins/cache/bmad-method/bmad/<version>/` (cache layout) or `~/.claude/plugins/bmad-method-<version>/` (spec layout). Both layouts are detected automatically.
+
+3. **Add the Stepper plugin.**
+   ```text
+   /plugin marketplace add Tgorka/bmad-stepper
+   ```
+   The marketplace manifest at `.claude-plugin/plugin.json` declares the `/bmad-next` and `/bmad-doctor` slash commands.
+
+4. **Run the diagnostic.**
+   ```text
+   /bmad-next --doctor
+   ```
+   The thin alias `/bmad-doctor` invokes the same runner.
+
+5. **Read the expected output.** A healthy install emits these five lines on **stderr** (placeholders shown; the runner substitutes concrete values):
+   ```text
+   BMAD detected: v<version> (compatible)
+   Project: <name>
+   State file: not present (fresh project)
+   Step registry: built from <N> BMAD skills + <M> project overrides; DAG validated; no cycles
+   Suggestion: run /bmad-next to start the analysis phase.
+   ```
+
+6. **Verify the exit code.** `/bmad-next --doctor` exits `0` on success, `1` on corrupt state, `3` on missing or incompatible BMAD. See [`docs/exit-codes.md`](docs/exit-codes.md) for the full FR53 catalog.
+
+7. **(Optional) Initialize a fresh project.** Either `npx bmad-method init` or just `cd` into an empty directory. The `_bmad-output/.stepper/` directory tree is created on the first `/bmad-next` invocation; doctor itself never writes to disk.
+
+8. **Time check.** If you reached step 7 in under 10 minutes, your install is healthy and the **NFR-M4** dogfood walkthrough is satisfied. The timed reference fixture lives at [`tests/fixtures/quick-start-walkthrough.md`](tests/fixtures/quick-start-walkthrough.md).
+
+### State location convention
+
+After your first `/bmad-next`, Stepper persists state under `_bmad-output/.stepper/`:
+
+- `state.yaml` — canonical project state (atomic write + `.bak` rotation).
+- `state.yaml.bak` — last-good rollback.
+- `runs/<ts>-<step>.log` and `runs/<ts>-<step>.json` — per-step transcripts (human + machine readable).
+- `staging/<run-id>/` — ephemeral sub-agent dispatch workspace; cleaned up after promote.
+- `.lock/` — mkdir-based file lock (read-only flags including `--doctor` are lock-free).
+
+Deeper exposition lives in [`docs/getting-started.md`](docs/getting-started.md) §State location.
+
+## What you get
+
+- `/bmad-next` zero-config single-step advance — see `docs/examples/single-step.md` (ships in Epic 6 Story 6.10).
+- `/bmad-loop` bounded loop with eight stop conditions — see `docs/examples/overnight-loop.md` (Epic 6 Story 6.10).
+- `/bmad-next --resume` after halt — see `docs/examples/halt-recovery.md` (Epic 6 Story 6.10).
+- `--auto-fix` route-to-fixer recovery — see `docs/examples/skip-on-failure.md` (Epic 6 Story 6.10).
+- `/bmad-next --doctor` first-run diagnostic — see `docs/examples/doctor-diagnostic.md` (Epic 6 Story 6.10).
+- `--export-state` for CI integration — see `docs/examples/state-export-ci.md` (Epic 6 Story 6.10).
+- `/bmad-next --resume` cold-start return — see `docs/examples/cold-start-return.md` (Epic 6 Story 6.10).
+
+The seven worked example bodies ship with the v0.1.0 marketplace release; this README links forward to their final paths.
+
+## Uninstall preserves your data
+
+Removing the Stepper plugin **never touches your project state**. `/plugin marketplace remove bmad-stepper` only deletes the plugin directory at `.claude/plugins/bmad-stepper/`. Your `_bmad-output/.stepper/state.yaml`, `_bmad-output/.stepper/state.yaml.bak`, `_bmad-output/.stepper/runs/*.log`, `_bmad-output/.stepper/runs/*.json`, and `staging/<run-id>/` directories are untouched. You can reinstall Stepper later and resume exactly where you left off (FR49).
+
+To wipe project state explicitly, run:
+
+```bash
+rm -rf _bmad-output/.stepper/
+```
+
+To re-create from scratch after a wipe, just run `/bmad-next` again — the state file is recomputable from disk per NFR-R3 (the `recompute.ts` subsystem reads your project files and rebuilds the cache).
+
+## Documentation map
+
+| Document | Purpose |
+|----------|---------|
+| [`docs/getting-started.md`](docs/getting-started.md) | Deeper onboarding — prerequisites, commands surface, state location, troubleshooting top-5 |
+| [`docs/exit-codes.md`](docs/exit-codes.md) | Exit codes 0–5 with verbatim remediation hints (FR53) |
+| `docs/configuration.md` | `bmad-stepper.config.yaml` schema reference (Epic 6 Story 6.1 — placeholder) |
+| `docs/bmad-compatibility.md` | Per-Stepper-release BMAD compat history (Epic 6 Story 6.10 — placeholder) |
+| `docs/architecture.md` | Mirror of the planning architecture (Epic 6 Story 6.10 — placeholder) |
+| `docs/examples/` | Seven worked examples (Epic 6 Story 6.10 — placeholder) |
+
+## Repo links
+
+- `CHANGELOG.md` — release history (ships with Epic 6 Story 6.10 — placeholder).
+- `CONTRIBUTING.md` — contribution guide (Epic 6 Story 6.10 — placeholder).
+- `LICENSE` — MIT (Epic 6 Story 6.10 — placeholder).
+- `SECURITY.md` — security policy (Epic 6 Story 6.10 — placeholder).
+- Issues: <https://github.com/Tgorka/bmad-stepper/issues> (live once v0.1.0 ships).
+- Discussions: <https://github.com/Tgorka/bmad-stepper/discussions> (live once v0.1.0 ships).
