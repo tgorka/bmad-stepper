@@ -19,24 +19,6 @@ _bmad-output/planning-artifacts/implementation-readiness-report-2026-04-30.md
       "total_deletions": 0,
       "accepted_lines": 468,
       "overriden_lines": 0
-    },
-    "90f48674fa47e4dc": {
-      "agent_id": {
-        "tool": "claude",
-        "id": "cf69ef7f-53d1-4fcd-a3e9-4fc9754565ed",
-        "model": "claude-opus-4-7"
-      },
-      "human_author": "tomasz-gorka-endeavor",
-      "messages": [],
-      "total_additions": 0,
-      "total_deletions": 0,
-      "accepted_lines": 184,
-      "overriden_lines": 0
-    }
-  },
-  "humans": {
-    "h_1af3134dd66d0f": {
-      "author": "tomasz-gorka-endeavor"
     }
   }
 }

@@ -1,22 +1,23 @@
 .changeset/README.md
   4f74eec1333ea527 1-8
-.github/workflows/ci.yml
-  4f74eec1333ea527 1-28
-bunfig.toml
-  4f74eec1333ea527 1-4
-.claude-plugin/plugin.json
-  4f74eec1333ea527 1-19
-tsconfig.json
-  4f74eec1333ea527 1-19
-.changeset/config.json
-  4f74eec1333ea527 1-11
 commands/bmad-next.md
   4f74eec1333ea527 1-10
+.claude-plugin/plugin.json
+  4f74eec1333ea527 1-19
+biome.json
+  4f74eec1333ea527 1-28
+.changeset/config.json
+  4f74eec1333ea527 1-11
 package.json
   4f74eec1333ea527 1-22
+bunfig.toml
+  4f74eec1333ea527 1-4
+tsconfig.json
+  4f74eec1333ea527 1-19
 _bmad-output/implementation-artifacts/sprint-status.yaml
+  90f48674fa47e4dc 1-44,48-113
   4f74eec1333ea527 45-46
-biome.json
+.github/workflows/ci.yml
   4f74eec1333ea527 1-28
 _bmad-output/implementation-artifacts/1-1-initialize-repository-scaffold.md
   4f74eec1333ea527 1-622
@@ -36,7 +37,7 @@ _bmad-output/implementation-artifacts/1-1-initialize-repository-scaffold.md
       "messages": [],
       "total_additions": 3251,
       "total_deletions": 2,
-      "accepted_lines": 3251,
+      "accepted_lines": 773,
       "overriden_lines": 0
     }
   }
