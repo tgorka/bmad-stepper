@@ -1,0 +1,106 @@
+src/dispatch/promote.test.ts
+  e2616fc1fca66600 1-367
+src/commands/next/run.test.ts
+  e2616fc1fca66600 1-1224
+src/runs/build-run-log.ts
+  e2616fc1fca66600 1-57
+src/commands/next/args.ts
+  e2616fc1fca66600 95-98,320-603
+src/runs/render-markdown.test.ts
+  e2616fc1fca66600 1-222
+commands/bmad-next.md
+  e2616fc1fca66600 2,7,9-291
+src/dispatch/promote.ts
+  e2616fc1fca66600 1-275
+src/runs/types.ts
+  e2616fc1fca66600 1-114
+src/runs/write-step.test.ts
+  e2616fc1fca66600 1-390
+src/schemas/dispatch-protocol.ts
+  e2616fc1fca66600 1-74
+src/dispatch/types.ts
+  e2616fc1fca66600 1-60
+tests/fixtures/bmad-step-runner/README.md
+  e2616fc1fca66600 1-80
+tests/fixtures/bmad-step-runner/dispatch-spec.json
+  e2616fc1fca66600 1-38
+src/commands/next/index.ts
+  e2616fc1fca66600 4,11-17,23,26-29,39,41-42,44-53
+src/smoke/next.test.ts
+  e2616fc1fca66600 1-376
+src/schemas/state.ts
+  e2616fc1fca66600 7-14,19-37,41,46-91,107-108
+src/runs/render-markdown.ts
+  e2616fc1fca66600 1-127
+src/dispatch/staging-cleanup.test.ts
+  e2616fc1fca66600 1-258
+src/dispatch/generate-spec.test.ts
+  e2616fc1fca66600 1-479
+src/runs/build-run-log.test.ts
+  e2616fc1fca66600 1-169
+src/dispatch/emit.ts
+  e2616fc1fca66600 1-51
+src/commands/next/run.ts
+  e2616fc1fca66600 1-1075
+tests/fixtures/minimal-bmad-project/README.md
+  e2616fc1fca66600 1-34
+tests/fixtures/minimal-bmad-project/_bmad/config.yaml
+  e2616fc1fca66600 1-2
+src/dispatch/emit.test.ts
+  e2616fc1fca66600 1-141
+src/commands/next/verify-and-advance.ts
+  e2616fc1fca66600 1-864
+src/commands/next/args.test.ts
+  e2616fc1fca66600 25-30,336-622
+agents/bmad-step-runner.md
+  e2616fc1fca66600 1-173
+src/dispatch/generate-spec.ts
+  e2616fc1fca66600 1-245
+src/runs/index.ts
+  e2616fc1fca66600 1-23
+tests/fixtures/bmad-step-runner/inputs/topic.md
+  e2616fc1fca66600 1
+src/dispatch/staging-cleanup.ts
+  e2616fc1fca66600 1-140
+src/integration/halt-records-state.test.ts
+  e2616fc1fca66600 1-436
+src/io/paths.ts
+  e2616fc1fca66600 29-42
+src/schemas/dispatch-protocol.test.ts
+  e2616fc1fca66600 1-275
+src/integration/no-write-outside-scope.test.ts
+  e2616fc1fca66600 1-252
+src/runs/write-step.ts
+  e2616fc1fca66600 1-150
+src/commands/next/verify-and-advance.test.ts
+  e2616fc1fca66600 1-1502
+src/schemas/state.test.ts
+  e2616fc1fca66600 17-22,103-179
+src/dispatch/index.ts
+  e2616fc1fca66600 1-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "574b86c4fbe422b471a992e2f4d8682f748a2275",
+  "prompts": {
+    "e2616fc1fca66600": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b0b6f29-abd1-4f83-bd23-89b9efd33539",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 10790,
+      "total_deletions": 33,
+      "accepted_lines": 10790,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
