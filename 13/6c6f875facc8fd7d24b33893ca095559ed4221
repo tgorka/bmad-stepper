@@ -1,0 +1,12 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "136c6f875facc8fd7d24b33893ca095559ed4221",
+  "prompts": {},
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
