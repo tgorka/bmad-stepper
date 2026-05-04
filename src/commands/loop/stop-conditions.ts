@@ -86,6 +86,34 @@ export interface LoopContext {
   readonly startPhase: Phase | null;
 }
 
+/**
+ * Loop-level runtime metrics captured by `runLoop` for the budget
+ * predicates (Story 4.5). The `runLoop` initialises this struct at
+ * loop entry and updates it after each successful iteration. Pure
+ * predicates (`timeBudgetStopCondition`, `tokenBudgetStopCondition`)
+ * READ this struct to decide whether to halt; they do NOT mutate it.
+ *
+ * Fields:
+ *   - startedAtNs: `Bun.nanoseconds()` snapshot at loop entry; subtract
+ *                  to derive `elapsedMs` per-iteration.
+ *   - tokensIn / tokensOut: cumulative token counts read from
+ *                  `state.runHistory[].tokensIn / tokensOut` per AR10.
+ *   - warned80Time / warned80Token: latches set true after the 80%-
+ *                  warning is emitted to stderr; prevents repeated
+ *                  emissions on subsequent iterations.
+ *
+ * Fields are `readonly` per Story 4.3 §Open Question 9 precedent
+ * (immutable struct; the runLoop creates a new object via spread when
+ * updating fields).
+ */
+export interface LoopMetrics {
+  readonly startedAtNs: number;
+  readonly tokensIn: number;
+  readonly tokensOut: number;
+  readonly warned80Time: boolean;
+  readonly warned80Token: boolean;
+}
+
 // ─── Public types ─────────────────────────────────────────────────────────
 
 /**
@@ -115,6 +143,7 @@ export type StopConditionFn = (
   args: LoopArgs,
   sprintStatus?: SprintStatus,
   loopContext?: LoopContext,
+  loopMetrics?: LoopMetrics,
 ) => StopReason | null;
 
 // ─── compareStoryIds — numeric-segment comparator ─────────────────────────
@@ -164,6 +193,38 @@ export function compareStoryIds(a: string, b: string): -1 | 0 | 1 {
     if (numA > numB) return 1;
   }
   return 0;
+}
+
+// ─── formatTimeBudget — pure helper (Story 4.5) ───────────────────────────
+
+/**
+ * Format an integer milliseconds value as the canonical
+ * human-readable unit per AC-1 (`Xh` / `Xm` / `Xs` / `Xms`). Used by
+ * `timeBudgetStopCondition` to produce the AC-1 byte-identical
+ * exit-message text `time-budget (Xh) reached, partial work committed`
+ * where `Xh` is the canonical formatted unit per `formatTimeBudget`.
+ *
+ * Rules:
+ *   - ms >= 3_600_000 AND ms % 3_600_000 === 0 → `${ms / 3_600_000}h`
+ *   - ms >= 60_000   AND ms % 60_000 === 0    → `${ms / 60_000}m`
+ *   - ms >= 1_000    AND ms % 1_000 === 0     → `${ms / 1_000}s`
+ *   - otherwise                                → `${ms}ms`
+ *
+ * Pure function; no I/O; no throws. Used ONLY by
+ * `timeBudgetStopCondition` for message-text composition.
+ *
+ * Examples:
+ *   formatTimeBudget(7_200_000) === "2h"
+ *   formatTimeBudget(3_600_000) === "1h"
+ *   formatTimeBudget(60_000)    === "1m"
+ *   formatTimeBudget(500)       === "500ms"
+ *   formatTimeBudget(0)         === "0ms"
+ */
+export function formatTimeBudget(ms: number): string {
+  if (ms >= 3_600_000 && ms % 3_600_000 === 0) return `${ms / 3_600_000}h`;
+  if (ms >= 60_000 && ms % 60_000 === 0) return `${ms / 60_000}m`;
+  if (ms >= 1_000 && ms % 1_000 === 0) return `${ms / 1_000}s`;
+  return `${ms}ms`;
 }
 
 // ─── untilEpicEndStopCondition (AC-1) ─────────────────────────────────────
@@ -418,6 +479,105 @@ export function phaseEndStopCondition(
   };
 }
 
+// ─── timeBudgetStopCondition (AC-1, Story 4.5) ────────────────────────────
+
+/**
+ * Fires when `args.timeBudgetMs !== undefined` AND
+ * `loopMetrics.elapsedMs >= args.timeBudgetMs` — i.e., the wall-clock
+ * elapsed time has reached or exceeded the budget.
+ *
+ * Returns a `StopReason` of code `"time-budget-reached"` carrying the
+ * `budgetMs` (`args.timeBudgetMs`) + the `elapsedMs` (actual elapsed)
+ * + the verbatim AC-1 message text
+ * `"time-budget (Xh) reached, partial work committed"` where `Xh` is
+ * the canonical formatted unit per `formatTimeBudget`.
+ *
+ * Pure function; no I/O; no throws. Reads `Bun.nanoseconds()` directly
+ * to compute the elapsed since `loopMetrics.startedAtNs`. Per Open
+ * Question 2, the predicate (not the runner) computes elapsed to keep
+ * `LoopMetrics` immutable from the predicate's perspective.
+ *
+ * Edge cases (all return `null`):
+ *   - `args.timeBudgetMs === undefined` (flag absent).
+ *   - `loopMetrics === undefined` (predicate called without metrics).
+ *   - `elapsedMs < args.timeBudgetMs` (under budget).
+ *
+ * The 80%-warning (per AC-1 wording "at 80% the loop emits a stderr
+ * warning") is emitted by `runLoop` (NOT by this predicate); the
+ * predicate signals only the 100% halt. The two-step pattern keeps
+ * the predicate pure-function and the warning side-effect localised
+ * to the runner.
+ */
+export function timeBudgetStopCondition(
+  _state: State,
+  _dag: Dag,
+  args: LoopArgs,
+  _sprintStatus: SprintStatus | undefined,
+  _loopContext: LoopContext | undefined,
+  loopMetrics: LoopMetrics | undefined,
+): StopReason | null {
+  if (args.timeBudgetMs === undefined) return null;
+  if (loopMetrics === undefined) return null;
+  const elapsedMs = (Bun.nanoseconds() - loopMetrics.startedAtNs) / 1_000_000;
+  if (elapsedMs < args.timeBudgetMs) return null;
+  const unit = formatTimeBudget(args.timeBudgetMs);
+  return {
+    code: "time-budget-reached",
+    budgetMs: args.timeBudgetMs,
+    elapsedMs,
+    message: `time-budget (${unit}) reached, partial work committed`,
+  };
+}
+
+// ─── tokenBudgetStopCondition (AC-2, Story 4.5) ───────────────────────────
+
+/**
+ * Fires when `args.tokenBudget !== undefined` AND
+ * `loopMetrics.tokensIn + loopMetrics.tokensOut >= args.tokenBudget`
+ * — i.e., the cumulative token usage has reached or exceeded the
+ * budget.
+ *
+ * Returns a `StopReason` of code `"token-budget-reached"` carrying:
+ *   - `budget` (`args.tokenBudget`)
+ *   - `tokensIn` (cumulative input tokens at halt time)
+ *   - `tokensOut` (cumulative output tokens at halt time)
+ *   - `message`: AC-2 exit text WITH actual usage stats —
+ *     `"token-budget (N) reached, used X tokensIn + Y tokensOut"`.
+ *
+ * Pure function; no I/O; no throws. The token accumulator is updated
+ * by `runLoop` after each successful iteration by reading the latest
+ * `state.runHistory[]` entry's `tokensIn / tokensOut` fields per AR10.
+ *
+ * Edge cases (all return `null`):
+ *   - `args.tokenBudget === undefined` (flag absent).
+ *   - `loopMetrics === undefined` (predicate called without metrics).
+ *   - `tokensIn + tokensOut < args.tokenBudget` (under budget).
+ *
+ * The 80%-warning (per AC-2 wording "at 80% a warning is emitted")
+ * is emitted by `runLoop` (NOT by this predicate); the predicate
+ * signals only the 100% halt.
+ */
+export function tokenBudgetStopCondition(
+  _state: State,
+  _dag: Dag,
+  args: LoopArgs,
+  _sprintStatus: SprintStatus | undefined,
+  _loopContext: LoopContext | undefined,
+  loopMetrics: LoopMetrics | undefined,
+): StopReason | null {
+  if (args.tokenBudget === undefined) return null;
+  if (loopMetrics === undefined) return null;
+  const total = loopMetrics.tokensIn + loopMetrics.tokensOut;
+  if (total < args.tokenBudget) return null;
+  return {
+    code: "token-budget-reached",
+    budget: args.tokenBudget,
+    tokensIn: loopMetrics.tokensIn,
+    tokensOut: loopMetrics.tokensOut,
+    message: `token-budget (${args.tokenBudget}) reached, used ${loopMetrics.tokensIn} tokensIn + ${loopMetrics.tokensOut} tokensOut`,
+  };
+}
+
 // ─── evaluateStopConditions — dispatcher ──────────────────────────────────
 
 /**
@@ -425,19 +585,22 @@ export function phaseEndStopCondition(
  * order; returns the first non-null `StopReason` or `null` when no predicate
  * fires.
  *
- * Stories 4.5/4.6 will EXTEND this function with additional predicate
+ * Story 4.6 will EXTEND this function with additional predicate
  * invocations following the same `(state, dag, args, sprintStatus?,
- * loopContext?) => StopReason | null` contract.
+ * loopContext?, loopMetrics?) => StopReason | null` contract.
  *
  * Declaration order = priority order. The current order is:
- *   1. `untilEpicEndStopCondition` (Story 4.2 — AC-1).
- *   2. `untilStoryStopCondition`   (Story 4.2 — AC-2).
- *   3. `nextStoryStopCondition`    (Story 4.3 — AC-1).
- *   4. `phaseEndStopCondition`     (Story 4.3 — AC-2).
+ *   1. `untilEpicEndStopCondition`  (Story 4.2 — AC-1).
+ *   2. `untilStoryStopCondition`    (Story 4.2 — AC-2).
+ *   3. `nextStoryStopCondition`     (Story 4.3 — AC-1).
+ *   4. `phaseEndStopCondition`      (Story 4.3 — AC-2).
+ *   5. `timeBudgetStopCondition`    (Story 4.5 — AC-1).
+ *   6. `tokenBudgetStopCondition`   (Story 4.5 — AC-2).
  *
  * When MULTIPLE predicates would fire on the same iteration, the dispatcher
- * returns the FIRST non-null in declaration order. This is deterministic
- * and tested in `stop-conditions.test.ts` Tests 14, EVAL_43_1, EVAL_43_2.
+ * returns the FIRST non-null in declaration order. The Story 4.5 placement
+ * (after the Story 4.2/4.3 predicates) gives explicit user-facing flags
+ * priority over budget exhaustion. Tracked as Open Question 4 in 4.5.
  *
  * Pure function; no I/O; no throws.
  */
@@ -447,6 +610,7 @@ export function evaluateStopConditions(
   args: LoopArgs,
   sprintStatus?: SprintStatus,
   loopContext?: LoopContext,
+  loopMetrics?: LoopMetrics,
 ): StopReason | null {
   const epicEnd = untilEpicEndStopCondition(state, dag, args, sprintStatus);
   if (epicEnd !== null) return epicEnd;
@@ -472,6 +636,27 @@ export function evaluateStopConditions(
     loopContext,
   );
   if (phase !== null) return phase;
+
+  // Story 4.5 additions (AC-1, AC-2):
+  const timeBudget = timeBudgetStopCondition(
+    state,
+    dag,
+    args,
+    sprintStatus,
+    loopContext,
+    loopMetrics,
+  );
+  if (timeBudget !== null) return timeBudget;
+
+  const tokenBudget = tokenBudgetStopCondition(
+    state,
+    dag,
+    args,
+    sprintStatus,
+    loopContext,
+    loopMetrics,
+  );
+  if (tokenBudget !== null) return tokenBudget;
 
   return null;
 }

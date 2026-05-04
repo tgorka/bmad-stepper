@@ -54,7 +54,10 @@ import { type LoopArgs, parseLoopArgs } from "./args.ts";
 import {
   evaluateStopConditions,
   type LoopContext,
+  type LoopMetrics,
   type SprintStatus,
+  timeBudgetStopCondition,
+  tokenBudgetStopCondition,
 } from "./stop-conditions.ts";
 
 // ─── Public types ─────────────────────────────────────────────────────────
@@ -121,6 +124,19 @@ export type StopReason =
       code: "phase-end-reached";
       fromPhase: Phase;
       toPhase: Phase;
+      message: string;
+    }
+  | {
+      code: "time-budget-reached";
+      budgetMs: number;
+      elapsedMs: number;
+      message: string;
+    }
+  | {
+      code: "token-budget-reached";
+      budget: number;
+      tokensIn: number;
+      tokensOut: number;
       message: string;
     };
 
@@ -198,6 +214,14 @@ export interface LoopOpts {
     | Promise<DagAdjacency | null>
     | DagAdjacency
     | null;
+  /**
+   * Story 4.5 test-injection seam: directly inject per-iteration token
+   * counts without round-tripping through `state.yaml`. When supplied,
+   * the runner uses these values; otherwise it reads tokens from the
+   * latest `state.runHistory[]` entry (production path per AR10).
+   * Production code passes nothing.
+   */
+  readonly tokensPerIter?: () => { tokensIn: number; tokensOut: number };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -219,6 +243,12 @@ export interface LoopOpts {
  * `args.maxIters` non-undefined and the `--max-iters` branch fires
  * naturally.
  *
+ *
+ * Story 4.5 EXTENDS the signature with `loopMetrics` (loop-level wall-
+ * clock + token accumulator) so the new `--time-budget` + `--token-budget`
+ * predicates can read elapsed time + cumulative token counts. Stories
+ * 4.6-4.10 will continue to extend `evaluateStopConditions` (stop-on-error /
+ * continue-on-error / plan-first / checkpoint-each).
  */
 function shouldStop(
   iterCount: number,
@@ -227,6 +257,7 @@ function shouldStop(
   dag: DagAdjacency | null,
   sprintStatus: SprintStatus | null,
   loopContext: LoopContext | null,
+  loopMetrics: LoopMetrics | null,
 ): StopReason | null {
   if (args.maxIters !== undefined && iterCount >= args.maxIters) {
     return {
@@ -258,8 +289,35 @@ function shouldStop(
       args,
       sprintStatus ?? undefined,
       loopContext ?? undefined,
+      loopMetrics ?? undefined,
     );
     if (reason !== null) return reason;
+  } else if (loopMetrics !== null) {
+    // Story 4.5: budget predicates do NOT consume `state` (they only
+    // read `args` + `loopMetrics`). When state is null (e.g., test
+    // injects `stateOverride: () => null`, or the per-iteration state
+    // load failed), the dispatcher above is skipped. Call the budget
+    // predicates directly so `--time-budget` / `--token-budget` still
+    // fire. The predicates ignore `_state` (underscore prefix) so the
+    // sentinel passed here is safe.
+    const time = timeBudgetStopCondition(
+      EMPTY_STATE,
+      dag ?? EMPTY_DAG,
+      args,
+      sprintStatus ?? undefined,
+      loopContext ?? undefined,
+      loopMetrics,
+    );
+    if (time !== null) return time;
+    const token = tokenBudgetStopCondition(
+      EMPTY_STATE,
+      dag ?? EMPTY_DAG,
+      args,
+      sprintStatus ?? undefined,
+      loopContext ?? undefined,
+      loopMetrics,
+    );
+    if (token !== null) return token;
   }
   // Story 4.4: the v0.1 `no-stop-condition` placeholder branch was
   // REMOVED. When no stop condition is supplied, `runLoop` injects
@@ -280,6 +338,25 @@ const EMPTY_DAG: DagAdjacency = {
   nodes: new Map(),
   edgesOut: new Map(),
   edgesIn: new Map(),
+};
+
+/**
+ * Empty State sentinel passed to budget predicates when the runtime state
+ * load returned `null` (e.g., test injects `stateOverride: () => null`).
+ * The Story 4.5 budget predicates (`timeBudgetStopCondition`,
+ * `tokenBudgetStopCondition`) ignore `_state` (underscore-prefixed
+ * parameter) — they only consume `args` + `loopMetrics`. The sentinel
+ * keeps the type signature uniform.
+ */
+const EMPTY_STATE: State = {
+  schemaVersion: 1,
+  project: { name: "bmad-stepper", bmadVersion: "v6.x" },
+  lastSuccessfulStep: null,
+  lastAttempted: null,
+  lastFailureReason: null,
+  lastSnapshot: null,
+  checkpoints: [],
+  runHistory: [],
 };
 
 /**
@@ -404,7 +481,9 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
     args.untilEpicEnd !== true &&
     args.untilStory === undefined &&
     args.nextStory !== true &&
-    args.phaseEnd !== true
+    args.phaseEnd !== true &&
+    args.timeBudgetMs === undefined &&
+    args.tokenBudget === undefined
   ) {
     args = { ...args, maxIters: 50 };
   }
@@ -491,6 +570,20 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
     };
   }
 
+  // Story 4.5: initialise the LoopMetrics accumulator at loop entry.
+  // The runner UPDATES this struct after each successful iteration
+  // (token accumulation from state.runHistory[]; the 80%-warning
+  // latches flip when the predicates would emit warnings). Reuses
+  // the existing `loopStartNs` from line 448 (`Bun.nanoseconds()` at
+  // loop entry) — no double-clock-read.
+  let loopMetrics: LoopMetrics = {
+    startedAtNs: loopStartNs,
+    tokensIn: 0,
+    tokensOut: 0,
+    warned80Time: false,
+    warned80Token: false,
+  };
+
   // Iterate until shouldStop fires.
   while (true) {
     // Story 4.2: load state + sprint-status fresh BEFORE each shouldStop
@@ -512,6 +605,7 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
       dag,
       sprintStatus,
       loopContext,
+      loopMetrics,
     );
     if (reason !== null) {
       // Story 4.2 AC-1: --until-epic-end emits state-snapshot pointer +
@@ -545,6 +639,66 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
     };
     iterations.push(record);
     iterCount++;
+
+    // Story 4.5: token accumulation from state.runHistory[] per AR10.
+    // The verify-and-advance.ts (Layer 2) writes tokensIn/tokensOut to
+    // runHistory[]; we read the LATEST entry per-iteration. v0.1
+    // conservative: defensive typeof guards because runHistory[] is
+    // schema-typed as z.unknown() per Story 1.5.
+    let iterTokensIn = 0;
+    let iterTokensOut = 0;
+    if (opts?.tokensPerIter !== undefined) {
+      // Test-injection seam: bypass state.yaml round-trip.
+      const tokens = opts.tokensPerIter();
+      iterTokensIn = tokens.tokensIn;
+      iterTokensOut = tokens.tokensOut;
+    } else {
+      // Production path: read latest runHistory entry from state.yaml.
+      const postState = await stateFn();
+      const history = postState?.runHistory ?? [];
+      const latest = history[history.length - 1];
+      if (
+        latest !== undefined &&
+        latest !== null &&
+        typeof latest === "object"
+      ) {
+        const entry = latest as { tokensIn?: unknown; tokensOut?: unknown };
+        if (typeof entry.tokensIn === "number") iterTokensIn = entry.tokensIn;
+        if (typeof entry.tokensOut === "number")
+          iterTokensOut = entry.tokensOut;
+      }
+    }
+    loopMetrics = {
+      ...loopMetrics,
+      tokensIn: loopMetrics.tokensIn + iterTokensIn,
+      tokensOut: loopMetrics.tokensOut + iterTokensOut,
+    };
+
+    // Story 4.5: 80%-warning emission for time/token budgets. The
+    // emission happens AFTER the iteration completes (so the predicates
+    // see the just-completed iteration's metrics on the NEXT iteration's
+    // pre-iter check) and BEFORE the next shouldStop call. The latches
+    // (warned80Time, warned80Token) ensure each warning fires AT MOST
+    // ONCE per loop run.
+    if (args.timeBudgetMs !== undefined && !loopMetrics.warned80Time) {
+      const elapsedMs =
+        (Bun.nanoseconds() - loopMetrics.startedAtNs) / 1_000_000;
+      if (elapsedMs >= args.timeBudgetMs * 0.8) {
+        stderrFn(
+          `Warning: time-budget at 80% (elapsed ${Math.round(elapsedMs)}ms of ${args.timeBudgetMs}ms budget).\n`,
+        );
+        loopMetrics = { ...loopMetrics, warned80Time: true };
+      }
+    }
+    if (args.tokenBudget !== undefined && !loopMetrics.warned80Token) {
+      const totalTokens = loopMetrics.tokensIn + loopMetrics.tokensOut;
+      if (totalTokens >= args.tokenBudget * 0.8) {
+        stderrFn(
+          `Warning: token-budget at 80% (used ${totalTokens} of ${args.tokenBudget} tokens).\n`,
+        );
+        loopMetrics = { ...loopMetrics, warned80Token: true };
+      }
+    }
 
     // Story 4.3 §Open Question 2: deferred-baseline capture for the
     // fresh-project edge case. When `loopContext.startStory === null`
@@ -638,6 +792,12 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
  *   - epic-end-reached / until-story-reached / next-story-reached /
  *     phase-end-reached:  delegated to the predicate's `message` field
  *                         (Story 4.2/4.3 verbatim per their AC-1/AC-2).
+ *   - time-budget-reached / token-budget-reached:
+ *                         delegated to the predicate's `message` field
+ *                         (Story 4.5 AC-1/AC-2 verbatim — "time-budget
+ *                         (Xh) reached, partial work committed" /
+ *                         "token-budget (N) reached, used X tokensIn +
+ *                         Y tokensOut").
  */
 function formatExitReason(stopReason: StopReason): string {
   switch (stopReason.code) {
@@ -657,6 +817,17 @@ function formatExitReason(stopReason: StopReason): string {
       return `next-story boundary reached (${stopReason.startStory} → ${stopReason.currentStory})`;
     case "phase-end-reached":
       // AC-2 verbatim message format already includes the from→to context.
+      return stopReason.message;
+    case "time-budget-reached":
+      // Story 4.5 AC-1 verbatim: "time-budget (Xh) reached, partial work
+      // committed" (epics.md line 966). The message is composed by the
+      // predicate via formatTimeBudget(args.timeBudgetMs); we delegate
+      // to the predicate's message field for AC-byte-identical text.
+      return stopReason.message;
+    case "token-budget-reached":
+      // Story 4.5 AC-2: "the exit reason includes the actual usage
+      // stats" — the predicate composes the message using budget +
+      // tokensIn + tokensOut.
       return stopReason.message;
   }
 }

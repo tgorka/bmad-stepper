@@ -18,10 +18,14 @@ import type { LoopArgs } from "./args.ts";
 import {
   compareStoryIds,
   evaluateStopConditions,
+  formatTimeBudget,
   type LoopContext,
+  type LoopMetrics,
   nextStoryStopCondition,
   phaseEndStopCondition,
   type SprintStatus,
+  timeBudgetStopCondition,
+  tokenBudgetStopCondition,
   untilEpicEndStopCondition,
   untilStoryStopCondition,
 } from "./stop-conditions.ts";
@@ -714,5 +718,398 @@ describe("predicate purity — Story 4.3 (Test 17)", () => {
     const a = phaseEndStopCondition(state, dag, args, undefined, ctx);
     const b = phaseEndStopCondition(state, dag, args, undefined, ctx);
     expect(a).toEqual(b);
+  });
+
+  // ─── Story 4.5 — predicate purity (Test 18) ─────────────────────────────
+
+  it("timeBudgetStopCondition: identical inputs → identical results (idempotent)", () => {
+    const state = makeState(4, "4.1");
+    const args: LoopArgs = { timeBudgetMs: 100 };
+    const metrics: LoopMetrics = {
+      // Far in the past → guaranteed elapsed >> budget.
+      startedAtNs: -1e15,
+      tokensIn: 0,
+      tokensOut: 0,
+      warned80Time: false,
+      warned80Token: false,
+    };
+    const a = timeBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      args,
+      undefined,
+      undefined,
+      metrics,
+    );
+    const b = timeBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      args,
+      undefined,
+      undefined,
+      metrics,
+    );
+    // Codes / structured fields equal across calls; elapsedMs may differ
+    // by sub-millisecond between calls because Bun.nanoseconds() advances.
+    // Assert the discriminator + the byte-identical message + budget.
+    expect(a?.code).toBe("time-budget-reached");
+    expect(b?.code).toBe("time-budget-reached");
+    if (a?.code !== "time-budget-reached") return;
+    if (b?.code !== "time-budget-reached") return;
+    expect(a.budgetMs).toBe(b.budgetMs);
+    expect(a.message).toBe(b.message);
+  });
+
+  it("tokenBudgetStopCondition: identical inputs → identical results (idempotent)", () => {
+    const state = makeState(4, "4.1");
+    const args: LoopArgs = { tokenBudget: 100 };
+    const metrics: LoopMetrics = {
+      startedAtNs: Bun.nanoseconds(),
+      tokensIn: 50,
+      tokensOut: 50,
+      warned80Time: false,
+      warned80Token: false,
+    };
+    const a = tokenBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      args,
+      undefined,
+      undefined,
+      metrics,
+    );
+    const b = tokenBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      args,
+      undefined,
+      undefined,
+      metrics,
+    );
+    expect(a).toEqual(b);
+  });
+});
+
+// ─── Story 4.5 — formatTimeBudget cascade ─────────────────────────────────
+
+describe("formatTimeBudget (Story 4.5)", () => {
+  it("7_200_000 → '2h' (AC-1 canonical exemplar)", () => {
+    expect(formatTimeBudget(7_200_000)).toBe("2h");
+  });
+
+  it("3_600_000 → '1h'", () => {
+    expect(formatTimeBudget(3_600_000)).toBe("1h");
+  });
+
+  it("5_400_000 → '90m' (hours not evenly divisible)", () => {
+    expect(formatTimeBudget(5_400_000)).toBe("90m");
+  });
+
+  it("60_000 → '1m'", () => {
+    expect(formatTimeBudget(60_000)).toBe("1m");
+  });
+
+  it("120_000 → '2m'", () => {
+    expect(formatTimeBudget(120_000)).toBe("2m");
+  });
+
+  it("1_000 → '1s'", () => {
+    expect(formatTimeBudget(1_000)).toBe("1s");
+  });
+
+  it("5_000 → '5s'", () => {
+    expect(formatTimeBudget(5_000)).toBe("5s");
+  });
+
+  it("500 → '500ms' (non-round sub-second)", () => {
+    expect(formatTimeBudget(500)).toBe("500ms");
+  });
+
+  it("1_500 → '1500ms' (not evenly divisible by 1000)", () => {
+    expect(formatTimeBudget(1_500)).toBe("1500ms");
+  });
+
+  it("0 → '0ms'", () => {
+    expect(formatTimeBudget(0)).toBe("0ms");
+  });
+});
+
+// ─── Story 4.5 — timeBudgetStopCondition unit tests ───────────────────────
+
+describe("timeBudgetStopCondition (Story 4.5, AC-1)", () => {
+  const makeMetrics = (opts?: Partial<LoopMetrics>): LoopMetrics => ({
+    startedAtNs: Bun.nanoseconds(),
+    tokensIn: 0,
+    tokensOut: 0,
+    warned80Time: false,
+    warned80Token: false,
+    ...opts,
+  });
+
+  it("returns null when args.timeBudgetMs is undefined", () => {
+    const state = makeState(4, "4.1");
+    const result = timeBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      {},
+      undefined,
+      undefined,
+      makeMetrics(),
+    );
+    expect(result).toBeNull();
+  });
+
+  it("returns null when loopMetrics is undefined", () => {
+    const state = makeState(4, "4.1");
+    const result = timeBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      { timeBudgetMs: 1000 },
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(result).toBeNull();
+  });
+
+  it("returns null when elapsed < budget", () => {
+    const state = makeState(4, "4.1");
+    // startedAtNs in the future → negative elapsed → under budget
+    const result = timeBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      { timeBudgetMs: 1_000_000 },
+      undefined,
+      undefined,
+      makeMetrics({ startedAtNs: Bun.nanoseconds() + 1e15 }),
+    );
+    expect(result).toBeNull();
+  });
+
+  it("fires when elapsed >= budget (startedAtNs far in the past)", () => {
+    const state = makeState(4, "4.1");
+    const result = timeBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      { timeBudgetMs: 100 },
+      undefined,
+      undefined,
+      makeMetrics({ startedAtNs: -1e15 }),
+    );
+    expect(result?.code).toBe("time-budget-reached");
+    if (result?.code !== "time-budget-reached") return;
+    expect(result.budgetMs).toBe(100);
+    expect(result.elapsedMs).toBeGreaterThan(100);
+  });
+
+  it("AC-1 message format: 'time-budget (Xh) reached, partial work committed' for 2h budget", () => {
+    const state = makeState(4, "4.1");
+    const result = timeBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      { timeBudgetMs: 7_200_000 },
+      undefined,
+      undefined,
+      makeMetrics({ startedAtNs: -1e15 }),
+    );
+    expect(result?.code).toBe("time-budget-reached");
+    if (result?.code !== "time-budget-reached") return;
+    expect(result.message).toBe(
+      "time-budget (2h) reached, partial work committed",
+    );
+  });
+
+  it("AC-1 message format: 'time-budget (500ms) reached, partial work committed' for 500ms budget", () => {
+    const state = makeState(4, "4.1");
+    const result = timeBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      { timeBudgetMs: 500 },
+      undefined,
+      undefined,
+      makeMetrics({ startedAtNs: -1e15 }),
+    );
+    expect(result?.code).toBe("time-budget-reached");
+    if (result?.code !== "time-budget-reached") return;
+    expect(result.message).toBe(
+      "time-budget (500ms) reached, partial work committed",
+    );
+  });
+});
+
+// ─── Story 4.5 — tokenBudgetStopCondition unit tests ─────────────────────
+
+describe("tokenBudgetStopCondition (Story 4.5, AC-2)", () => {
+  const makeMetrics = (opts?: Partial<LoopMetrics>): LoopMetrics => ({
+    startedAtNs: Bun.nanoseconds(),
+    tokensIn: 0,
+    tokensOut: 0,
+    warned80Time: false,
+    warned80Token: false,
+    ...opts,
+  });
+
+  it("returns null when args.tokenBudget is undefined", () => {
+    const state = makeState(4, "4.1");
+    const result = tokenBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      {},
+      undefined,
+      undefined,
+      makeMetrics({ tokensIn: 100, tokensOut: 100 }),
+    );
+    expect(result).toBeNull();
+  });
+
+  it("returns null when loopMetrics is undefined", () => {
+    const state = makeState(4, "4.1");
+    const result = tokenBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      { tokenBudget: 100 },
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(result).toBeNull();
+  });
+
+  it("returns null when total tokens < budget", () => {
+    const state = makeState(4, "4.1");
+    const result = tokenBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      { tokenBudget: 200 },
+      undefined,
+      undefined,
+      makeMetrics({ tokensIn: 50, tokensOut: 50 }),
+    );
+    expect(result).toBeNull();
+  });
+
+  it("fires when total tokens === budget (exact hit)", () => {
+    const state = makeState(4, "4.1");
+    const result = tokenBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      { tokenBudget: 100 },
+      undefined,
+      undefined,
+      makeMetrics({ tokensIn: 50, tokensOut: 50 }),
+    );
+    expect(result?.code).toBe("token-budget-reached");
+    if (result?.code !== "token-budget-reached") return;
+    expect(result.budget).toBe(100);
+    expect(result.tokensIn).toBe(50);
+    expect(result.tokensOut).toBe(50);
+  });
+
+  it("fires when total tokens > budget (overshoot)", () => {
+    const state = makeState(4, "4.1");
+    const result = tokenBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      { tokenBudget: 100 },
+      undefined,
+      undefined,
+      makeMetrics({ tokensIn: 80, tokensOut: 80 }),
+    );
+    expect(result?.code).toBe("token-budget-reached");
+  });
+
+  it("AC-2 message includes actual usage stats", () => {
+    const state = makeState(4, "4.1");
+    const result = tokenBudgetStopCondition(
+      state,
+      EMPTY_DAG,
+      { tokenBudget: 100 },
+      undefined,
+      undefined,
+      makeMetrics({ tokensIn: 60, tokensOut: 40 }),
+    );
+    expect(result?.code).toBe("token-budget-reached");
+    if (result?.code !== "token-budget-reached") return;
+    expect(result.message).toBe(
+      "token-budget (100) reached, used 60 tokensIn + 40 tokensOut",
+    );
+  });
+});
+
+// ─── Story 4.5 — evaluateStopConditions with loopMetrics ─────────────────
+
+describe("evaluateStopConditions with loopMetrics (Story 4.5)", () => {
+  it("EVAL_45_1: timeBudgetStopCondition fires through dispatcher when budget exceeded", () => {
+    const state = makeState(4, "4.1");
+    const metrics: LoopMetrics = {
+      startedAtNs: -1e15,
+      tokensIn: 0,
+      tokensOut: 0,
+      warned80Time: false,
+      warned80Token: false,
+    };
+    const result = evaluateStopConditions(
+      state,
+      EMPTY_DAG,
+      { timeBudgetMs: 100 },
+      undefined,
+      undefined,
+      metrics,
+    );
+    expect(result?.code).toBe("time-budget-reached");
+  });
+
+  it("EVAL_45_2: tokenBudgetStopCondition fires through dispatcher when budget exceeded", () => {
+    const state = makeState(4, "4.1");
+    const metrics: LoopMetrics = {
+      startedAtNs: Bun.nanoseconds(),
+      tokensIn: 60,
+      tokensOut: 60,
+      warned80Time: false,
+      warned80Token: false,
+    };
+    const result = evaluateStopConditions(
+      state,
+      EMPTY_DAG,
+      { tokenBudget: 100 },
+      undefined,
+      undefined,
+      metrics,
+    );
+    expect(result?.code).toBe("token-budget-reached");
+  });
+
+  it("EVAL_45_3: explicit --until-story takes priority over budget (declaration order)", () => {
+    const state = makeState(4, "4.1");
+    const metrics: LoopMetrics = {
+      startedAtNs: -1e15,
+      tokensIn: 200,
+      tokensOut: 200,
+      warned80Time: false,
+      warned80Token: false,
+    };
+    // Both until-story AND token-budget would fire; until-story is first.
+    const result = evaluateStopConditions(
+      state,
+      EMPTY_DAG,
+      { untilStory: "4.1", tokenBudget: 100 },
+      undefined,
+      undefined,
+      metrics,
+    );
+    expect(result?.code).toBe("until-story-reached");
+  });
+
+  it("EVAL_45_4: no loopMetrics → budget predicates return null (graceful degradation)", () => {
+    const state = makeState(4, "4.1");
+    const result = evaluateStopConditions(
+      state,
+      EMPTY_DAG,
+      { timeBudgetMs: 1, tokenBudget: 1 },
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(result).toBeNull();
   });
 });
