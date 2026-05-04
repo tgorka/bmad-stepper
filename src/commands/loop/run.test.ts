@@ -1,6 +1,6 @@
 /**
  * src/commands/loop/run.test.ts — colocated unit tests for `runLoop`
- * (Story 4.1 AC-1).
+ * (Story 4.1 AC-1; Story 4.2 AC-1/2; Story 4.3 AC-1/2/3; Story 4.4 AC-1/2/3).
  *
  * Tests use the `runNextOverride` test-injection seam (per Story 1.6 +
  * Story 3.x precedent — runtime-injectable test seams are preferred over
@@ -13,7 +13,13 @@
  *     iteration and exits with reason `max-iters reached`.
  *   - Multi-iteration (Test C): `--max-iters 3` runs exactly 3 iterations.
  *   - IterationRecord shape (Test D).
- *   - No stop condition (Test E): v0.1 pre-Story-4.4 behaviour.
+ *   - Default cap (Test E + X_44 + AA_44): Story 4.4 AC-1 — `argv=[]`
+ *     injects `--max-iters=50` and runs 50 iterations exiting with
+ *     `max-iters-reached`.
+ *   - AC-2 (Test Y_44): `--max-iters 10` exits with `max-iters-reached`
+ *     carrying maxIters=10.
+ *   - AC-3 (Test Z_44 + AA_44): explicit `--until-epic-end` /
+ *     `--until-story` / `--next-story` do NOT inject the default cap.
  *   - halt-on-error (Test F): non-zero exitCode stops the loop.
  *   - LoopResult shape (Test G).
  *   - ConfigError on argv parse failure (Test H).
@@ -152,14 +158,17 @@ describe("runLoop — Test D (IterationRecord shape)", () => {
   });
 });
 
-describe("runLoop — Test E (no stop condition supplied)", () => {
-  it("argv=[] halts immediately with no-stop-condition reason + exit 0", async () => {
+describe("runLoop — Test E (default --max-iters=50 when no stop condition supplied; Story 4.4 AC-1)", () => {
+  it("argv=[] applies the default --max-iters=50 cap and runs 50 iterations", async () => {
     const { stub, calls } = countingStub(successResult());
     const result = await runLoop({ argv: [], runNextOverride: stub });
-    expect(result.iterations.length).toBe(0);
-    expect(result.stopReason.code).toBe("no-stop-condition");
+    expect(result.iterations.length).toBe(50);
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    if (result.stopReason.code !== "max-iters-reached") return;
+    expect(result.stopReason.maxIters).toBe(50);
+    expect(result.stopReason.iterCount).toBe(50);
     expect(result.exitCode).toBe(0);
-    expect(calls()).toBe(0);
+    expect(calls()).toBe(50);
   });
 });
 
@@ -500,12 +509,18 @@ describe("runLoop — Test M_42 (Story 4.2 AC-2: --until-story 3.2 does NOT fire
   });
 });
 
-describe("runLoop — Test N_42 (Story 4.2: hasOtherStopCondition guard)", () => {
-  it("--until-epic-end alone does NOT trigger no-stop-condition placeholder", async () => {
+describe("runLoop — Test N_42 (Story 4.4 AC-3: explicit-overrides-default — `--until-epic-end` alone does NOT apply default cap)", () => {
+  it("--until-epic-end + --max-iters 2 — explicit cap controls; no default-50 injection", async () => {
     const { stub, calls } = countingStub(successResult());
     // Epic NOT done — predicate does not fire. With --max-iters 2 to
-    // bound. Without the hasOtherStopCondition guard the v0.1 placeholder
-    // would fire on iter 0 BEFORE any iteration runs.
+    // bound. Story 4.2 introduced `hasOtherStopCondition` to suppress
+    // the v0.1 `no-stop-condition` placeholder when another condition
+    // is supplied; Story 4.4 REMOVED both the helper AND the
+    // placeholder, replacing them with a default-cap injection. The
+    // semantic is now: when `--until-epic-end` is supplied WITHOUT
+    // `--max-iters`, NO default cap is applied (the explicit condition
+    // controls). This test pins the explicit-cap path: `--max-iters 2`
+    // wins, the loop runs 2 iterations.
     const state = makeStateFixture(3, "3.5");
     const sprintStatus = makeSprintStatusEpic3Done();
     const mutated: SprintStatus = {
@@ -521,17 +536,16 @@ describe("runLoop — Test N_42 (Story 4.2: hasOtherStopCondition guard)", () =>
       sprintStatusOverride: () => mutated,
       stderrOverride: () => {},
     });
-    // The placeholder does NOT fire; the loop ran 2 iterations and hit
-    // the --max-iters cap.
     expect(result.stopReason.code).toBe("max-iters-reached");
     expect(calls()).toBe(2);
   });
 
-  it("--until-story 3.5 alone (no --max-iters) does NOT trigger no-stop-condition before any iteration runs", async () => {
+  it("--until-story 3.5 alone (no --max-iters) — explicit predicate fires; no default-cap", async () => {
     const { stub, calls } = countingStub(successResult());
-    // Current story is 3.5 (>= target) so the predicate fires AFTER
-    // iter 0's state load. The point of this test is to confirm the
-    // hasOtherStopCondition guard suppresses the placeholder.
+    // Current story is 3.5 (>= target) so the predicate fires on the
+    // iter-0 boundary check. Story 4.4: when `--until-story` is
+    // supplied alone, NO default cap is applied — the explicit
+    // condition controls.
     const state = makeStateFixture(3, "3.5");
     const result = await runLoop({
       argv: ["--until-story", "3.5"],
@@ -541,9 +555,6 @@ describe("runLoop — Test N_42 (Story 4.2: hasOtherStopCondition guard)", () =>
       stderrOverride: () => {},
     });
     expect(result.stopReason.code).toBe("until-story-reached");
-    // Predicate fires on the iter-0 boundary check (BEFORE any
-    // runNext call) because state.lastSuccessfulStep.story already
-    // matches the target.
     expect(calls()).toBe(0);
   });
 });
@@ -746,16 +757,14 @@ describe("runLoop --phase-end (Story 4.3 AC-2)", () => {
   });
 });
 
-describe("runLoop — Test V_43 (--next-story / --phase-end no-stop-condition guard)", () => {
-  it("--next-story alone does NOT trigger no-stop-condition placeholder", async () => {
+describe("runLoop — Test V_43 (Story 4.4: --next-story / --phase-end alone WITHOUT --max-iters do not apply default cap; with explicit --max-iters 1 the cap fires immediately)", () => {
+  it("--next-story + --max-iters 1 — explicit cap fires; default-cap not applied", async () => {
     const { stub, calls } = countingStub(successResult());
-    // State stays at 3.2 (predicate would not fire on unchanged story).
-    // Without the hasOtherStopCondition extension, the v0.1 placeholder
-    // would fire on iter-0 BEFORE any iteration runs.
+    // State stays at 3.2 (--next-story predicate would not fire on
+    // unchanged story). Story 4.4: when `--next-story` is supplied
+    // WITHOUT `--max-iters`, NO default cap is applied — the explicit
+    // `--max-iters 1` here wins and bounds the loop to 1 iteration.
     const state = makeStateFixtureFull(3, "3.2");
-    // Use --max-iters 1 to bound the loop (the predicate does not fire;
-    // max-iters does). The point: the loop ran AT LEAST one iteration
-    // → the placeholder was correctly suppressed.
     const result = await runLoop({
       argv: ["--next-story", "--max-iters", "1"],
       runNextOverride: stub,
@@ -767,7 +776,7 @@ describe("runLoop — Test V_43 (--next-story / --phase-end no-stop-condition gu
     expect(calls()).toBe(1);
   });
 
-  it("--phase-end alone does NOT trigger no-stop-condition placeholder", async () => {
+  it("--phase-end + --max-iters 1 — explicit cap fires; default-cap not applied", async () => {
     const { stub, calls } = countingStub(successResult());
     const dag = makeDagFixture();
     const state = makeStateFixtureFull(3, "3.2", "bmad-dev-story");
@@ -846,6 +855,138 @@ describe("runLoop AC-3 sweep — all four stop conditions (Story 4.3)", () => {
       dagOverride: () => dag,
     });
     expect(result.stopReason.code).toBe("phase-end-reached");
+  });
+});
+
+// ─── Story 4.4 tests (AC-1 + AC-2 + AC-3) ─────────────────────────────────
+
+describe("runLoop — Test X_44 (Story 4.4 AC-1: default cap fires with max-iters-reached)", () => {
+  it("default-cap injection produces stopReason.maxIters === 50 when argv=[]", async () => {
+    const { stub } = countingStub(successResult());
+    const result = await runLoop({ argv: [], runNextOverride: stub });
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    if (result.stopReason.code !== "max-iters-reached") return;
+    expect(result.stopReason.maxIters).toBe(50);
+    expect(result.stopReason.iterCount).toBe(50);
+  });
+});
+
+describe("runLoop — Test Y_44 (Story 4.4 AC-2: --max-iters 10 exits with maxIters=10/iterCount=10)", () => {
+  it("--max-iters 10 exits with stopReason.maxIters === 10 + iterCount === 10", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--max-iters", "10"],
+      runNextOverride: stub,
+    });
+    expect(result.iterations.length).toBe(10);
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    if (result.stopReason.code !== "max-iters-reached") return;
+    expect(result.stopReason.maxIters).toBe(10);
+    expect(result.stopReason.iterCount).toBe(10);
+    expect(calls()).toBe(10);
+  });
+  // Note: the AR9 emitted message text "max-iters (10) reached" is
+  // assembled by `formatExitReason` inside `import.meta.main`. This unit
+  // test verifies the structured StopReason fields used by
+  // `formatExitReason`; the AR9 line shape is covered by the
+  // import.meta.main path (Story 4.1 baseline). Story 4.4 changes only
+  // the message format string, not the structured StopReason.
+});
+
+describe("runLoop — Test Z_44 (Story 4.4 AC-3: explicit condition does NOT inject default cap)", () => {
+  it("--until-epic-end alone fires on epic-end-reached without applying --max-iters=50", async () => {
+    const { stub, calls } = countingStub(successResult());
+    // Epic-3 is fully done in this fixture → --until-epic-end fires on iter 0.
+    const state = makeStateFixture(3, "3.10");
+    const sprintStatus = makeSprintStatusEpic3Done();
+    const result = await runLoop({
+      argv: ["--until-epic-end"],
+      runNextOverride: stub,
+      stateOverride: () => state,
+      sprintStatusOverride: () => sprintStatus,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("epic-end-reached");
+    // The default-cap was NOT applied; the loop exited via the
+    // explicit condition. iter count is 0 because --until-epic-end
+    // fires BEFORE the first iteration runs.
+    expect(result.iterations.length).toBe(0);
+    expect(calls()).toBe(0);
+  });
+
+  it("--until-story 3.5 alone fires WITHOUT applying default cap", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const state = makeStateFixture(3, "3.5");
+    const result = await runLoop({
+      argv: ["--until-story", "3.5"],
+      runNextOverride: stub,
+      stateOverride: () => state,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("until-story-reached");
+    expect(calls()).toBe(0);
+  });
+
+  it("--next-story alone — no default cap; loop bounded by external halt", async () => {
+    // Story stays at 3.2 → predicate never fires → loop runs without
+    // a default cap. AC-3 verbatim: "no default cap is applied (the
+    // explicit condition controls)". To bound the test we use a stub
+    // that emits halt-on-error after a few iterations; assert the
+    // halt path fires (NOT max-iters-reached, which would require the
+    // default cap to have been applied).
+    let count = 0;
+    const haltStub = async (): Promise<NextResult> => {
+      count++;
+      if (count >= 3) return haltResult("test bound");
+      return successResult();
+    };
+    const state = makeStateFixtureFull(3, "3.2");
+    const result = await runLoop({
+      argv: ["--next-story"],
+      runNextOverride: haltStub,
+      stateOverride: () => state,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("halt-on-error");
+  });
+});
+
+describe("runLoop AC-3 sweep — default cap behaviour (Story 4.4)", () => {
+  it("Sweep-44-A: default cap fires when no stop condition supplied (50 iters)", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = await runLoop({ argv: [], runNextOverride: stub });
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    if (result.stopReason.code !== "max-iters-reached") return;
+    expect(result.stopReason.maxIters).toBe(50);
+    expect(calls()).toBe(50);
+  });
+
+  it("Sweep-44-B: explicit --max-iters 10 overrides default cap", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = await runLoop({
+      argv: ["--max-iters", "10"],
+      runNextOverride: stub,
+    });
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    if (result.stopReason.code !== "max-iters-reached") return;
+    expect(result.stopReason.maxIters).toBe(10);
+    expect(calls()).toBe(10);
+  });
+
+  it("Sweep-44-C: explicit --until-epic-end does NOT apply default cap", async () => {
+    const { stub } = countingStub(successResult());
+    const state = makeStateFixture(3, "3.10");
+    const sprintStatus = makeSprintStatusEpic3Done();
+    const result = await runLoop({
+      argv: ["--until-epic-end"],
+      runNextOverride: stub,
+      stateOverride: () => state,
+      sprintStatusOverride: () => sprintStatus,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("epic-end-reached");
   });
 });
 

@@ -10,12 +10,14 @@
  * module — all per-iteration state I/O flows through `runNext` per the
  * AR41 boundary.
  *
- * Story 4.1 wires ONLY `--max-iters` as the runtime stop condition per
- * AC-1 verbatim. The other 7 stop-condition types (epic-end, story-X-Y,
- * next-story, phase-end, time-budget, token-budget, stop-on-error /
- * continue-on-error) are owned by Stories 4.2-4.10. The other flags
- * declared on `LoopArgsSchema` are ARG-SURFACE-PRESENT (Zod parses them)
- * but RUNTIME-DEFERRED (`shouldStop` does not branch on them).
+ * Story 4.1 wired `--max-iters` as the FIRST runtime stop condition per
+ * AC-1 verbatim. Story 4.2 wired `--until-epic-end` + `--until-story X.Y`.
+ * Story 4.3 wired `--next-story` + `--phase-end`. Story 4.4 ADDS the
+ * **`--max-iters=50` default cap** per FR25 — when no other stop
+ * condition is supplied, the runner injects `args.maxIters = 50` so the
+ * bounded loop has a hard ceiling. Stories 4.5-4.10 will wire the
+ * remaining flags (`--time-budget`, `--token-budget`, `--stop-on-error`,
+ * `--continue-on-error`, `--plan-first`).
  *
  * **AR9 STDOUT DISCIPLINE (final-emission strategy)**: per-iteration
  * `runNext` invocations have their AR9 lines captured in-process via the
@@ -25,8 +27,9 @@
  * This preserves the AR9 single-line invariant per command invocation.
  *
  * **EXIT-CODE MAPPING (FR53)**:
- *   - 0 — `max-iters-reached` OR `no-stop-condition` (clean exit per
- *         Story 4.1 v0.1 pre-Story-4.4 placeholder).
+ *   - 0 — clean exit (one of `max-iters-reached`, `epic-end-reached`,
+ *         `until-story-reached`, `next-story-reached`, `phase-end-reached`,
+ *         `time-budget-reached`, `token-budget-reached`).
  *   - 1 — `halt-on-error` (per-iteration `runNext` halt; relayed verbatim).
  *   - 2 — argv parse error (configuration error).
  *
@@ -87,13 +90,19 @@ export interface IterationRecord {
  * (see `./stop-conditions.ts`). Story 4.3 EXTENDS with two MORE
  * variants (`next-story-reached`, `phase-end-reached`) emitted by the
  * Story 4.3 predicates (`nextStoryStopCondition`,
- * `phaseEndStopCondition`). Stories 4.5 (`--time-budget`,
- * `--token-budget`) and 4.6 (`--stop-on-error`, `--continue-on-error`)
- * will extend with additional variants following the same shape.
+ * `phaseEndStopCondition`). Story 4.4 REMOVED the v0.1 placeholder
+ * variant `no-stop-condition` — when no stop condition is supplied,
+ * the runner injects `--max-iters=50` as a default cap (FR25) and the
+ * loop exits via `max-iters-reached`. Story 4.5 (`--time-budget`,
+ * `--token-budget`) extends with TWO MORE variants
+ * (`time-budget-reached`, `token-budget-reached`) emitted by the new
+ * pure-function predicates `timeBudgetStopCondition` +
+ * `tokenBudgetStopCondition` (see `./stop-conditions.ts`). Story 4.6
+ * (`--stop-on-error`, `--continue-on-error`) will extend further
+ * following the same shape.
  */
 export type StopReason =
   | { code: "max-iters-reached"; maxIters: number; iterCount: number }
-  | { code: "no-stop-condition"; iterCount: number }
   | { code: "halt-on-error"; iterCount: number; failureCode: string }
   | { code: "epic-end-reached"; epic: string; message: string }
   | {
@@ -194,26 +203,6 @@ export interface LoopOpts {
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 /**
- * Returns `true` when any non-`--max-iters` stop condition is supplied on
- * the args. Story 4.2 wired `--until-epic-end` + `--until-story`. Story
- * 4.3 EXTENDS with `--next-story` + `--phase-end`. Stories 4.5/4.6 will
- * EXTEND further with their flags. Used by `shouldStop` to suppress the
- * v0.1 `no-stop-condition` placeholder when the user supplied a stop
- * condition (without `--max-iters`).
- *
- * Story 4.4 will REMOVE this helper entirely when the `--max-iters=50`
- * default cap eliminates the no-stop-condition branch.
- */
-function hasOtherStopCondition(args: LoopArgs): boolean {
-  return (
-    args.untilEpicEnd === true ||
-    args.untilStory !== undefined ||
-    args.nextStory === true ||
-    args.phaseEnd === true
-  );
-}
-
-/**
  * Stop-condition gate. Returns the StopReason if the loop should halt;
  * otherwise returns `null` to indicate "continue".
  *
@@ -222,17 +211,14 @@ function hasOtherStopCondition(args: LoopArgs): boolean {
  * to `evaluateStopConditions` (in `./stop-conditions.ts`) for the other
  * stop-condition predicates after the `--max-iters` check. When
  * `state`/`sprintStatus` are `null` (per-iteration load failed; graceful
- * degradation per Story 4.2 §Open Question 4), only the
- * `--max-iters` + `no-stop-condition` branches remain active.
+ * degradation per Story 4.2 §Open Question 4), only the `--max-iters`
+ * branch remains active. Story 4.4 ADDED the `--max-iters=50` default
+ * cap (injected by `runLoop` before `shouldStop` is called) and REMOVED
+ * the v0.1 `no-stop-condition` placeholder branch — when no stop
+ * condition is supplied, the default-cap injection makes
+ * `args.maxIters` non-undefined and the `--max-iters` branch fires
+ * naturally.
  *
- * The `no-stop-condition` placeholder (Story 4.1 v0.1 pre-Story-4.4) is
- * SUPPRESSED by `hasOtherStopCondition(args)` when the user supplied
- * `--until-epic-end` or `--until-story` alone — without the suppression,
- * the placeholder would fire on iter 0 BEFORE any iteration runs.
- *
- * Stories 4.3-4.10 will extend `evaluateStopConditions` with the other
- * 5 stop-condition types (next-story, phase-end, time-budget,
- * token-budget, stop-on-error / continue-on-error).
  */
 function shouldStop(
   iterCount: number,
@@ -275,18 +261,12 @@ function shouldStop(
     );
     if (reason !== null) return reason;
   }
-  // Story 4.1 v0.1 pre-Story-4.4: no stop condition supplied → halt
-  // immediately. This branch is REMOVED by Story 4.4 when the default
-  // cap (--max-iters=50) is wired. Story 4.2 adds the
-  // `hasOtherStopCondition` guard so the placeholder does NOT fire when
-  // `--until-epic-end` or `--until-story` is supplied alone.
-  if (
-    args.maxIters === undefined &&
-    iterCount === 0 &&
-    !hasOtherStopCondition(args)
-  ) {
-    return { code: "no-stop-condition", iterCount };
-  }
+  // Story 4.4: the v0.1 `no-stop-condition` placeholder branch was
+  // REMOVED. When no stop condition is supplied, `runLoop` injects
+  // `args.maxIters = 50` as a default cap (FR25) BEFORE this gate is
+  // called, so the `--max-iters` branch above fires naturally. When
+  // another stop condition is supplied without `--max-iters`, the
+  // explicit condition controls (no default cap).
   return null;
 }
 
@@ -399,6 +379,34 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
       );
     }
     args = parsed.value;
+  }
+
+  // Story 4.4 (FR25): default `--max-iters=50` when no stop condition is
+  // supplied. The injection ONLY applies when `args.maxIters` is
+  // undefined AND no other stop condition is set. When the user
+  // supplies another stop condition (e.g., `--until-epic-end`,
+  // `--until-story X.Y`, `--next-story`, `--phase-end`) WITHOUT
+  // `--max-iters`, the explicit condition controls and NO default cap
+  // is applied (AC-3 explicit-overrides-default). When `--max-iters`
+  // is explicitly set, this is a no-op.
+  //
+  // Forward-tracker: Stories 4.6/4.7 will EXTEND this stanza with
+  // their flags as they become RUNTIME-WIRED:
+  //   - 4.6: && args.stopOnError !== true && args.continueOnError !== true
+  //   - 4.7: && args.planFirst !== true
+  //
+  // Story 4.5 wired the time-budget + token-budget clauses below.
+  //
+  // The default value (50) matches PRD §Bounded Loop Execution line 589
+  // and epics.md §Story 4.4 AC-1 line 947.
+  if (
+    args.maxIters === undefined &&
+    args.untilEpicEnd !== true &&
+    args.untilStory === undefined &&
+    args.nextStory !== true &&
+    args.phaseEnd !== true
+  ) {
+    args = { ...args, maxIters: 50 };
   }
 
   const runNextFn = opts?.runNextOverride ?? runNext;
@@ -589,11 +597,12 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
   // Compute exit code per FR53 mapping.
   const exitCode: 0 | 1 | 2 = stopReason?.code === "halt-on-error" ? 1 : 0;
 
-  // Defensive: stopReason cannot be null because shouldStop always
-  // returns non-null on iterCount===0 when no stop condition was
-  // supplied, AND on iterCount===maxIters when --max-iters is set, AND
-  // on halt-on-error before this point. But TypeScript can't prove it;
-  // cast via assertion:
+  // Defensive: stopReason cannot be null because the default-cap
+  // injection (Story 4.4) ensures `args.maxIters` is non-undefined
+  // whenever no other stop condition is supplied — so `shouldStop`
+  // ALWAYS fires on `iterCount === maxIters` if no other predicate
+  // fires sooner, AND halt-on-error short-circuits before this point.
+  // TypeScript can't prove the invariant; cast via assertion:
   if (stopReason === null) {
     // Should be unreachable; surface as a defensive ConfigError so any
     // future refactor that breaks the invariant fails loudly.
@@ -618,20 +627,23 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
 
 /**
  * Format the human-readable summary message embedded in the loop's
- * final AR9 line. Mirrors Story 4.1 Task 4.8:
+ * final AR9 line.
  *
- *   - max-iters-reached:  "max-iters reached (1 iteration)" (AC-1 verbatim).
- *   - no-stop-condition:  "no stop condition supplied (Story 4.4 ...)" placeholder.
+ *   - max-iters-reached:  "max-iters (N) reached" (Story 4.4 AC-2
+ *                         verbatim per epics.md line 950). The `(N)`
+ *                         is the cap value (`stopReason.maxIters`),
+ *                         not the actual iter count — tracked as
+ *                         OQ-1 in the Story 4.4 spec.
  *   - halt-on-error:      "halt on error (<failureCode>) at iteration <N>".
+ *   - epic-end-reached / until-story-reached / next-story-reached /
+ *     phase-end-reached:  delegated to the predicate's `message` field
+ *                         (Story 4.2/4.3 verbatim per their AC-1/AC-2).
  */
 function formatExitReason(stopReason: StopReason): string {
   switch (stopReason.code) {
-    case "max-iters-reached": {
-      const plural = stopReason.iterCount === 1 ? "iteration" : "iterations";
-      return `max-iters reached (${stopReason.iterCount} ${plural})`;
-    }
-    case "no-stop-condition":
-      return "no stop condition supplied (Story 4.4 default cap not yet wired) — exiting";
+    case "max-iters-reached":
+      // AC-2 verbatim: "max-iters (N) reached" (epics.md line 950).
+      return `max-iters (${stopReason.maxIters}) reached`;
     case "halt-on-error":
       return `halt on error (${stopReason.failureCode}) at iteration ${stopReason.iterCount}`;
     case "epic-end-reached":
