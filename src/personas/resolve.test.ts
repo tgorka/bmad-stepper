@@ -19,7 +19,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { ConfigError } from "../errors.ts";
-import { resolvePersona } from "./resolve.ts";
+import { resolvePersona, resolvePersonaWithTier } from "./resolve.ts";
 
 describe("resolvePersona", () => {
   let tmpdir = "";
@@ -324,5 +324,157 @@ describe("resolvePersona", () => {
       });
       expect(result).toBe("dev");
     });
+  });
+});
+
+// ─── Story 3.6: resolvePersonaWithTier sibling helper ─────────────────────
+//
+// The new sibling helper duplicates the 4-tier cascade walk + adds tier-
+// tracking. Tier 0 = `--persona override` short-circuit. Tiers 1-4 mirror
+// Story 1.11's existing cascade. Used by Story 3.6 (`--explain`) to surface
+// the persona-tier provenance.
+//
+// Test coverage (per story spec Task 7.6):
+//   - Tier 0 (override): single + multi-tier-fallback fixtures.
+//   - Tier 1 (SKILL.md frontmatter).
+//   - Tier 2 (project config personas: block).
+//   - Tier 3 (built-in defaults — single + multi-persona).
+//   - Tier 4 (_bmad/<module>/config.yaml triggers).
+//   - Cascade-exhaustion throw (no tier resolves).
+
+describe("resolvePersonaWithTier — Story 3.6 sibling helper", () => {
+  let tmpdir = "";
+
+  beforeEach(async () => {
+    tmpdir = await fs.mkdtemp(path.join(os.tmpdir(), "stepper-personas-tier-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpdir, { recursive: true, force: true });
+  });
+
+  it("Tier 0: --persona override short-circuits the 4-tier cascade", async () => {
+    // Even with a Tier 1 SKILL.md fixture present, the override wins.
+    const pluginDir = path.join(tmpdir, "plugin");
+    const skillDir = path.join(pluginDir, "skills", "some-step");
+    await fs.mkdir(skillDir, { recursive: true });
+    await Bun.write(
+      path.join(skillDir, "SKILL.md"),
+      "---\npersona: frontmatter-persona\n---\n",
+    );
+    const result = await resolvePersonaWithTier({
+      stepName: "some-step",
+      personaOverride: "tea",
+      pluginDir,
+      projectRoot: tmpdir,
+    });
+    expect(result.persona).toBe("tea");
+    expect(result.tier).toBe(0);
+    expect(result.tierLabel).toBe("--persona override");
+  });
+
+  it("Tier 0: empty-string personaOverride falls through to lower tiers", async () => {
+    // Empty-string override is treated as "no override" — falls through to
+    // Tier 3 default for bmad-create-prd ("pm").
+    const result = await resolvePersonaWithTier({
+      stepName: "bmad-create-prd",
+      personaOverride: "",
+      projectRoot: tmpdir,
+    });
+    expect(result.persona).toBe("pm");
+    expect(result.tier).toBe(3);
+    expect(result.tierLabel).toBe("built-in defaults");
+  });
+
+  it("Tier 1: SKILL.md frontmatter resolves with tier label", async () => {
+    const pluginDir = path.join(tmpdir, "plugin");
+    const skillDir = path.join(pluginDir, "skills", "fm-step");
+    await fs.mkdir(skillDir, { recursive: true });
+    await Bun.write(
+      path.join(skillDir, "SKILL.md"),
+      "---\npersona: alice\n---\nbody",
+    );
+    const result = await resolvePersonaWithTier({
+      stepName: "fm-step",
+      pluginDir,
+      projectRoot: tmpdir,
+    });
+    expect(result.persona).toBe("alice");
+    expect(result.tier).toBe(1);
+    expect(result.tierLabel).toBe("SKILL.md frontmatter");
+  });
+
+  it("Tier 2: project config personas: block resolves with tier label", async () => {
+    await Bun.write(
+      path.join(tmpdir, "bmad-stepper.config.yaml"),
+      "personas:\n  cfg-step: bob\n",
+    );
+    const result = await resolvePersonaWithTier({
+      stepName: "cfg-step",
+      projectRoot: tmpdir,
+    });
+    expect(result.persona).toBe("bob");
+    expect(result.tier).toBe(2);
+    expect(result.tierLabel).toBe("project-config personas: block");
+  });
+
+  it("Tier 3 single-persona: built-in defaults resolves with tier label", async () => {
+    const result = await resolvePersonaWithTier({
+      stepName: "bmad-product-brief",
+      projectRoot: tmpdir,
+    });
+    expect(result.persona).toBe("analyst");
+    expect(result.tier).toBe(3);
+    expect(result.tierLabel).toBe("built-in defaults");
+  });
+
+  it("Tier 3 multi-persona: returns array with tier 3 label", async () => {
+    // bmad-create-story Tier 3 default is ["analyst", "pm"].
+    const result = await resolvePersonaWithTier({
+      stepName: "bmad-create-story",
+      projectRoot: tmpdir,
+    });
+    expect(Array.isArray(result.persona)).toBe(true);
+    expect([...(result.persona as readonly string[])]).toEqual([
+      "analyst",
+      "pm",
+    ]);
+    expect(result.tier).toBe(3);
+    expect(result.tierLabel).toBe("built-in defaults");
+  });
+
+  it("Tier 4: _bmad/<module>/config.yaml trigger resolves with tier label", async () => {
+    const moduleDir = path.join(tmpdir, "_bmad", "tea");
+    await fs.mkdir(moduleDir, { recursive: true });
+    await Bun.write(
+      path.join(moduleDir, "config.yaml"),
+      "triggers:\n  - some-tea-step\n",
+    );
+    const result = await resolvePersonaWithTier({
+      stepName: "some-tea-step",
+      projectRoot: tmpdir,
+    });
+    expect(result.persona).toBe("tea");
+    expect(result.tier).toBe(4);
+    expect(result.tierLabel).toBe("_bmad/<module>/config.yaml triggers");
+  });
+
+  it("Cascade exhaustion: throws ConfigError with verbatim AC-2 hint when no tier resolves", async () => {
+    let caught: unknown = null;
+    try {
+      await resolvePersonaWithTier({
+        stepName: "totally-unknown-step",
+        projectRoot: tmpdir,
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ConfigError);
+    const error = caught as ConfigError;
+    expect(error.code).toBe("CONFIG_ERROR");
+    expect(error.exitCode).toBe(2);
+    expect(error.actionableHint).toBe(
+      "Add a persona for totally-unknown-step in bmad-stepper.config.yaml under the personas: block.",
+    );
   });
 });

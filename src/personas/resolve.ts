@@ -583,3 +583,136 @@ export async function resolvePersona(
     ac2NoPersonaHint(input.stepName),
   );
 }
+
+// ─── Story 3.6: resolvePersonaWithTier sibling helper ─────────────────────
+//
+// The new sibling helper duplicates the 4-tier cascade walk + adds tier-
+// tracking. Used by Story 3.6 (`--explain` reasoning trace) to surface the
+// persona-tier provenance ("Tier 1: SKILL.md frontmatter" / "Tier 2:
+// project-config personas: block" / etc.). Strictly additive — `resolvePersona`
+// stays UNCHANGED to avoid cascading the return-shape change into the many
+// call sites (Stories 2.2 / 2.4 / 4.1 / 5.* / 6.x).
+//
+// Tier 0 (`--persona` override) short-circuits the cascade per Story 3.5's
+// design decision — the user's explicit override bypasses the 4-tier
+// resolution. Tier 0's tierLabel is "--persona override".
+
+/**
+ * Resolved persona with tier provenance (Story 3.6 explain support).
+ *
+ * - `persona`   — Same shape as `resolvePersona`'s return type:
+ *                 `string | readonly string[]`.
+ * - `tier`      — 0 (`--persona` override) | 1 (SKILL.md frontmatter) |
+ *                 2 (project config) | 3 (built-in defaults) | 4
+ *                 (`_bmad/<module>/config.yaml` triggers).
+ * - `tierLabel` — Human-readable label (e.g. "--persona override",
+ *                 "SKILL.md frontmatter", ...).
+ */
+export interface ResolvedPersonaWithTier {
+  readonly persona: string | readonly string[];
+  readonly tier: 0 | 1 | 2 | 3 | 4;
+  readonly tierLabel: string;
+}
+
+/**
+ * Tier-label string constants (single source of truth for the explain
+ * surface). The Tier 0 label matches Story 3.5's `--persona override`
+ * surface; Tiers 1-4 mirror Story 1.11's existing 4-tier cascade.
+ */
+const TIER_LABEL_OVERRIDE = "--persona override";
+const TIER_LABEL_FRONTMATTER = "SKILL.md frontmatter";
+const TIER_LABEL_PROJECT_CONFIG = "project-config personas: block";
+const TIER_LABEL_DEFAULTS = "built-in defaults";
+const TIER_LABEL_MODULE_CONFIG = "_bmad/<module>/config.yaml triggers";
+
+/**
+ * Same 4-tier cascade as `resolvePersona`, but also returns the tier
+ * the resolution came from. Used by Story 3.6 (`--explain`) to surface
+ * the persona-tier provenance.
+ *
+ * The runner-tier may pre-empt by passing the user's `--persona` value
+ * via `personaOverride`; when supplied (non-empty string), the function
+ * short-circuits with `tier: 0, tierLabel: "--persona override"` —
+ * matching Story 3.5's persona-override branch at `run.ts:1148-1159`.
+ *
+ * **Strictly additive**: this function does NOT modify `resolvePersona`'s
+ * return-shape contract; the existing dispatch path stays unchanged.
+ *
+ * @throws {ConfigError} (code `CONFIG_ERROR`, exit 2) when no tier
+ *   resolves AND no override is supplied. Same verbatim AC-2 hint as
+ *   `resolvePersona`.
+ */
+export async function resolvePersonaWithTier(
+  input: ResolveInput & { readonly personaOverride?: string },
+): Promise<ResolvedPersonaWithTier> {
+  // Tier 0: user-supplied --persona override.
+  if (input.personaOverride !== undefined && input.personaOverride !== "") {
+    return {
+      persona: input.personaOverride,
+      tier: 0,
+      tierLabel: TIER_LABEL_OVERRIDE,
+    };
+  }
+
+  const projectRoot = input.projectRoot ?? process.cwd();
+  const configPath =
+    input.configPath ?? path.join(projectRoot, "bmad-stepper.config.yaml");
+  const bmadDir = input.bmadConfigPath ?? path.join(projectRoot, "_bmad");
+
+  // Tier 1: SKILL.md frontmatter (skipped when pluginDir absent).
+  if (input.pluginDir !== undefined) {
+    const tier1 = await tier1Frontmatter(input.stepName, input.pluginDir);
+    if (tier1 !== null) {
+      return {
+        persona: tier1,
+        tier: 1,
+        tierLabel: TIER_LABEL_FRONTMATTER,
+      };
+    }
+  }
+
+  // Tier 2: project config personas: block.
+  const tier2 = await tier2ProjectConfig(input.stepName, configPath);
+  if (tier2 !== null) {
+    return {
+      persona: tier2,
+      tier: 2,
+      tierLabel: TIER_LABEL_PROJECT_CONFIG,
+    };
+  }
+
+  // Tier 3: hand-curated defaults (synchronous, zero IO).
+  const tier3 = tier3Defaults(input.stepName);
+  if (tier3 !== null) {
+    return {
+      persona: tier3,
+      tier: 3,
+      tierLabel: TIER_LABEL_DEFAULTS,
+    };
+  }
+
+  // Tier 4: _bmad/<module>/config.yaml triggers.
+  const tier4 = await tier4ModuleConfig(input.stepName, bmadDir);
+  if (tier4 !== null) {
+    return {
+      persona: tier4,
+      tier: 4,
+      tierLabel: TIER_LABEL_MODULE_CONFIG,
+    };
+  }
+
+  // No-tier-resolves — fail-loud with the verbatim AC-2 hint.
+  throw new ConfigError(
+    `Persona not resolvable for step "${input.stepName}".`,
+    JSON.stringify({
+      step: input.stepName,
+      tiersChecked: {
+        tier1: input.pluginDir !== undefined ? "checked-no-match" : "skipped",
+        tier2: "checked-no-match",
+        tier3: "checked-no-match",
+        tier4: "checked-no-match",
+      },
+    }),
+    ac2NoPersonaHint(input.stepName),
+  );
+}
