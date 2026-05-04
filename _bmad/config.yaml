@@ -21,7 +21,7 @@ core:
 bmm:
   name: BMAD Method
   description: Planning, PRD, architecture, story creation, dev, retrospective.
-  project_name: bmad-stepper-cc
+  project_name: bmad-stepper
   user_skill_level: intermediate
   planning_artifacts: "{project-root}/_bmad-output/planning-artifacts"
   implementation_artifacts: "{project-root}/_bmad-output/implementation-artifacts"
