@@ -1,0 +1,59 @@
+_bmad-output/implementation-artifacts/epic-3-retrospective.md
+  1d4e065f7719b064 1-297
+_bmad-output/implementation-artifacts/sprint-status.yaml
+  1d4e065f7719b064 2,38,70,73-81
+_bmad-output/implementation-artifacts/3-10-non-locking-read-flags.md
+  1d4e065f7719b064 1-858
+_bmad-output/implementation-artifacts/3-9-watch-live-transcript-tail.md
+  1d4e065f7719b064 1-897
+_bmad-output/implementation-artifacts/3-3-dry-run-flag.md
+  1d4e065f7719b064 1-673
+_bmad-output/implementation-artifacts/3-6-explain-reasoning-trace.md
+  1d4e065f7719b064 1-1010
+_bmad-output/implementation-artifacts/3-5-persona-override-include-optional-no-optional.md
+  1d4e065f7719b064 1-791
+_bmad-output/implementation-artifacts/3-4-step-id-and-scope-flags.md
+  1d4e065f7719b064 1-814
+_bmad-output/implementation-artifacts/3-7-list-candidate-next-steps.md
+  1d4e065f7719b064 1-941
+_bmad-output/implementation-artifacts/3-8-diff-state-and-export-state.md
+  1d4e065f7719b064 1-946
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "287a800fe195102377905271d825ab0e584474dc",
+  "prompts": {
+    "1d4e065f7719b064": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8f5f4be1-15b5-4dd7-b3df-21f915f3eb5f",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 7239,
+      "overriden_lines": 0
+    },
+    "93427a1958b93e17": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7f976703-dd8d-45cd-890b-dffbeda155a9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "tomasz-gorka-endeavor",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_1af3134dd66d0f": {
+      "author": "tomasz-gorka-endeavor"
+    }
+  }
+}
