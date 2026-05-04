@@ -22,4 +22,5 @@
  */
 
 export * as doctor from "./doctor/index.ts";
+export * as loop from "./loop/index.ts";
 export * as next from "./next/index.ts";
