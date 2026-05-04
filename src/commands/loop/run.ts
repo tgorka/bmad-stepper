@@ -38,7 +38,8 @@
  *   - epics.md §Epic 4 lines 887-1062 (Stories 4.1-4.10 stop-condition map).
  */
 
-import type { DagAdjacency } from "../../dag/index.ts";
+import { build as buildDag } from "../../dag/build.ts";
+import type { DagAdjacency, Phase } from "../../dag/index.ts";
 import { emitDispatchAction } from "../../dispatch/index.ts";
 import { ConfigError, StepperError } from "../../errors.ts";
 import { error } from "../../io/log.ts";
@@ -49,6 +50,7 @@ import { type NextResult, type RunNextOptions, runNext } from "../next/run.ts";
 import { type LoopArgs, parseLoopArgs } from "./args.ts";
 import {
   evaluateStopConditions,
+  type LoopContext,
   type SprintStatus,
 } from "./stop-conditions.ts";
 
@@ -80,11 +82,13 @@ export interface IterationRecord {
  * carries the stop-condition-specific fields (e.g., the `maxIters` cap
  * value for `max-iters-reached`).
  *
- * Story 4.2 extends this union with two new variants
- * (`epic-end-reached`, `until-story-reached`) emitted by
- * `evaluateStopConditions` (see `./stop-conditions.ts`). Stories 4.3
- * (`--next-story`, `--phase-end`), 4.5 (`--time-budget`,
- * `--token-budget`), and 4.6 (`--stop-on-error`, `--continue-on-error`)
+ * Story 4.2 extended this union with two variants (`epic-end-reached`,
+ * `until-story-reached`) emitted by `evaluateStopConditions`
+ * (see `./stop-conditions.ts`). Story 4.3 EXTENDS with two MORE
+ * variants (`next-story-reached`, `phase-end-reached`) emitted by the
+ * Story 4.3 predicates (`nextStoryStopCondition`,
+ * `phaseEndStopCondition`). Stories 4.5 (`--time-budget`,
+ * `--token-budget`) and 4.6 (`--stop-on-error`, `--continue-on-error`)
  * will extend with additional variants following the same shape.
  */
 export type StopReason =
@@ -96,6 +100,18 @@ export type StopReason =
       code: "until-story-reached";
       targetStory: string;
       currentStory: string;
+      message: string;
+    }
+  | {
+      code: "next-story-reached";
+      startStory: string;
+      currentStory: string;
+      message: string;
+    }
+  | {
+      code: "phase-end-reached";
+      fromPhase: Phase;
+      toPhase: Phase;
       message: string;
     };
 
@@ -161,22 +177,40 @@ export interface LoopOpts {
    * code passes nothing.
    */
   readonly stderrOverride?: (chunk: string) => void;
+  /**
+   * Story 4.3 test-injection seam: replaces the opt-in `buildDag()` call
+   * used by `--phase-end`. When the stub returns `null`, the
+   * `phaseEndStopCondition` predicate degrades gracefully (returns null
+   * because `loopContext.startPhase === null`); the loop continues with
+   * other stop conditions. Production code passes nothing — the runner
+   * calls `buildDag({ skillNames: [] })` only when `args.phaseEnd === true`.
+   */
+  readonly dagOverride?: () =>
+    | Promise<DagAdjacency | null>
+    | DagAdjacency
+    | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 /**
  * Returns `true` when any non-`--max-iters` stop condition is supplied on
- * the args. Story 4.2 wires `--until-epic-end` + `--until-story`. Stories
- * 4.3/4.5/4.6 will EXTEND this guard with their flags. Used by
- * `shouldStop` to suppress the v0.1 `no-stop-condition` placeholder when
- * the user supplied a stop condition (without `--max-iters`).
+ * the args. Story 4.2 wired `--until-epic-end` + `--until-story`. Story
+ * 4.3 EXTENDS with `--next-story` + `--phase-end`. Stories 4.5/4.6 will
+ * EXTEND further with their flags. Used by `shouldStop` to suppress the
+ * v0.1 `no-stop-condition` placeholder when the user supplied a stop
+ * condition (without `--max-iters`).
  *
  * Story 4.4 will REMOVE this helper entirely when the `--max-iters=50`
  * default cap eliminates the no-stop-condition branch.
  */
 function hasOtherStopCondition(args: LoopArgs): boolean {
-  return args.untilEpicEnd === true || args.untilStory !== undefined;
+  return (
+    args.untilEpicEnd === true ||
+    args.untilStory !== undefined ||
+    args.nextStory === true ||
+    args.phaseEnd === true
+  );
 }
 
 /**
@@ -206,6 +240,7 @@ function shouldStop(
   state: State | null,
   dag: DagAdjacency | null,
   sprintStatus: SprintStatus | null,
+  loopContext: LoopContext | null,
 ): StopReason | null {
   if (args.maxIters !== undefined && iterCount >= args.maxIters) {
     return {
@@ -226,12 +261,17 @@ function shouldStop(
   // `--until-story` from firing whenever the sprint-status load fails or
   // the test injects `null` for it. (Repair r1: tightened the guard from
   // `state !== null && sprintStatus !== null` to `state !== null`.)
+  //
+  // Story 4.3: thread `loopContext` (loop-entry baseline) through to
+  // `evaluateStopConditions` so the new `--next-story` + `--phase-end`
+  // predicates can detect transitions from the baseline.
   if (state !== null) {
     const reason = evaluateStopConditions(
       state,
       dag ?? EMPTY_DAG,
       args,
       sprintStatus ?? undefined,
+      loopContext ?? undefined,
     );
     if (reason !== null) return reason;
   }
@@ -381,6 +421,20 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
     ((chunk: string) => {
       process.stderr.write(chunk);
     });
+  // Story 4.3: opt-in DAG loader for `--phase-end`. Tests inject overrides;
+  // production calls `buildDag({ skillNames: [] })` only when
+  // `args.phaseEnd === true`. The seed-only DAG (Tier 1 of the three-tier
+  // resolver) is sufficient for `state.lastSuccessfulStep.step → phase`
+  // lookups because the seed enumerates all canonical BMAD skills.
+  const dagFn =
+    opts?.dagOverride ??
+    (async () => {
+      try {
+        return await buildDag({ skillNames: [] });
+      } catch {
+        return null;
+      }
+    });
 
   const startedAt = new Date().toISOString();
   // Bun.nanoseconds() returns number (not BigInt) per Bun's docs; we use
@@ -391,6 +445,44 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
   let iterCount = 0;
   let stopReason: StopReason | null = null;
 
+  // Story 4.3: opt-in DAG build at loop entry. Other Story 4.2/4.3
+  // predicates do not consume the DAG; building it costs ~5-10ms but is
+  // avoidable when not needed. Story 4.5+ may always build (broader
+  // predicate consumption). Per Story 4.3 §Open Question 8, the opt-in
+  // heuristic preserves zero-cost behaviour for the other 5+ flags.
+  let loopDag: DagAdjacency | null = null;
+  if (args.phaseEnd === true) {
+    loopDag = await dagFn();
+  }
+
+  // Story 4.3: capture the loop-entry baseline for `--next-story` and
+  // `--phase-end`. The baseline is read ONCE before the first iteration
+  // and reused across all iterations. Predicates compare the just-
+  // completed iteration's story/phase against this baseline (post-
+  // iteration check per Story 4.3 §Open Questions 3 + 10 inheritance).
+  //
+  // Edge case (Story 4.3 §Open Question 2): when `state.lastSuccessfulStep
+  // === null` at entry (fresh project), the baseline fields are `null`.
+  // The predicates short-circuit on `null` baselines; the runLoop
+  // UPDATES the baseline after the first successful iteration so
+  // subsequent iterations have a baseline to compare against.
+  let loopContext: LoopContext = { startStory: null, startPhase: null };
+  {
+    const initialState = await stateFn();
+    const initialStartStory = initialState?.lastSuccessfulStep?.story ?? null;
+    let initialStartPhase: Phase | null = null;
+    if (args.phaseEnd === true && loopDag !== null) {
+      const step = initialState?.lastSuccessfulStep?.step;
+      if (step !== undefined && step !== null) {
+        initialStartPhase = loopDag.nodes.get(step)?.phase ?? null;
+      }
+    }
+    loopContext = {
+      startStory: initialStartStory,
+      startPhase: initialStartPhase,
+    };
+  }
+
   // Iterate until shouldStop fires.
   while (true) {
     // Story 4.2: load state + sprint-status fresh BEFORE each shouldStop
@@ -399,12 +491,20 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
     // predicates without their inputs; the `--max-iters` branch still runs.
     const state = await stateFn();
     const sprintStatus = await sprintStatusFn();
-    // v0.1 conservative: skip the DAG load (predicates do not consume it
-    // yet; Stories 4.3+ will). The empty-DAG sentinel is passed to
-    // satisfy the predicate signature.
-    const dag: DagAdjacency | null = null;
+    // Story 4.3: use the opt-in DAG (loaded once at loop entry when
+    // `args.phaseEnd === true`; null otherwise). The empty-DAG sentinel
+    // is passed downstream to satisfy the predicate signature when
+    // `loopDag === null`.
+    const dag: DagAdjacency | null = loopDag;
 
-    const reason = shouldStop(iterCount, args, state, dag, sprintStatus);
+    const reason = shouldStop(
+      iterCount,
+      args,
+      state,
+      dag,
+      sprintStatus,
+      loopContext,
+    );
     if (reason !== null) {
       // Story 4.2 AC-1: --until-epic-end emits state-snapshot pointer +
       // --resume hint to STDERR per FR54 + AR9 single-line discipline.
@@ -437,6 +537,38 @@ export async function runLoop(opts?: LoopOpts): Promise<LoopResult> {
     };
     iterations.push(record);
     iterCount++;
+
+    // Story 4.3 §Open Question 2: deferred-baseline capture for the
+    // fresh-project edge case. When `loopContext.startStory === null`
+    // (no prior successful step at loop entry), update the baseline
+    // from the just-completed iteration's state so subsequent
+    // iterations have something to compare against. The same applies
+    // to `loopContext.startPhase` when `args.phaseEnd === true`.
+    if (loopContext.startStory === null || loopContext.startPhase === null) {
+      const postState = await stateFn();
+      let nextStartStory = loopContext.startStory;
+      let nextStartPhase = loopContext.startPhase;
+      if (loopContext.startStory === null) {
+        const story = postState?.lastSuccessfulStep?.story ?? null;
+        if (story !== null) {
+          nextStartStory = story;
+        }
+      }
+      if (
+        loopContext.startPhase === null &&
+        args.phaseEnd === true &&
+        loopDag !== null
+      ) {
+        const step = postState?.lastSuccessfulStep?.step;
+        if (step !== undefined && step !== null) {
+          const phase = loopDag.nodes.get(step)?.phase ?? null;
+          if (phase !== null) {
+            nextStartPhase = phase;
+          }
+        }
+      }
+      loopContext = { startStory: nextStartStory, startPhase: nextStartPhase };
+    }
 
     // halt-on-error short-circuit. Any non-zero exitCode OR explicit
     // "halt" action stops the loop. Story 4.6 (--continue-on-error)
@@ -505,6 +637,14 @@ function formatExitReason(stopReason: StopReason): string {
     case "epic-end-reached":
       return stopReason.message;
     case "until-story-reached":
+      return stopReason.message;
+    case "next-story-reached":
+      // AC-1 verbatim message ("next-story boundary reached") plus
+      // structured from→to context per Story 4.2 precedent (AR9 summary
+      // may include extra context beyond the predicate's `message` field).
+      return `next-story boundary reached (${stopReason.startStory} → ${stopReason.currentStory})`;
+    case "phase-end-reached":
+      // AC-2 verbatim message format already includes the from→to context.
       return stopReason.message;
   }
 }

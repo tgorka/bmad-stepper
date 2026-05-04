@@ -263,6 +263,16 @@ describe("runLoop — Test I (AR41 boundary check)", () => {
     expect(source).toMatch(/loadStateUnlocked/);
     expect(source).toMatch(/from\s+["']\.\.\/\.\.\/state\/load\.ts["']/);
   });
+
+  it("src/commands/loop/run.ts imports buildDag from src/dag/build.ts (Story 4.3)", () => {
+    const source = readFileSync(join(import.meta.dir, "run.ts"), "utf-8");
+    // Story 4.3: opt-in DAG build for `--phase-end`. The `buildDag` alias
+    // for the canonical `build` export from `src/dag/build.ts` is the
+    // sole new mid-tier import; foundational/mid-tier-import is
+    // permitted at the top tier per AR41 lines 1294-1302.
+    expect(source).toMatch(/buildDag/);
+    expect(source).toMatch(/from\s+["']\.\.\/\.\.\/dag\/build\.ts["']/);
+  });
 });
 
 // Story 4.2: AR41 boundary check on the new pure-function module.
@@ -535,6 +545,307 @@ describe("runLoop — Test N_42 (Story 4.2: hasOtherStopCondition guard)", () =>
     // runNext call) because state.lastSuccessfulStep.story already
     // matches the target.
     expect(calls()).toBe(0);
+  });
+});
+
+// ─── Story 4.3 integration tests (AC-1 + AC-2 + AC-3 sweep) ───────────────
+
+import type { DagAdjacency, DagNode, Phase } from "../../dag/index.ts";
+
+// Helper: build a state fixture allowing custom step + epic + story.
+function makeStateFixtureFull(
+  epic: number,
+  story: string,
+  step = "bmad-dev-story",
+): State {
+  return {
+    schemaVersion: 1,
+    project: { name: "bmad-stepper", bmadVersion: "v6.x" },
+    lastSuccessfulStep: {
+      step,
+      epic,
+      story,
+      completedAt: "2026-05-02T00:00:00Z",
+    },
+    lastAttempted: null,
+    lastFailureReason: null,
+    lastSnapshot: null,
+    checkpoints: [],
+    runHistory: [],
+  };
+}
+
+// Helper: minimal DAG fixture for Story 4.3 phase-transition tests.
+function makeDagFixture(): DagAdjacency {
+  const nodes = new Map<string, DagNode>();
+  const addNode = (name: string, phase: Phase): void => {
+    nodes.set(name, {
+      name,
+      phase,
+      after: [],
+      before: [],
+      optional: false,
+      persona: null,
+    });
+  };
+  addNode("bmad-create-prd", "planning");
+  addNode("bmad-dev-story", "implementation");
+  addNode("bmad-retrospective", "retro");
+  addNode("bmad-domain-research", "analysis");
+  return { nodes, edgesOut: new Map(), edgesIn: new Map() };
+}
+
+// Helper: build a sequencing state stub. Each call returns the next
+// state in the array; clamps at the last element.
+function sequenceStateStub(
+  states: ReadonlyArray<State | null>,
+): () => State | null {
+  let i = 0;
+  return () => {
+    const out = states[Math.min(i, states.length - 1)] ?? null;
+    i++;
+    return out;
+  };
+}
+
+describe("runLoop --next-story (Story 4.3 AC-1)", () => {
+  it("Test P_43: --next-story fires on story transition (3.2 → 3.3)", async () => {
+    const { stub } = countingStub(successResult());
+    // The runLoop calls stateFn at:
+    //   1) loop entry (baseline capture) → state 3.2
+    //   2) iter-0 pre-check (shouldStop) → state 3.2 (predicate compares baseline === 3.2 → no-fire)
+    //   3) post-iter-0 deferred-baseline update path → only runs if startStory was null;
+    //      our baseline is 3.2 (non-null), so this path is skipped
+    //   4) iter-1 pre-check (shouldStop) → state 3.3 (predicate fires)
+    const states: ReadonlyArray<State | null> = [
+      makeStateFixtureFull(3, "3.2"),
+      makeStateFixtureFull(3, "3.2"),
+      makeStateFixtureFull(3, "3.3"),
+    ];
+    const result = await runLoop({
+      argv: ["--next-story"],
+      runNextOverride: stub,
+      stateOverride: sequenceStateStub(states),
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.iterations.length).toBe(1);
+    expect(result.stopReason.code).toBe("next-story-reached");
+    if (result.stopReason.code !== "next-story-reached") return;
+    expect(result.stopReason.startStory).toBe("3.2");
+    expect(result.stopReason.currentStory).toBe("3.3");
+    expect(result.stopReason.message).toBe("next-story boundary reached");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("Test Q_43: --next-story does NOT fire when story unchanged", async () => {
+    const { stub, calls } = countingStub(successResult());
+    // State remains at 3.2 across iterations.
+    const state = makeStateFixtureFull(3, "3.2");
+    const result = await runLoop({
+      argv: ["--next-story", "--max-iters", "2"],
+      runNextOverride: stub,
+      stateOverride: () => state,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    expect(result.iterations.length).toBe(2);
+    expect(calls()).toBe(2);
+  });
+
+  it("Test R_43: --next-story works across epic boundaries (3.10 → 4.1)", async () => {
+    const { stub } = countingStub(successResult());
+    // Same call sequence as P_43: loop-entry + iter-0 pre-check at 3.10, then 4.1.
+    const states: ReadonlyArray<State | null> = [
+      makeStateFixtureFull(3, "3.10"),
+      makeStateFixtureFull(3, "3.10"),
+      makeStateFixtureFull(4, "4.1"),
+    ];
+    const result = await runLoop({
+      argv: ["--next-story"],
+      runNextOverride: stub,
+      stateOverride: sequenceStateStub(states),
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("next-story-reached");
+    if (result.stopReason.code !== "next-story-reached") return;
+    expect(result.stopReason.startStory).toBe("3.10");
+    expect(result.stopReason.currentStory).toBe("4.1");
+  });
+});
+
+describe("runLoop --phase-end (Story 4.3 AC-2)", () => {
+  it("Test S_43: --phase-end fires on planning → implementation transition", async () => {
+    const { stub } = countingStub(successResult());
+    const dag = makeDagFixture();
+    // The runLoop calls stateFn at loop entry + per-iter pre-check + post-iter
+    // (deferred-baseline path; only fires when one of the baselines is null).
+    // For this test loopContext.startPhase resolves to "planning" (non-null);
+    // baseline.startStory is "3.2" (non-null) — so the deferred-baseline path
+    // is skipped. Sequence: loop-entry (planning), iter-0 pre-check (planning,
+    // matches baseline → no-fire), iter-1 pre-check (implementation → fires).
+    const states: ReadonlyArray<State | null> = [
+      makeStateFixtureFull(3, "3.2", "bmad-create-prd"),
+      makeStateFixtureFull(3, "3.2", "bmad-create-prd"),
+      makeStateFixtureFull(3, "3.2", "bmad-dev-story"),
+    ];
+    const result = await runLoop({
+      argv: ["--phase-end"],
+      runNextOverride: stub,
+      stateOverride: sequenceStateStub(states),
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+      dagOverride: () => dag,
+    });
+    expect(result.stopReason.code).toBe("phase-end-reached");
+    if (result.stopReason.code !== "phase-end-reached") return;
+    expect(result.stopReason.fromPhase).toBe("planning");
+    expect(result.stopReason.toPhase).toBe("implementation");
+    expect(result.stopReason.message).toBe(
+      "phase-end (transition planning→implementation) reached",
+    );
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("Test T_43: --phase-end does NOT fire when phase unchanged", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const dag = makeDagFixture();
+    // State always returns the same step (implementation phase).
+    const state = makeStateFixtureFull(3, "3.2", "bmad-dev-story");
+    const result = await runLoop({
+      argv: ["--phase-end", "--max-iters", "2"],
+      runNextOverride: stub,
+      stateOverride: () => state,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+      dagOverride: () => dag,
+    });
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    expect(result.iterations.length).toBe(2);
+    expect(calls()).toBe(2);
+  });
+
+  it("Test U_43: --phase-end degrades gracefully when DAG load fails", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const state = makeStateFixtureFull(3, "3.2", "bmad-dev-story");
+    const result = await runLoop({
+      argv: ["--phase-end", "--max-iters", "2"],
+      runNextOverride: stub,
+      stateOverride: () => state,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+      // dagOverride returns null — simulates buildDag failure.
+      dagOverride: () => null,
+    });
+    // The phase-end predicate short-circuits (loopContext.startPhase
+    // === null because DAG load failed). The loop runs to --max-iters cap.
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    expect(calls()).toBe(2);
+  });
+});
+
+describe("runLoop — Test V_43 (--next-story / --phase-end no-stop-condition guard)", () => {
+  it("--next-story alone does NOT trigger no-stop-condition placeholder", async () => {
+    const { stub, calls } = countingStub(successResult());
+    // State stays at 3.2 (predicate would not fire on unchanged story).
+    // Without the hasOtherStopCondition extension, the v0.1 placeholder
+    // would fire on iter-0 BEFORE any iteration runs.
+    const state = makeStateFixtureFull(3, "3.2");
+    // Use --max-iters 1 to bound the loop (the predicate does not fire;
+    // max-iters does). The point: the loop ran AT LEAST one iteration
+    // → the placeholder was correctly suppressed.
+    const result = await runLoop({
+      argv: ["--next-story", "--max-iters", "1"],
+      runNextOverride: stub,
+      stateOverride: () => state,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    expect(calls()).toBe(1);
+  });
+
+  it("--phase-end alone does NOT trigger no-stop-condition placeholder", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const dag = makeDagFixture();
+    const state = makeStateFixtureFull(3, "3.2", "bmad-dev-story");
+    const result = await runLoop({
+      argv: ["--phase-end", "--max-iters", "1"],
+      runNextOverride: stub,
+      stateOverride: () => state,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+      dagOverride: () => dag,
+    });
+    expect(result.stopReason.code).toBe("max-iters-reached");
+    expect(calls()).toBe(1);
+  });
+});
+
+describe("runLoop AC-3 sweep — all four stop conditions (Story 4.3)", () => {
+  it("Sweep-A: --until-epic-end fires when epic done + retro done", async () => {
+    const { stub } = countingStub(successResult());
+    const state = makeStateFixture(3, "3.10");
+    const sprintStatus = makeSprintStatusEpic3Done();
+    const result = await runLoop({
+      argv: ["--until-epic-end"],
+      runNextOverride: stub,
+      stateOverride: () => state,
+      sprintStatusOverride: () => sprintStatus,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("epic-end-reached");
+  });
+
+  it("Sweep-B: --until-story 3.2 fires on exact match", async () => {
+    const { stub } = countingStub(successResult());
+    const state = makeStateFixture(3, "3.2");
+    const result = await runLoop({
+      argv: ["--until-story", "3.2"],
+      runNextOverride: stub,
+      stateOverride: () => state,
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("until-story-reached");
+  });
+
+  it("Sweep-C: --next-story fires on story transition (3.2 → 3.3)", async () => {
+    const { stub } = countingStub(successResult());
+    const states: ReadonlyArray<State | null> = [
+      makeStateFixtureFull(3, "3.2"),
+      makeStateFixtureFull(3, "3.2"),
+      makeStateFixtureFull(3, "3.3"),
+    ];
+    const result = await runLoop({
+      argv: ["--next-story"],
+      runNextOverride: stub,
+      stateOverride: sequenceStateStub(states),
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+    });
+    expect(result.stopReason.code).toBe("next-story-reached");
+  });
+
+  it("Sweep-D: --phase-end fires on planning → implementation transition", async () => {
+    const { stub } = countingStub(successResult());
+    const dag = makeDagFixture();
+    const states: ReadonlyArray<State | null> = [
+      makeStateFixtureFull(3, "3.2", "bmad-create-prd"),
+      makeStateFixtureFull(3, "3.2", "bmad-create-prd"),
+      makeStateFixtureFull(3, "3.2", "bmad-dev-story"),
+    ];
+    const result = await runLoop({
+      argv: ["--phase-end"],
+      runNextOverride: stub,
+      stateOverride: sequenceStateStub(states),
+      sprintStatusOverride: () => null,
+      stderrOverride: () => {},
+      dagOverride: () => dag,
+    });
+    expect(result.stopReason.code).toBe("phase-end-reached");
   });
 });
 
