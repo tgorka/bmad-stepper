@@ -1,12 +1,12 @@
 /**
  * src/io/paths.ts — Path scope-checker (NFR-S2, AR42).
  *
- * Foundational module per AR41. Sibling foundational imports allowed:
- * `../errors.ts` for `PathologicalInputError` (the registered code we reuse
- * for SCOPE_VIOLATION-class failures — `errors.ts` does not yet have a
- * dedicated `SCOPE_VIOLATION` code, so we route through the existing
- * `PATHOLOGICAL_INPUT` code per the dev-task constraint to avoid mutating
- * the central registry from this story).
+ * Foundational module per AR41. Sibling foundational import allowed:
+ * `../errors.ts` for `ScopeViolationError` (the dedicated SCOPE_VIOLATION
+ * code introduced in Story 1.5; the throw-site migration from
+ * `PathologicalInputError` to `ScopeViolationError` was completed in
+ * Story 1.6 Task 6.4 — Story 1.5 review I-finding I3 deferred-task
+ * resolution).
  *
  * `assertWithinScope(path)` throws when a write target is outside the three
  * allowed write roots (AR42 + AC-2):
@@ -20,7 +20,7 @@
 
 import * as os from "node:os";
 import * as path from "node:path";
-import { PathologicalInputError } from "../errors.ts";
+import { ScopeViolationError } from "../errors.ts";
 
 export const STEPPER_INTERNAL_ROOT = "_bmad-output/.stepper";
 export const BMAD_OUTPUT_ROOT = "_bmad-output";
@@ -46,9 +46,9 @@ function isInside(parent: string, child: string): boolean {
 }
 
 /**
- * Throws a `PathologicalInputError` (code `PATHOLOGICAL_INPUT`, exitCode 5)
- * when `targetPath` resolves outside the allowed write roots. The thrown
- * error's `actionableHint` directs the user to the project's path scope
+ * Throws a `ScopeViolationError` (code `SCOPE_VIOLATION`, exitCode 5) when
+ * `targetPath` resolves outside the allowed write roots. The thrown error's
+ * `actionableHint` directs the user to the project's path scope
  * documentation.
  *
  * The helper resolves the target against `process.cwd()` as the project
@@ -74,7 +74,7 @@ export function assertWithinScope(targetPath: string): void {
     return;
   }
 
-  throw new PathologicalInputError(
+  throw new ScopeViolationError(
     `SCOPE_VIOLATION: write target outside allowed roots: ${targetPath} (resolved: ${resolvedTarget})`,
     `allowed roots: ${stepperInternalAbs}, ${bmadOutputAbs}, ${tmpRoot}`,
   );

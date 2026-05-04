@@ -149,7 +149,7 @@ export class PathologicalInputError extends StepperError {
   override readonly code = "PATHOLOGICAL_INPUT" as const;
   override readonly exitCode = 5 as const;
   override readonly actionableHint =
-    "Check the input shape against the schema in _bmad-output/.stepper/runs/<latest>/log.md.";
+    "Run /bmad-next --recompute-state to rebuild the cache.";
 }
 
 export class ScopeViolationError extends StepperError {

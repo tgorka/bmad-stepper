@@ -3,12 +3,16 @@
  *
  * Pure path-string assertions; no IO. Uses `os.tmpdir()` for the third
  * allowed-root check (AR35 — tests use unique tmpdirs in real IO tests).
+ *
+ * After Story 1.6 Task 6.4 the throw site routes through
+ * `ScopeViolationError` (registered in Story 1.5); the assertions reflect
+ * the migrated class + code.
  */
 
 import { describe, expect, it } from "bun:test";
 import * as os from "node:os";
 import * as path from "node:path";
-import { PathologicalInputError } from "../errors.ts";
+import { ScopeViolationError } from "../errors.ts";
 import { assertWithinScope } from "./paths.ts";
 
 describe("assertWithinScope — allowed roots", () => {
@@ -40,20 +44,18 @@ describe("assertWithinScope — allowed roots", () => {
 
 describe("assertWithinScope — forbidden roots", () => {
   it("rejects /etc/passwd (system path, outside all allowed roots)", () => {
-    expect(() => assertWithinScope("/etc/passwd")).toThrow(
-      PathologicalInputError,
-    );
+    expect(() => assertWithinScope("/etc/passwd")).toThrow(ScopeViolationError);
   });
 
   it("rejects _bmad/config.yaml (BMAD installed-files dir is read-only per AR42)", () => {
     expect(() => assertWithinScope("_bmad/config.yaml")).toThrow(
-      PathologicalInputError,
+      ScopeViolationError,
     );
   });
 
   it("rejects _bmad-output/../etc/passwd (..-traversal escape)", () => {
     expect(() => assertWithinScope("_bmad-output/../../etc/passwd")).toThrow(
-      PathologicalInputError,
+      ScopeViolationError,
     );
   });
 
@@ -61,18 +63,18 @@ describe("assertWithinScope — forbidden roots", () => {
     // path.resolve does not expand `~`; the literal `~` becomes a child of cwd
     // which is outside _bmad-output/ and outside os.tmpdir(), so this rejects.
     expect(() => assertWithinScope("~/.claude/plugins/foo.json")).toThrow(
-      PathologicalInputError,
+      ScopeViolationError,
     );
   });
 
-  it("thrown error carries PATHOLOGICAL_INPUT code (registered SCOPE_VIOLATION-class)", () => {
+  it("thrown error carries SCOPE_VIOLATION code (Story 1.6 Task 6.4 migration)", () => {
     try {
       assertWithinScope("/etc/passwd");
       throw new Error("expected assertWithinScope to throw");
     } catch (err) {
-      expect(err).toBeInstanceOf(PathologicalInputError);
-      const stepperErr = err as PathologicalInputError;
-      expect(stepperErr.code).toBe("PATHOLOGICAL_INPUT");
+      expect(err).toBeInstanceOf(ScopeViolationError);
+      const stepperErr = err as ScopeViolationError;
+      expect(stepperErr.code).toBe("SCOPE_VIOLATION");
       expect(stepperErr.exitCode).toBe(5);
       expect(stepperErr.message).toMatch(/SCOPE_VIOLATION/);
     }
