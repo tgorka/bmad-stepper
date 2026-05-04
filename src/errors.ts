@@ -106,8 +106,38 @@ export class BmadNotInstalledError extends StepperError {
 export class UnknownBmadSkillError extends StepperError {
   override readonly code = "UNKNOWN_BMAD_SKILL" as const;
   override readonly exitCode = 3 as const;
-  override readonly actionableHint =
+  /**
+   * Per-instance override for the actionable hint (Story 1.10 AC-3).
+   *
+   * The architecture (line 1381) and Story 1.10 AC-3 mandate a verbatim
+   * "Add an override for <skill> in bmad-stepper.config.yaml under the
+   * overrides: block." hint at the throw site, but the registry default
+   * (`DEFAULT_HINT` below) was authored from a discovery angle in
+   * Story 1.2. To deliver the AC-3 verbatim string without rewriting the
+   * registry default (which would force every Story 1.2 consumer to
+   * change), Story 1.10 extends this single class with an optional
+   * constructor arg that overrides the hint per-instance. The base
+   * `StepperError.toJSON()` and the global formatter both render
+   * `actionableHint` (this getter), so the override flows through
+   * unchanged.
+   *
+   * Backwards compatibility: the registry CI gate (`src/errors.test.ts`)
+   * instantiates each subclass via `new Ctor("test message")` and
+   * `new Ctor("primary message", "extra detail line")` — both shapes are
+   * preserved (the 3rd arg is optional and defaults to `undefined`).
+   */
+  private readonly hintOverride?: string;
+  private static readonly DEFAULT_HINT =
     "Run /bmad-next --list to see the candidate skills your BMAD installation registers.";
+
+  constructor(message: string, detail?: string, hintOverride?: string) {
+    super(message, detail);
+    this.hintOverride = hintOverride;
+  }
+
+  override get actionableHint(): string {
+    return this.hintOverride ?? UnknownBmadSkillError.DEFAULT_HINT;
+  }
 }
 
 export class DagCycleError extends StepperError {
@@ -176,8 +206,36 @@ export class TimeoutError extends StepperError {
 export class ConfigError extends StepperError {
   override readonly code = "CONFIG_ERROR" as const;
   override readonly exitCode = 2 as const;
-  override readonly actionableHint =
+  /**
+   * Per-instance override for the actionable hint (Story 1.11 AC-2).
+   *
+   * Story 1.11 AC-2 mandates a verbatim hint at the throw site for
+   * persona-resolver failures: "Add a persona for <step> in
+   * bmad-stepper.config.yaml under the personas: block.". This diverges
+   * from the registry default below (which was authored from a generic
+   * config-validation angle in Story 1.2). The optional 3rd constructor
+   * arg + getter pattern matches the Story 1.10 `UnknownBmadSkillError`
+   * precedent — the override flows through `actionableHint` (which the
+   * global error formatter renders) without forcing every Story 1.2
+   * consumer to change.
+   *
+   * Backwards compatibility: the registry CI gate (`src/errors.test.ts`)
+   * instantiates each subclass via `new Ctor("test message")` and
+   * `new Ctor("primary message", "extra detail line")` — both shapes are
+   * preserved (the 3rd arg is optional and defaults to `undefined`).
+   */
+  private readonly hintOverride?: string;
+  private static readonly DEFAULT_HINT =
     "See bmad-stepper.config.yaml; run /bmad-next --doctor to validate the file against the schema.";
+
+  constructor(message: string, detail?: string, hintOverride?: string) {
+    super(message, detail);
+    this.hintOverride = hintOverride;
+  }
+
+  override get actionableHint(): string {
+    return this.hintOverride ?? ConfigError.DEFAULT_HINT;
+  }
 }
 
 export class MigrationFailureError extends StepperError {
