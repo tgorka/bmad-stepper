@@ -1,5 +1,5 @@
 # generated: 2026-04-30
-# last_updated: 2026-05-04T02:45:00Z  # Story 4.7 code-review complete (verdict approve)
+# last_updated: 2026-05-05T06:57:21Z  # epic-5-retrospective COMPLETE (optional → done); EPIC 5 fully closed (all 6 stories + retrospective done); next surface = Story 6.1
 # project: bmad-stepper
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-30
-last_updated: 2026-05-04T02:45:00Z
+last_updated: 2026-05-05T06:57:21Z
 project: bmad-stepper
 project_key: NOKEY
 tracking_system: file-system
@@ -79,7 +79,7 @@ development_status:
   3-9-watch-live-transcript-tail: done
   3-10-non-locking-read-flags: done
   epic-3-retrospective: done
-  epic-4: in-progress
+  epic-4: done
   4-1-bmad-loop-command-skeleton: done
   4-2-stop-condition-epic-end-and-story-x-y: done
   4-3-stop-condition-next-story-and-phase-end: done
@@ -87,18 +87,18 @@ development_status:
   4-5-stop-condition-time-budget-and-token-budget: done
   4-6-stop-condition-error-with-stop-on-error-continue-on-error: done
   4-7-plan-first-dry-run-preview: done
-  4-8-checkpoint-each-step-type: backlog
-  4-9-sigint-graceful-exit: backlog
-  4-10-loop-exit-reason-resume-hint: backlog
-  epic-4-retrospective: optional
-  epic-5: backlog
-  5-1-retry-failure-mode: backlog
-  5-2-skip-failure-mode-skip-flag: backlog
-  5-3-route-to-fixer-mode-auto-fix-flag: backlog
-  5-4-escalate-failure-mode: backlog
-  5-5-interactive-pause-between-steps: backlog
-  5-6-per-step-failure-policy-via-config-actionable-errors: backlog
-  epic-5-retrospective: optional
+  4-8-checkpoint-each-step-type: done
+  4-9-sigint-graceful-exit: done
+  4-10-loop-exit-reason-resume-hint: done
+  epic-4-retrospective: done
+  epic-5: done
+  5-1-retry-failure-mode: done
+  5-2-skip-failure-mode-skip-flag: done
+  5-3-route-to-fixer-mode-auto-fix-flag: done
+  5-4-escalate-failure-mode: done
+  5-5-interactive-pause-between-steps: done
+  5-6-per-step-failure-policy-via-config-actionable-errors: done
+  epic-5-retrospective: done
   epic-6: backlog
   6-1-bmad-stepper-config-yaml-schema-loader: backlog
   6-2-dag-overrides-block: backlog
