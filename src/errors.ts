@@ -34,7 +34,8 @@ export type StepperErrorCode =
   | "BUDGET_EXCEEDED"
   | "TIMEOUT"
   | "CONFIG_ERROR"
-  | "MIGRATION_FAILURE";
+  | "MIGRATION_FAILURE"
+  | "SKIP_REQUIRES_RESUME";
 
 export type StepperExitCode = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -73,7 +74,7 @@ export abstract class StepperError extends Error {
   }
 }
 
-// ─── Concrete subclasses (16 codes — AC-2 fixed list + Story 1.5 ScopeViolationError) ───────
+// ─── Concrete subclasses (17 codes — AC-2 fixed list + Story 1.5 ScopeViolationError + Story 5.2 SkipRequiresResumeError) ───────
 
 export class LockContentionError extends StepperError {
   override readonly code = "LOCK_CONTENTION" as const;
@@ -245,6 +246,36 @@ export class MigrationFailureError extends StepperError {
     "Run /bmad-next --doctor to inspect the failing migration; restore _bmad-output/.stepper/state.yaml from .bak and re-run the migration.";
 }
 
+/**
+ * Story 5.2 — `--skip <step>` requires `--resume` cross-validation error.
+ *
+ * Thrown by `src/commands/next/run.ts` when the user invokes
+ * `/bmad-next --skip <step>` WITHOUT the co-required `--resume` flag.
+ * Per epics.md AC line 1078-1080 (Story 5.2 BDD block 2), the runner
+ * exits 2 with the BYTE-IDENTICAL hint
+ * `--skip requires --resume to advance state. Run /bmad-next --skip <step> --resume.`
+ *
+ * Story 5.1 INTENTIONALLY did NOT add new error classes per
+ * epic-4-retrospective.md §Recommendations item 3 ("Epic 5 should NOT
+ * add new error classes — registry stability discipline established
+ * across Epics 2/3/4"). Story 5.2 INTENTIONALLY DEVIATES from that
+ * recommendation per OQ-1 — the AC-mandated verbatim hint string is
+ * NOT byte-identical to any existing class's actionableHint, and the
+ * cleanest path is a NEW class with `exitCode = 2` + the AC-verbatim
+ * hint baked in. The alternatives (reusing ConfigError with a third
+ * `hintOverride` instance, or reusing PathologicalInputError which
+ * has the wrong exitCode 5) were rejected.
+ *
+ * The hint matches the AR22 regex `/^.*(Run|See|Try|Check) /` via the
+ * trailing "Run /bmad-next --skip <step> --resume." segment.
+ */
+export class SkipRequiresResumeError extends StepperError {
+  override readonly code = "SKIP_REQUIRES_RESUME" as const;
+  override readonly exitCode = 2 as const;
+  override readonly actionableHint =
+    "--skip requires --resume to advance state. Run /bmad-next --skip <step> --resume.";
+}
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 /**
@@ -274,6 +305,7 @@ export const errorRegistry = {
   TimeoutError,
   ConfigError,
   MigrationFailureError,
+  SkipRequiresResumeError,
 } as const;
 
 export type ErrorRegistry = typeof errorRegistry;

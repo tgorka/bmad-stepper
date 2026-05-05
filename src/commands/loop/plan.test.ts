@@ -203,22 +203,45 @@ describe("computePlan — PC5 (v0.1 null-token aggregation)", () => {
   });
 });
 
-// ─── PC6: checkpoints with --checkpoint-each ──────────────────────────────
+// ─── PC6: checkpoints with --checkpoint-each (Story 4.8 phase-match) ──────
 
-describe("computePlan — PC6 (--checkpoint-each story surfaces checkpoint locations)", () => {
-  it("checkpointEachConfigured === true; checkpoints.length > 0", () => {
+describe("computePlan — PC6 (Story 4.8: --checkpoint-each implementation surfaces only implementation-phase checkpoints)", () => {
+  it("checkpointEachConfigured === true; checkpoints.length > 0; only implementation-phase steps have checkpoints", () => {
     const plan = computePlan(
       freshState(),
       seedDag(),
       null,
-      defaultArgs({ checkpointEach: "story" }),
+      defaultArgs({ checkpointEach: "implementation" }),
     );
     expect(plan.checkpointEachConfigured).toBe(true);
     expect(plan.checkpoints.length).toBeGreaterThan(0);
     for (const cp of plan.checkpoints) {
-      expect(cp.stepType).toBe("story");
-      const inSteps = plan.steps.some((s) => s.step === cp.afterStep);
-      expect(inSteps).toBe(true);
+      expect(cp.stepType).toBe("implementation");
+      const matched = plan.steps.find((s) => s.step === cp.afterStep);
+      expect(matched).toBeDefined();
+      expect(matched?.phase).toBe("implementation");
+    }
+    // Step-d + step-e are the implementation-phase steps in the seed DAG;
+    // only steps reached during the plan walk are surfaced.
+    const cpSteps = plan.checkpoints.map((c) => c.afterStep);
+    for (const cp of plan.checkpoints) {
+      expect(["step-d", "step-e"]).toContain(cp.afterStep);
+    }
+    expect(cpSteps.length).toBeGreaterThan(0);
+  });
+
+  it("checkpointEach analysis surfaces only analysis-phase checkpoints (no over-counting)", () => {
+    const plan = computePlan(
+      freshState(),
+      seedDag(),
+      null,
+      defaultArgs({ checkpointEach: "analysis" }),
+    );
+    expect(plan.checkpointEachConfigured).toBe(true);
+    for (const cp of plan.checkpoints) {
+      expect(cp.stepType).toBe("analysis");
+      const matched = plan.steps.find((s) => s.step === cp.afterStep);
+      expect(matched?.phase).toBe("analysis");
     }
   });
 });
@@ -375,12 +398,12 @@ describe("formatPlan — PF4 (checkpoint section rendering)", () => {
     const cps: PlanCheckpoint[] = [
       {
         afterStep: "step-1",
-        stepType: "story",
+        stepType: "implementation",
         description: "checkpoint after step-1",
       },
       {
         afterStep: "step-2",
-        stepType: "story",
+        stepType: "implementation",
         description: "checkpoint after step-2",
       },
     ];

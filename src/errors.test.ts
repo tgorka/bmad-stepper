@@ -7,8 +7,18 @@
  *   (b) every hint matches /^.*(Run|See|Try|Check) /
  *   (c) every code is unique
  *   (d) every exitCode ∈ {0,1,2,3,4,5}
- * plus the AC-2 fixed-list assertion (16 codes registered — the AC-2
- * baseline of 15 plus `SCOPE_VIOLATION` added in Story 1.5).
+ *   (e) every actionableHint is SINGLE-LINE — no `\n` or `\r` (Story 5.6 — FR46)
+ * plus the AC-2 fixed-list assertion (17 codes registered — the AC-2
+ * baseline of 15 plus `SCOPE_VIOLATION` added in Story 1.5 plus
+ * `SKIP_REQUIRES_RESUME` added in Story 5.2 per OQ-1 deviation from the
+ * Story 5.1 epic-4-retro Recommendations item 3 ("Epic 5 should NOT add
+ * new error classes"); the AC-mandated verbatim hint string justifies
+ * the dedicated class).
+ *
+ * Story 5.6 EXTENDED the gate with the single-line constraint per FR46
+ * ("main-thread output is exactly one line; full detail in run log").
+ * Future Epic 6+ classes inherit the gate AUTOMATICALLY (no per-class
+ * assertion needed) — failing the gate is the discoverability signal.
  *
  * This test is the FIRST source-code test of the project and the FIRST
  * release-blocker gate enforced by `bun run check` (AR36).
@@ -17,6 +27,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   errorRegistry,
+  SkipRequiresResumeError,
   StepperError,
   type StepperErrorCode,
 } from "./errors.ts";
@@ -38,6 +49,7 @@ const REQUIRED_CODES: ReadonlyArray<StepperErrorCode> = [
   "TIMEOUT",
   "CONFIG_ERROR",
   "MIGRATION_FAILURE",
+  "SKIP_REQUIRES_RESUME",
 ];
 
 const HINT_REGEX = /^.*(Run|See|Try|Check) /;
@@ -47,8 +59,8 @@ describe("errorRegistry", () => {
   const constructors = Object.values(errorRegistry);
   const instances = constructors.map((Ctor) => new Ctor("test message"));
 
-  it("contains exactly 16 entries", () => {
-    expect(constructors).toHaveLength(16);
+  it("contains exactly 17 entries", () => {
+    expect(constructors).toHaveLength(17);
   });
 
   it("registers all required codes (AC-2 fixed list)", () => {
@@ -65,6 +77,19 @@ describe("errorRegistry", () => {
   it("every hint starts with Run/See/Try/Check (AC-1 b — AR22 regex)", () => {
     for (const instance of instances) {
       expect(instance.actionableHint).toMatch(HINT_REGEX);
+    }
+  });
+
+  it("every actionableHint is SINGLE-LINE — no \\n or \\r (Story 5.6 — FR46)", () => {
+    for (const instance of instances) {
+      // FR46: main-thread output is exactly ONE LINE; full detail lives
+      // in the run log only. The CI gate enforces single-line constraint
+      // at the unit level (extends the Story 1.2 errors-registry CI gate
+      // per Story 5.6 AC-2). Future Epic 6+ classes inherit the gate
+      // AUTOMATICALLY — failing this is the discoverability signal.
+      expect(instance.actionableHint).not.toMatch(/\n/);
+      // Defence-in-depth: also reject carriage return (Windows line endings).
+      expect(instance.actionableHint).not.toMatch(/\r/);
     }
   });
 
@@ -112,5 +137,34 @@ describe("errorRegistry", () => {
     const instance = new Ctor("primary message", "extra detail line");
     expect(instance.detail).toBe("extra detail line");
     expect(instance.toJSON().detail).toBe("extra detail line");
+  });
+});
+
+// ─── Story 5.2 — SkipRequiresResumeError verbatim hint check ──────────────
+
+describe("SkipRequiresResumeError (Story 5.2)", () => {
+  it("declares code = SKIP_REQUIRES_RESUME and exitCode = 2", () => {
+    const instance = new SkipRequiresResumeError("test message");
+    expect(instance.code).toBe("SKIP_REQUIRES_RESUME");
+    expect(instance.exitCode).toBe(2);
+  });
+
+  it("exposes the AC-mandated VERBATIM hint string (epics.md line 1080)", () => {
+    const instance = new SkipRequiresResumeError("test message");
+    // BYTE-IDENTICAL per AC line 1080 — every character (including the
+    // trailing period after `--resume.`) must match the AC verbatim.
+    expect(instance.actionableHint).toBe(
+      "--skip requires --resume to advance state. Run /bmad-next --skip <step> --resume.",
+    );
+  });
+
+  it("hint matches the AR22 regex /^.*(Run|See|Try|Check) /", () => {
+    const instance = new SkipRequiresResumeError("test message");
+    expect(instance.actionableHint).toMatch(/^.*(Run|See|Try|Check) /);
+  });
+
+  it("is included in the errorRegistry under the SkipRequiresResumeError key", () => {
+    expect(errorRegistry.SkipRequiresResumeError).toBeDefined();
+    expect(errorRegistry.SkipRequiresResumeError).toBe(SkipRequiresResumeError);
   });
 });

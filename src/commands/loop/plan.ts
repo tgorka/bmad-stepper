@@ -96,19 +96,25 @@ export interface PlannedStep {
 
 /**
  * One checkpoint location in the plan. Surfaced when `--checkpoint-each`
- * is supplied. Story 4.8 forward dependency: when `args.checkpointEach`
- * is `undefined`, the plan's `checkpoints` array is empty.
+ * is supplied AND the planned step's `phase` matches the supplied
+ * step-type. Story 4.8 RUNTIME-WIRES `--checkpoint-each` to the
+ * `verify-and-advance.ts` post-step state save; plan-mode mirrors the
+ * runtime contract by only enumerating checkpoint locations that the
+ * runtime would actually emit.
  *
  * - `afterStep`   — Step name after which the checkpoint would fire.
  *                   Matches a step in `Plan.steps[]`.
- * - `stepType`    — Echoes `args.checkpointEach` ("story" | "epic" | "phase").
+ * - `stepType`    — Echoes `args.checkpointEach` (one of the 5 `Phase`
+ *                   values: `analysis`, `planning`, `solutioning`,
+ *                   `implementation`, `retro`). Story 4.8 RESTRICTED the
+ *                   value to phase-only (the legacy `story|epic|phase`
+ *                   placeholder values are NO LONGER accepted).
  * - `description` — Human-readable single-line description of the
- *                   checkpoint (v0.1 conservative: a boilerplate marker;
- *                   Story 4.8 may refine).
+ *                   checkpoint.
  */
 export interface PlanCheckpoint {
   readonly afterStep: string;
-  readonly stepType: "story" | "epic" | "phase";
+  readonly stepType: Phase;
   readonly description: string;
 }
 
@@ -301,6 +307,23 @@ function extractStopReasonMessage(stopReason: StopReason): string {
       return stopReason.message;
     case "error-stop":
       return stopReason.message;
+    case "manual-sigint":
+      // Story 4.9: SIGINT graceful exit. Plan-mode short-circuits on
+      // SIGINT BEFORE computePlan is reached, so this branch is
+      // unreachable at runtime — but the case is required for
+      // TypeScript exhaustiveness on the discriminated union. Delegate
+      // to the stored AC-3 verbatim message for consistency with
+      // run.ts:formatExitReason.
+      return stopReason.message;
+    case "manual-interactive-halt":
+      // Story 5.5: --interactive per-step pause halt. Plan-mode short-
+      // circuits BEFORE the iteration body (per Story 4.7 AC-1), and the
+      // `--interactive` runtime gate ONLY fires inside the iteration body
+      // — so this branch is unreachable at plan-walk time. The case is
+      // required for TypeScript exhaustiveness on the discriminated
+      // union. Delegate to the stored AC-3 verbatim message for
+      // consistency with run.ts:formatExitReason.
+      return stopReason.message;
   }
 }
 
@@ -308,25 +331,23 @@ function extractStopReasonMessage(stopReason: StopReason): string {
  * Pure-function lookup: would the given node fire a checkpoint under
  * `checkpointEachType`? Returns the checkpoint entry or `null`.
  *
- * v0.1 conservative semantics:
- *   - "phase": surface a checkpoint after every step (Story 4.8 may
- *     refine to first-of-phase only).
- *   - "story": surface a checkpoint after every step.
- *   - "epic":  surface a checkpoint after every step.
- *
- * Story 4.8 will own the precise runtime semantics; v0.1 surfaces the
- * planned locations without filtering by transition type. This matches
- * the spec's wording "DESCRIBES where Story 4.8's eventual wiring would
- * create them".
+ * Story 4.8 semantics (RUNTIME-WIRED): a checkpoint fires ONLY when the
+ * node's `phase` matches `checkpointEachType` exactly. This restricts
+ * the v0.1 (Story 4.7) "accept-all" boilerplate to the actual runtime
+ * contract — `verify-and-advance.ts` (lock-held mid-tier) only appends
+ * a `state.checkpoints[]` entry when the just-completed step's phase
+ * matches the supplied step-type, so plan-mode mirrors that behaviour
+ * faithfully (FIFO-50 cap is enforced at the runtime write site only).
  */
 function matchCheckpointType(
   node: DagNode,
-  checkpointEachType: "story" | "epic" | "phase",
+  checkpointEachType: Phase,
 ): PlanCheckpoint | null {
+  if (node.phase !== checkpointEachType) return null;
   return {
     afterStep: node.name,
     stepType: checkpointEachType,
-    description: `${node.name} [${node.phase}] checkpoint marker (Story 4.8 wires runtime semantics)`,
+    description: `${node.name} [${node.phase}] checkpoint after step (Story 4.8 wires runtime semantics; FIFO-50 cap)`,
   };
 }
 

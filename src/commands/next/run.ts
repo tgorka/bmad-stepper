@@ -98,13 +98,19 @@
 
 import * as path from "node:path";
 import { build, type DagAdjacency, type DagNode } from "../../dag/index.ts";
+import type { Phase } from "../../dag/types.ts";
 import {
   buildDispatchSpec,
   cleanStagingOrphans,
   type Phase as DispatchPhase,
   emitDispatchAction,
 } from "../../dispatch/index.ts";
-import { ConfigError, StepperError } from "../../errors.ts";
+import {
+  ConfigError,
+  SkipRequiresResumeError,
+  StepperError,
+} from "../../errors.ts";
+import { resolveFailurePolicy } from "../../failure-ux/index.ts";
 import { error, info, warn } from "../../io/log.ts";
 import {
   type ResolvedPersonaWithTier,
@@ -250,6 +256,68 @@ export interface RunNextOptions {
    * (functionally equivalent to a real SIGINT delivery).
    */
   readonly watchSignal?: AbortSignal;
+  /**
+   * Story 4.8 (`--checkpoint-each <step-type>`): when supplied, the
+   * loop runner threads this value from `args.checkpointEach` so that
+   * the per-iteration `verify-and-advance.ts` post-step state save can
+   * APPEND a `state.checkpoints[]` entry IF the just-completed step's
+   * `phase` matches this value. The entry shape is `{ branch, sha,
+   * takenAt, stepType }` per AR13 Layer 1; `branch` + `sha` come from
+   * `detectSnapshot()` (Story 1.8); `takenAt` is the iso timestamp at
+   * append; `stepType` is this value. FIFO-evicted at 50 entries (the
+   * `.max(50)` cap on `StateV1Schema.checkpoints[]`).
+   *
+   * The lock-free `runNext` itself does NOT consume this value (it
+   * merely forwards it through to `verify-and-advance.ts` via the
+   * dispatch boundary). Production callers of `runNext` directly do
+   * NOT supply this field — the `/bmad-next` slash-command does not
+   * have a `--checkpoint-each` flag (it is a `/bmad-loop`-only flag).
+   * The value is captured here purely so the loop runner's
+   * `runNextOverride` test seam can pass it through and so that future
+   * Story 6.x integration may forward it across the dispatch boundary.
+   */
+  readonly checkpointEach?: Phase;
+  /**
+   * Story 5.1: per-step failure policy override threaded across the
+   * dispatch boundary to verify-and-advance.ts (test-injection seam;
+   * production reads from config in Story 5.6). Mirrors the Story 4.8
+   * `checkpointEach` threading pattern — the lock-free `runNext`
+   * composer captures the value but does NOT consume it; the loop
+   * runner's `runNextOverride` test seam threads the same value to
+   * `verify-and-advance.ts`'s `RunVerifyAndAdvanceOptions.failurePolicyOverride`
+   * for end-to-end retry-loop testing.
+   *
+   * Story 5.3: when `args.autoFix === true` (--auto-fix flag), the
+   * resolved failure policy is FORCED to `"route-to-fixer"` overriding
+   * any incoming `failurePolicyOverride` value from RunNextOptions OR
+   * from per-step config (per architecture line 499). The override is
+   * unconditional — the runner reads `result.resolvedFailurePolicy`
+   * (computed in runNext) for the threaded value.
+   */
+  readonly failurePolicyOverride?: import("../../failure-ux/index.ts").FailurePolicy;
+  /**
+   * Story 5.1: max-retries override threaded across the dispatch boundary
+   * to verify-and-advance.ts (test-injection seam; production defaults
+   * to 2 per architecture line 494). Mirrors the Story 4.8
+   * `checkpointEach` threading pattern.
+   */
+  readonly maxRetriesOverride?: number;
+  /**
+   * Story 5.6 — optional parsed config object for per-step policy
+   * resolution (FR31 PRIMARY). Production callers receive this from the
+   * Story 6.1 file loader (when it lands); tests pass synthetic config
+   * objects directly. Until Story 6.1 lands, the resolver is invoked
+   * with `undefined` config in production → escalate-default for every
+   * step.
+   *
+   * The shape is a structural subset of `ConfigV1` (only the
+   * `failurePolicies` field is consumed by the resolver). The runNext
+   * composer threads this directly to RunVerifyAndAdvanceOptions.config
+   * (the per-step resolution happens at the dispatch site).
+   */
+  readonly config?: {
+    failurePolicies?: import("../../schemas/config.ts").FailurePolicies;
+  };
 }
 
 /**
@@ -260,10 +328,19 @@ export interface RunNextOptions {
  *
  * The exit code 4 (lock contention) is UNREACHABLE in `runNext` since
  * the runner is lock-free — no possible code path can produce it.
+ *
+ * Story 5.3: `resolvedFailurePolicy` exposes the policy that the runner
+ * resolved for this invocation (after applying the --auto-fix override
+ * per architecture line 499). The loop runner reads this on the per-
+ * iteration result and threads it into the next-iteration's
+ * `RunVerifyAndAdvanceOptions.failurePolicyOverride`. The field is
+ * absent on halt/report results that did NOT compute a policy (e.g.,
+ * --doctor, --upgrade, --list, --explain).
  */
 export interface NextResult {
   readonly exitCode: 0 | 1 | 2 | 3 | 5;
   readonly action: DispatchActionV1;
+  readonly resolvedFailurePolicy?: import("../../failure-ux/index.ts").FailurePolicy;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -325,6 +402,34 @@ function enforceMutuallyExclusiveFlags(args: NextArgs): void {
         noOptional: args.noOptional,
       }),
       "Pass either --include-optional or --no-optional, not both.",
+    );
+  }
+}
+
+/**
+ * Story 5.2 cross-validation closure: `--skip <step>` REQUIRES `--resume`.
+ *
+ * Per epics.md AC line 1078-1080 (Story 5.2 BDD block 2): when `--skip`
+ * is supplied alone (without `--resume`), Stepper exits with code `2`
+ * (configuration error per FR53) and the BYTE-IDENTICAL hint
+ * `--skip requires --resume to advance state. Run /bmad-next --skip <step> --resume.`
+ *
+ * The hint is delivered via `SkipRequiresResumeError` (registry 17 —
+ * NEW class added in Story 5.2 per OQ-1 deviation from Story 5.1
+ * epic-4-retro Recommendations item 3). The class carries the AC-
+ * verbatim `actionableHint`; reusing `ConfigError` with a third
+ * `hintOverride` instance was rejected because the AC mandates a
+ * verbatim hint distinct from any existing class.
+ *
+ * Mirrors the Story 1.7 cross-validation gap closure pattern at
+ * `enforceMutuallyExclusiveFlags` above (the parser is lenient; the
+ * runner enforces).
+ */
+function enforceSkipRequiresResume(args: NextArgs): void {
+  if (args.skip !== undefined && args.resume === false) {
+    throw new SkipRequiresResumeError(
+      `--skip flag requires --resume (received --skip ${JSON.stringify(args.skip)} without --resume)`,
+      JSON.stringify({ skip: args.skip, resume: args.resume }),
     );
   }
 }
@@ -1353,6 +1458,10 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
   try {
     // Step 2: cross-validate flags (Story 1.7 forward-dep closure).
     enforceMutuallyExclusiveFlags(args);
+    // Story 5.2: --skip <step> requires --resume per AC line 1078-1080.
+    // Throws SkipRequiresResumeError (exitCode 2) with the AC-verbatim
+    // actionable hint when --skip is supplied alone.
+    enforceSkipRequiresResume(args);
 
     // Step 3: forward-deferral guards. Story 3.9 removes the `--watch`
     // entry from this block — the streaming-mode short-circuit is now
@@ -1905,7 +2014,29 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       },
       exitCode: 0,
     };
-    return { exitCode: 0, action };
+    // Story 5.3: --auto-fix overrides per-step policy to "route-to-fixer"
+    // for one run (architecture line 499). The override is unconditional
+    // when args.autoFix === true; it overrides ANY incoming
+    // failurePolicyOverride from RunNextOptions OR from per-step config.
+    // The resolvedFailurePolicy is exposed on NextResult so the loop
+    // runner can thread it to per-iteration verify-and-advance.ts.
+    //
+    // Story 5.6 (FR31 PRIMARY): per-step config-driven resolution joins
+    // the priority chain. Priority order per OQ-5:
+    //   1. --auto-fix → "route-to-fixer" (one-run scope per AC line 1144)
+    //   2. opts.failurePolicyOverride (TEST-ONLY SEAM per OQ-5)
+    //   3. resolveFailurePolicy(action.step, opts.config) (production path)
+    //   4. plugin default "escalate" (resolver fallback)
+    // Until Story 6.1 wires the file loader, opts.config is undefined in
+    // production → resolver returns escalate-default for every step.
+    const resolvedFailurePolicy:
+      | import("../../failure-ux/index.ts").FailurePolicy
+      | undefined =
+      args.autoFix === true
+        ? "route-to-fixer"
+        : (opts?.failurePolicyOverride ??
+          resolveFailurePolicy(nextStep.name, opts?.config));
+    return { exitCode: 0, action, resolvedFailurePolicy };
   } catch (err) {
     return haltFromError(err);
   }
