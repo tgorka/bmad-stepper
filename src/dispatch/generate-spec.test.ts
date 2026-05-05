@@ -20,7 +20,7 @@
  *   - phase optional input override (dev-001 deviation).
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -475,5 +475,251 @@ describe("buildDispatchSpec — Story 2.4 Task 11 (contextRefs + requiredSection
       requiredSections: readonly string[];
     };
     expect(outputFormat.requiredSections).toEqual(["title", "status"]);
+  });
+});
+
+// ─── Story 6.3 — info() dispatch-line log includes model (AC-3) ─────────
+//
+// AC-3 — "Stepper logs the model on dispatch line so the user can audit
+// which model handled each step" — covered at the Layer 2 stderr info()
+// channel via `src/dispatch/generate-spec.ts:240-248`. The spyOn pattern
+// matches the existing `src/io/log.test.ts:18-21` + `src/dispatch/emit.test.ts:36`
+// canonical project-wide pattern.
+
+describe("buildDispatchSpec — Story 6.3 AC-3 (info() log includes model)", () => {
+  it("MOD_63_DISPATCH_LOG_1: log line includes `(model sonnet)` when no override is supplied", async () => {
+    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    try {
+      const result = await buildDispatchSpec({
+        stepName: "dev-story",
+        state: minimalState,
+        persona: "dev",
+        stagingRoot: tmp,
+      });
+      expect(result.dispatchSpec.model).toBe("sonnet");
+      // Coalesce all captured writes into a single string for substring +
+      // single-line constraint assertions.
+      const combined = stderrSpy.mock.calls
+        .map((call) => String(call[0]))
+        .join("");
+      expect(combined).toMatch(
+        /dispatch: built spec for step dev-story \(model sonnet\) at /,
+      );
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("MOD_63_DISPATCH_LOG_2: log line includes `(model opus)` when modelOverride: 'opus' is supplied", async () => {
+    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    try {
+      const result = await buildDispatchSpec({
+        stepName: "dev-story",
+        state: minimalState,
+        persona: "dev",
+        modelOverride: "opus",
+        stagingRoot: tmp,
+      });
+      expect(result.dispatchSpec.model).toBe("opus");
+      const combined = stderrSpy.mock.calls
+        .map((call) => String(call[0]))
+        .join("");
+      expect(combined).toMatch(
+        /dispatch: built spec for step dev-story \(model opus\) at /,
+      );
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("MOD_63_DISPATCH_LOG_3: dispatch info() log line is single-line (no `\\n`/`\\r` mid-message)", async () => {
+    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    try {
+      await buildDispatchSpec({
+        stepName: "dev-story",
+        state: minimalState,
+        persona: "dev",
+        modelOverride: "haiku",
+        stagingRoot: tmp,
+      });
+      // Find the specific dispatch-line write among all stderr writes.
+      const dispatchWrite = stderrSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((s) => s.startsWith("dispatch: built spec for step "));
+      expect(dispatchWrite).toBeDefined();
+      // The write itself terminates with a single `\n` (added by info()).
+      // Constraint: zero internal `\r` or additional `\n` before terminator.
+      const body = (dispatchWrite ?? "").replace(/\n$/, "");
+      expect(body).not.toMatch(/[\r\n]/);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+});
+
+// Story 6.4 — `budgets:` per-step config consumer wiring (BUD_64_DISPATCH_*).
+// AC-1 verifies the budget defaults + override resolution at the
+// generate-spec.ts level. AC-3 verifies the info() log line surfaces
+// non-default budget values only (default case stays at Story 6.3 shape).
+
+describe("buildDispatchSpec — Story 6.4 AC-1 (default budget)", () => {
+  it("BUD_64_DISPATCH_DEFAULT_1: default budget when no override (60000 / 300000)", async () => {
+    const result = await buildDispatchSpec({
+      stepName: "dev-story",
+      state: minimalState,
+      persona: "dev",
+      stagingRoot: tmp,
+    });
+    expect(result.dispatchSpec.budget).toEqual({
+      contextTokens: 60_000,
+      timeoutMs: 300_000,
+    });
+  });
+});
+
+describe("buildDispatchSpec — Story 6.4 AC-1 (budgetOverride)", () => {
+  it("BUD_64_DISPATCH_OVERRIDE_1: full override threads through", async () => {
+    const result = await buildDispatchSpec({
+      stepName: "dev-story",
+      state: minimalState,
+      persona: "dev",
+      budgetOverride: { contextTokens: 80_000, timeoutMs: 600_000 },
+      stagingRoot: tmp,
+    });
+    expect(result.dispatchSpec.budget).toEqual({
+      contextTokens: 80_000,
+      timeoutMs: 600_000,
+    });
+  });
+
+  it("BUD_64_DISPATCH_OVERRIDE_2: partial override (only contextTokens) — timeoutMs falls through", async () => {
+    const result = await buildDispatchSpec({
+      stepName: "dev-story",
+      state: minimalState,
+      persona: "dev",
+      budgetOverride: { contextTokens: 80_000 },
+      stagingRoot: tmp,
+    });
+    expect(result.dispatchSpec.budget).toEqual({
+      contextTokens: 80_000,
+      timeoutMs: 300_000,
+    });
+  });
+
+  it("BUD_64_DISPATCH_OVERRIDE_3: partial override (only timeoutMs) — contextTokens falls through", async () => {
+    const result = await buildDispatchSpec({
+      stepName: "dev-story",
+      state: minimalState,
+      persona: "dev",
+      budgetOverride: { timeoutMs: 600_000 },
+      stagingRoot: tmp,
+    });
+    expect(result.dispatchSpec.budget).toEqual({
+      contextTokens: 60_000,
+      timeoutMs: 600_000,
+    });
+  });
+});
+
+describe("buildDispatchSpec — Story 6.4 AC-3 (info() log includes non-default budget)", () => {
+  it("BUD_64_DISPATCH_LOG_1: log line OMITS budget substring when at defaults (60_000 / 300_000)", async () => {
+    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    try {
+      await buildDispatchSpec({
+        stepName: "dev-story",
+        state: minimalState,
+        persona: "dev",
+        stagingRoot: tmp,
+      });
+      const combined = stderrSpy.mock.calls
+        .map((call) => String(call[0]))
+        .join("");
+      // Should match the Story 6.3 shape (no budget substring).
+      expect(combined).toMatch(
+        /dispatch: built spec for step dev-story \(model sonnet\) at /,
+      );
+      expect(combined).not.toMatch(/budget \d+\/\d+ms/);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("BUD_64_DISPATCH_LOG_2: log line INCLUDES budget substring when non-default (80000 / 600000)", async () => {
+    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    try {
+      await buildDispatchSpec({
+        stepName: "dev-story",
+        state: minimalState,
+        persona: "dev",
+        budgetOverride: { contextTokens: 80_000, timeoutMs: 600_000 },
+        stagingRoot: tmp,
+      });
+      const combined = stderrSpy.mock.calls
+        .map((call) => String(call[0]))
+        .join("");
+      expect(combined).toMatch(
+        /dispatch: built spec for step dev-story \(model sonnet, budget 80000\/600000ms\) at /,
+      );
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("BUD_64_DISPATCH_LOG_3: log line surfaces partial-override values when only contextTokens differs", async () => {
+    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    try {
+      await buildDispatchSpec({
+        stepName: "dev-story",
+        state: minimalState,
+        persona: "dev",
+        budgetOverride: { contextTokens: 80_000 },
+        stagingRoot: tmp,
+      });
+      const combined = stderrSpy.mock.calls
+        .map((call) => String(call[0]))
+        .join("");
+      // Partial override → timeoutMs falls through to default 300000.
+      // contextTokens differs → non-default → budget substring surfaces.
+      expect(combined).toMatch(
+        /dispatch: built spec for step dev-story \(model sonnet, budget 80000\/300000ms\) at /,
+      );
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("BUD_64_DISPATCH_LOG_4: log line is single-line (no `\\n`/`\\r` mid-message) when budget surfaces", async () => {
+    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    try {
+      await buildDispatchSpec({
+        stepName: "dev-story",
+        state: minimalState,
+        persona: "dev",
+        budgetOverride: { contextTokens: 80_000, timeoutMs: 600_000 },
+        stagingRoot: tmp,
+      });
+      const dispatchWrite = stderrSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((s) => s.startsWith("dispatch: built spec for step "));
+      expect(dispatchWrite).toBeDefined();
+      const body = (dispatchWrite ?? "").replace(/\n$/, "");
+      expect(body).not.toMatch(/[\r\n]/);
+    } finally {
+      stderrSpy.mockRestore();
+    }
   });
 });

@@ -4157,3 +4157,496 @@ describe("runNext — Story 5.3 --auto-fix flag (RTF_53_RUN_*)", () => {
     expect(result.resolvedFailurePolicy).toBe("escalate");
   });
 });
+
+// ─── Story 6.1: loadConfigOverride seam wiring (FR34-FR40) ────────────────
+
+describe("CFG_61_RUN_*: loadConfigOverride wiring (Story 6.1)", () => {
+  it("CFG_61_RUN_1: loadConfigOverride resolves to config object → resolveFailurePolicy uses the policy", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      loadConfigOverride: () => ({
+        failurePolicies: { "bmad-brainstorming": "retry" },
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+    expect(result.resolvedFailurePolicy).toBe("retry");
+  });
+
+  it("CFG_61_RUN_2: loadConfigOverride NOT used when opts.config supplied directly (opts.config wins)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      // opts.config WINS over loadConfigOverride.
+      config: { failurePolicies: { "bmad-brainstorming": "skip" } },
+      loadConfigOverride: () => ({
+        failurePolicies: { "bmad-brainstorming": "retry" },
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.resolvedFailurePolicy).toBe("skip");
+  });
+
+  it("CFG_61_RUN_3: loadConfigOverride absent + opts.config absent → escalate-default fallback", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.resolvedFailurePolicy).toBe("escalate");
+  });
+
+  it("CFG_61_RUN_4: --auto-fix overrides config policy unconditionally (priority order per OQ-5)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming", "--auto-fix"],
+      loadConfigOverride: () => ({
+        failurePolicies: { "bmad-brainstorming": "retry" },
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.resolvedFailurePolicy).toBe("route-to-fixer");
+  });
+});
+
+// ─── Story 6.2: opts.config?.overrides → BuildInput.overrides wiring ────
+
+describe("OVR_62_RUN_*: opts.config?.overrides threading (Story 6.2)", () => {
+  it("OVR_62_RUN_1: opts.config.overrides threads into build() via the strict path (override accepted)", async () => {
+    // Supply a typed override Record. The override redefines
+    // `bmad-brainstorming` (a seed entry) to a different phase. The
+    // dispatch-spec embeds the phase verbatim in the `taskSpec.task`
+    // string ("Execute BMAD step <name> (phase <phase>) ..."); we
+    // verify the override flowed through by string-matching the
+    // dispatch-spec.json output.
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: {
+        overrides: {
+          "bmad-brainstorming": {
+            phase: "implementation",
+          },
+        },
+      },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    const specPath = path.join(
+      tmp,
+      "staging",
+      result.action.runId,
+      "dispatch-spec.json",
+    );
+    const spec = JSON.parse(await Bun.file(specPath).text()) as {
+      taskSpec: { task: string };
+    };
+    // Override pinned the step to "implementation" (vs the seed's
+    // "analysis" baseline for bmad-brainstorming).
+    expect(spec.taskSpec.task).toContain("phase implementation");
+  });
+
+  it("OVR_62_RUN_2: unknown predecessor in opts.config.overrides → halt action exit 2 with edge-pointing hint (AC-2)", async () => {
+    // Override declares an unknown predecessor → strict path throws
+    // ConfigError; runNext catches it via haltFromError and returns a
+    // halt action carrying the actionable hint.
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: {
+        overrides: {
+          "bmad-brainstorming": {
+            phase: "analysis",
+            after: ["nonexistent-predecessor"],
+          },
+        },
+      },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.action.action).toBe("halt");
+    if (result.action.action !== "halt") return;
+    expect(result.action.exitCode).toBe(2);
+    expect(result.action.message).toMatch(
+      /See bmad-stepper\.config\.yaml at overrides\.bmad-brainstorming\.after\[0\]: predecessor "nonexistent-predecessor"/,
+    );
+    expect(result.action.message).toMatch(/Run \/bmad-next --doctor/);
+    expect(result.action.message).not.toMatch(/[\n\r]/);
+  });
+});
+
+// ─── Story 6.3: opts.config?.models → buildDispatchSpec.modelOverride ──
+//
+// AC-1 — `models:` config block → dispatch-spec.json's `model` field;
+// default `sonnet` if not configured. The runner reads
+// `opts.config?.models?.[stepName]` (Story 6.1 typed `Config.models`)
+// and threads via `modelOverride` (Story 2.2 existing field). Tests
+// supply synthetic config records via the typed `RunNextOptions.config`
+// seam (Story 5.6 + 6.1 + 6.2 frozen).
+
+describe("MOD_63_RUN_*: opts.config?.models threading (Story 6.3)", () => {
+  it("MOD_63_RUN_1: opts.config.models[stepName] threads into dispatch-spec.json's `model` field (AC-1)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: {
+        models: {
+          "bmad-brainstorming": "opus",
+        },
+      },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    const specPath = path.join(
+      tmp,
+      "staging",
+      result.action.runId,
+      "dispatch-spec.json",
+    );
+    const spec = JSON.parse(await Bun.file(specPath).text()) as {
+      model: string;
+    };
+    expect(spec.model).toBe("opus");
+  });
+
+  it("MOD_63_RUN_2: empty config.models record → dispatch-spec.json's model defaults to 'sonnet' (AC-1 fallback)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: {
+        models: {},
+      },
+    });
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    const specPath = path.join(
+      tmp,
+      "staging",
+      result.action.runId,
+      "dispatch-spec.json",
+    );
+    const spec = JSON.parse(await Bun.file(specPath).text()) as {
+      model: string;
+    };
+    expect(spec.model).toBe("sonnet");
+  });
+
+  it("MOD_63_RUN_3: absent opts.config → dispatch-spec.json's model defaults to 'sonnet' (AC-1 fallback)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+    });
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    const specPath = path.join(
+      tmp,
+      "staging",
+      result.action.runId,
+      "dispatch-spec.json",
+    );
+    const spec = JSON.parse(await Bun.file(specPath).text()) as {
+      model: string;
+    };
+    expect(spec.model).toBe("sonnet");
+  });
+
+  it("MOD_63_RUN_4: per-step config selectivity — only the matching step receives the configured model", async () => {
+    // Configure 'haiku' for a DIFFERENT step than the one we dispatch.
+    // The dispatched step should still receive the default 'sonnet'.
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: {
+        models: {
+          "some-other-step": "haiku",
+        },
+      },
+    });
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    const specPath = path.join(
+      tmp,
+      "staging",
+      result.action.runId,
+      "dispatch-spec.json",
+    );
+    const spec = JSON.parse(await Bun.file(specPath).text()) as {
+      model: string;
+    };
+    expect(spec.model).toBe("sonnet");
+  });
+});
+
+describe("MOD_63_RUN_DRYRUN_*: opts.config?.models in --dry-run preview (Story 6.3)", () => {
+  it("MOD_63_RUN_DRYRUN_1: dry-run preview surfaces the configured model", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming", "--dry-run"],
+      config: {
+        models: {
+          "bmad-brainstorming": "opus",
+        },
+      },
+    });
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    expect(result.action.message).toContain("opus");
+    expect(result.action.message).not.toContain("sonnet");
+    expect(result.action.message).toContain("60k context");
+    expect(result.action.message).toContain("5min timeout");
+  });
+
+  it("MOD_63_RUN_DRYRUN_2: dry-run preview defaults to sonnet when config absent", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming", "--dry-run"],
+    });
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    expect(result.action.message).toContain("sonnet");
+  });
+});
+
+// Story 6.4 — `budgets:` per-step config consumer wiring tests. Mirrors
+// the Story 6.3 MOD_63_RUN_* + MOD_63_RUN_DRYRUN_* pattern: the runner
+// reads `opts.config?.budgets?.[stepName]` (Story 6.1 typed Config.budgets
+// field) and threads via `buildDispatchSpec.budgetOverride`. When undefined
+// (no per-step config), defaults fire (60_000 / 300_000) per AC-1.
+
+describe("BUD_64_RUN_*: opts.config?.budgets threading (Story 6.4 AC-1)", () => {
+  it("BUD_64_RUN_1: opts.config.budgets[stepName] threads into dispatch-spec.json's `budget` field", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: {
+        budgets: {
+          "bmad-brainstorming": { contextTokens: 80000, timeoutMs: 600000 },
+        },
+      },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    const specPath = path.join(
+      tmp,
+      "staging",
+      result.action.runId,
+      "dispatch-spec.json",
+    );
+    const spec = JSON.parse(await Bun.file(specPath).text()) as {
+      budget: { contextTokens: number; timeoutMs: number };
+    };
+    expect(spec.budget).toEqual({ contextTokens: 80000, timeoutMs: 600000 });
+  });
+
+  it("BUD_64_RUN_2: empty config.budgets record → defaults 60000/300000", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: {
+        budgets: {},
+      },
+    });
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    const specPath = path.join(
+      tmp,
+      "staging",
+      result.action.runId,
+      "dispatch-spec.json",
+    );
+    const spec = JSON.parse(await Bun.file(specPath).text()) as {
+      budget: { contextTokens: number; timeoutMs: number };
+    };
+    expect(spec.budget).toEqual({ contextTokens: 60000, timeoutMs: 300000 });
+  });
+
+  it("BUD_64_RUN_3: non-matching step key in budgets → defaults 60000/300000", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: {
+        budgets: {
+          "some-other-step": { contextTokens: 100000, timeoutMs: 900000 },
+        },
+      },
+    });
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    const specPath = path.join(
+      tmp,
+      "staging",
+      result.action.runId,
+      "dispatch-spec.json",
+    );
+    const spec = JSON.parse(await Bun.file(specPath).text()) as {
+      budget: { contextTokens: number; timeoutMs: number };
+    };
+    expect(spec.budget).toEqual({ contextTokens: 60000, timeoutMs: 300000 });
+  });
+
+  it("BUD_64_RUN_4: partial override (only contextTokens) — timeoutMs falls through to default", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: {
+        budgets: {
+          "bmad-brainstorming": { contextTokens: 80000 },
+        },
+      },
+    });
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    const specPath = path.join(
+      tmp,
+      "staging",
+      result.action.runId,
+      "dispatch-spec.json",
+    );
+    const spec = JSON.parse(await Bun.file(specPath).text()) as {
+      budget: { contextTokens: number; timeoutMs: number };
+    };
+    expect(spec.budget).toEqual({ contextTokens: 80000, timeoutMs: 300000 });
+  });
+});
+
+describe("BUD_64_RUN_DRYRUN_*: opts.config?.budgets in --dry-run preview (Story 6.4)", () => {
+  it("BUD_64_RUN_DRYRUN_1: preview surfaces the configured budget (80k context, 10min timeout)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming", "--dry-run"],
+      config: {
+        budgets: {
+          "bmad-brainstorming": { contextTokens: 80000, timeoutMs: 600000 },
+        },
+      },
+    });
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    expect(result.action.message).toContain("80k context");
+    expect(result.action.message).toContain("10min timeout");
+    expect(result.action.message).not.toContain("60k context");
+    expect(result.action.message).not.toContain("5min timeout");
+  });
+
+  it("BUD_64_RUN_DRYRUN_2: preview defaults to `60k context, 5min timeout` when config absent", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming", "--dry-run"],
+    });
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    expect(result.action.message).toContain("60k context");
+    expect(result.action.message).toContain("5min timeout");
+  });
+});
+
+// ─── Story 6.5: VER_65_RUN_* — RunNextOptions.config.verifiers type
+// extension (the runner does not consume verifiers at the dispatch tier;
+// the field is forwarded to the verify-and-advance Layer 2 when called
+// in sequence — see VER_65_VANDA_* in verify-and-advance.test.ts for the
+// behaviour validation. These tests confirm the type extension does not
+// regress the dispatch-tier path).
+
+describe("VER_65_RUN_*: opts.config?.verifiers type extension (Story 6.5 AC-1 wiring)", () => {
+  it("VER_65_RUN_1: opts.config.verifiers does not regress runNext dispatch-tier behaviour", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: {
+        verifiers: {
+          "bmad-brainstorming": { requiredFrontmatterSections: ["owner"] },
+        },
+      },
+    });
+    // The runner emits a dispatch action; verifier consumption happens
+    // at Layer 2 (verify-and-advance.ts), not here.
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+  });
+
+  it("VER_65_RUN_2: backwards-compat — absent config.verifiers preserves runNext dispatch-tier semantics", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+  });
+});
+
+// ─── Story 6.6: TLM_66_RUN_* — RunNextOptions.config.telemetry type
+// extension. The runner does NOT consume telemetry at the dispatch tier;
+// the field is forwarded to verify-and-advance Layer 2 when called in
+// sequence — see TLM_66_VANDA_* in verify-and-advance.test.ts for the
+// behaviour validation. These tests confirm the type extension does not
+// regress the dispatch-tier path.
+
+describe("TLM_66_RUN_*: opts.config?.telemetry type extension (Story 6.6 AC-1 wiring)", () => {
+  it("TLM_66_RUN_1: opts.config.telemetry={enabled:true} does not regress runNext dispatch-tier behaviour", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: { telemetry: { enabled: true } },
+    });
+    // runNext composer emits dispatch; telemetry write happens at
+    // verify-and-advance Layer 2, NOT here.
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+  });
+
+  it("TLM_66_RUN_2: backwards-compat — absent config.telemetry preserves runNext dispatch-tier semantics", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+  });
+
+  it("TLM_66_RUN_3: opts.config.telemetry={enabled:false} (explicit default) does not regress dispatch", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      config: { telemetry: { enabled: false } },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+  });
+
+  it("TLM_66_RUN_4: loadConfigOverride returns telemetry → flows through type system", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+      loadConfigOverride: () => ({ telemetry: { enabled: true } }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+  });
+});

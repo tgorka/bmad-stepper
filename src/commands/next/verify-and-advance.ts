@@ -115,9 +115,11 @@ import {
   CheckpointEntrySchema,
   type State,
 } from "../../schemas/state.ts";
+import type { TelemetryRecord } from "../../schemas/telemetry.ts";
 import { detectSnapshot, type Snapshot } from "../../snapshot/detect.ts";
 import { loadStateUnlocked } from "../../state/load.ts";
 import { saveState } from "../../state/save.ts";
+import { writeTelemetryRecord as defaultWriteTelemetryRecord } from "../../telemetry/index.ts";
 import { type RunVerifierResult, runVerifier } from "../../verifiers/index.ts";
 import { parseVerifyAndAdvanceArgs } from "./args.ts";
 
@@ -246,7 +248,41 @@ export interface RunVerifyAndAdvanceOptions {
    */
   readonly config?: {
     failurePolicies?: import("../../schemas/config.ts").FailurePolicies;
+    /**
+     * Story 6.5 — optional per-step verifier config map. When supplied,
+     * `runVerifier` consults `projectVerifiers[stepName]` and merges /
+     * replaces the baseline plugin defaults per the entry's `mode`
+     * field. AR17 + AC-2 enforced: the schema declares NO `custom` /
+     * `schema` field — the registry-side `custom?` callback + `schema`
+     * are PLUGIN-SIDE only and preserved from the baseline.
+     */
+    verifiers?: import("../../schemas/config.ts").Verifiers;
+    /**
+     * Story 6.6 — opt-in telemetry config (FR39, FR40, NFR-S3). When
+     * `enabled === true`, the finally block (Step 12.25) writes a
+     * TelemetryRecord JSONL line to `<telemetryRoot>/<YYYY-MM>.jsonl`
+     * after the transcript write and BEFORE the orphan staging cleanup.
+     * The opt-in gate is `enabled === true` strict-equals (rejects
+     * `undefined`, `false`, `null`, `0`, `""`) per OQ-4. AC-3 mechanism.
+     */
+    telemetry?: import("../../schemas/config.ts").Telemetry;
   };
+  /**
+   * Story 6.6 — test seam: when supplied, overrides the telemetry
+   * directory root for `writeTelemetryRecord`. Production callers omit
+   * this; the writer falls back to `_bmad-output/.stepper/telemetry/`
+   * (the `paths.telemetry` default per `src/config/defaults.ts:48`).
+   * Mirror Story 2.6 `runsRoot?` seam pattern.
+   */
+  readonly telemetryRoot?: string;
+  /**
+   * Story 6.6 — test seam: when supplied, replaces the imported
+   * `writeTelemetryRecord` with a stub. Tests pass a stub that throws
+   * to exercise the best-effort fall-through (Step 12.25 catch +
+   * log.warn). Production callers omit. Mirror Story 6.5
+   * `verifierOverride?` test seam pattern.
+   */
+  readonly writeTelemetryRecordOverride?: typeof import("../../telemetry/index.ts").writeTelemetryRecord;
   /**
    * Story 5.1: max-retries override (test-injection seam; production
    * defaults to 2 per architecture line 494 = 3 total attempts). The
@@ -269,7 +305,18 @@ export interface RunVerifyAndAdvanceOptions {
    */
   readonly verifierOverride?: (
     runId: string,
-    opts: { stepName: string; stagingRoot: string },
+    opts: {
+      stepName: string;
+      stagingRoot: string;
+      /**
+       * Story 6.5 — test seam reflects the runtime `runVerifier`
+       * signature. Production threading: when `opts.config.verifiers` is
+       * supplied, the runner forwards it via this field so the test
+       * stub can capture / assert the merge layer's input. NOT
+       * load-bearing for stubs that ignore it.
+       */
+      projectVerifiers?: import("../../schemas/config.ts").Verifiers;
+    },
   ) => Promise<RunVerifierResult> | RunVerifierResult;
   /**
    * Story 5.1 test-injection seam: invoked between retry attempts to
@@ -1047,6 +1094,9 @@ export async function runVerifyAndAdvance(
       verifierResult = await verifierFn(args.runId, {
         stepName: dispatchSpec.step,
         stagingRoot,
+        ...(opts?.config?.verifiers !== undefined
+          ? { projectVerifiers: opts.config.verifiers }
+          : {}),
       });
 
       if (verifierResult.status !== "fail") {
@@ -1251,6 +1301,9 @@ export async function runVerifyAndAdvance(
         const fixerVerifierResult = await verifierFn(fixerRunId, {
           stepName: dispatchSpec.step,
           stagingRoot,
+          ...(opts?.config?.verifiers !== undefined
+            ? { projectVerifiers: opts.config.verifiers }
+            : {}),
         });
         if (fixerVerifierResult.status !== "fail") {
           // Post-fix verifier PASSES — break out of the retry loop;
@@ -1619,6 +1672,50 @@ export async function runVerifyAndAdvance(
       } catch (writeErr) {
         log.warn(
           `verify-and-advance: transcript write failed (non-fatal): ${writeErr instanceof Error ? writeErr.message : String(writeErr)}`,
+        );
+      }
+    }
+
+    // Step 12.25: Story 6.6 — opt-in telemetry write (best-effort).
+    // Gate: opts?.config?.telemetry?.enabled === true (strict-equals per
+    // OQ-4 — rejects undefined / false / null / 0 / ""). When disabled
+    // (default), this block is SKIPPED → ZERO file system writes (AC-3).
+    // The write happens INSIDE the held lock (per OQ-1) so the
+    // verifierResult + transcript + telemetry triple is atomic per step.
+    // Best-effort try/catch + log.warn (per OQ-8) — a Zod parse error or
+    // filesystem ENOSPC must NOT mask the verifier outcome.
+    if (
+      opts?.config?.telemetry?.enabled === true &&
+      handle !== undefined &&
+      dispatchSpec !== undefined
+    ) {
+      try {
+        const record: TelemetryRecord = {
+          schemaVersion: 1,
+          ts: opts?.nowIso ?? new Date().toISOString(),
+          step: dispatchSpec.step,
+          phase: derivePhaseFromStep(dispatchSpec.step),
+          persona: dispatchSpec.taskSpec?.persona ?? "<unspecified>",
+          model: dispatchSpec.model ?? "sonnet",
+          durationMs: Math.round(performance.now() - startMs),
+          verifierStatus: verifierResult?.status ?? "skip",
+          retries: accumulatedRunHistoryFromRetries.length,
+          tokensIn: args.tokensIn ?? 0,
+          tokensOut: args.tokensOut ?? 0,
+          ...(outcomeError !== undefined
+            ? { errorCode: outcomeError.code }
+            : {}),
+        };
+        const writeFn =
+          opts?.writeTelemetryRecordOverride ?? defaultWriteTelemetryRecord;
+        await writeFn(record, {
+          ...(opts?.telemetryRoot !== undefined
+            ? { telemetryRoot: opts.telemetryRoot }
+            : {}),
+        });
+      } catch (telemetryErr) {
+        log.warn(
+          `verify-and-advance: telemetry write failed (non-fatal): ${telemetryErr instanceof Error ? telemetryErr.message : String(telemetryErr)}`,
         );
       }
     }

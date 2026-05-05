@@ -92,12 +92,37 @@ than attempt invalid actions.
 ```
 Case action == "dispatch":
   Invoke the Task tool with the agent name from the JSON line and the
-  dispatch-spec path as the prompt:
+  dispatch-spec path as the prompt. Story 6.3 — additionally forward the
+  configured `model` parameter so the runtime can route the sub-agent to
+  the requested Anthropic Claude tier (sonnet | opus | haiku):
     Task(
       agent  = <jsonLine.agent>,
-      prompt = "staging/<jsonLine.runId>/dispatch-spec.json"
+      prompt = "staging/<jsonLine.runId>/dispatch-spec.json",
+      model  = <dispatchSpec.model>     # read from staging/<runId>/dispatch-spec.json's `model` field; "sonnet" default per Story 6.3
     )
   Then proceed to Step 4 (capture token counts).
+
+  Note (Story 6.3 AC-2 — `where supported`): If the Claude Code Task tool
+  runtime does not honour the `model` parameter (e.g., on a future
+  runtime change or a bound persona that cannot accept the parameter),
+  the runtime falls back to its default behaviour. Stepper still records
+  the configured model in the dispatch-spec.json + transcript markdown
+  + JSON run log for audit purposes — the configured model is the
+  user's INTENT; runtime acceptance is best-effort. See
+  `docs/configuration.md` `models:` section for configuration syntax.
+
+  Note (Story 6.4 AC-2 — `timeoutMs` cap is best-effort): The dispatch-
+  spec.json's `budget.timeoutMs` is the configured per-step timeout cap
+  (default 300000ms / 5min; `budget.contextTokens` defaults to 60000).
+  The Claude Code Task tool runtime is responsible for enforcing the cap
+  and surfacing a TIMEOUT condition if exceeded. Stepper records the cap
+  in the dispatch-spec.json + transcript markdown + JSON run log for
+  audit purposes — the configured cap is the user's INTENT; runtime
+  enforcement is best-effort. If the runtime exceeds the cap, the
+  slash-command markdown forwards `--error-code TIMEOUT` to
+  `verify-and-advance.ts` which constructs `TimeoutError` (registry code
+  TIMEOUT, exitCode 1, single-line hint). See `docs/configuration.md`
+  `budgets:` section for configuration syntax.
 
 Case action == "report":
   Print the `message` field DIRECTLY to the user. No Task dispatch. No
@@ -420,6 +445,18 @@ resolver (`src/failure-ux/resolve-policy.ts`) is invoked by
 `NextResult`) AND by `src/commands/next/verify-and-advance.ts` (for
 the per-step policy at the verifier-failure dispatch site). Both
 consume the same `failurePolicies:` block.
+
+### Configuration file (Story 6.1 — full schema reference)
+
+Story 6.1 ships the file LOADER that reads `bmad-stepper.config.yaml`
+from disk and validates the result against `ConfigV1Schema`. The full
+configuration model — including all 9 top-level keys, the three-layer
+resolution rule (project > user > defaults), per-key examples, and the
+schema-versioning model — is documented in `docs/configuration.md`.
+
+`/bmad-next` invokes the same `loadConfig()` function as `/bmad-loop`;
+both commands honour the same project + user + defaults layers and
+surface the same `CONFIG_ERROR` (exit 2) on invalid input.
 
 ### Failure modes — escalate (Story 5.4 — Epic 5 default policy)
 

@@ -186,6 +186,36 @@ prescribes:
    completes synchronously without a Task dispatch (the production
    wiring of Task-per-iteration lands in subsequent Epic 4 + Epic 5
    stories that integrate Layer 1's Task tool with the loop runner).
+
+   Story 6.3 — when the future Task-per-iteration wiring lands, the
+   per-iteration Task invocation MUST forward the `model` parameter
+   from the dispatch-spec.json's `model` field (e.g.,
+   `Task(agent=<jsonLine.agent>, prompt="staging/<runId>/dispatch-spec.json",
+   model=<dispatchSpec.model>)`) so the configured per-step model
+   (`config.models[step] ?? "sonnet"`) routes the sub-agent to the
+   requested Anthropic Claude tier. Best-effort caveat (`where supported`):
+   if the runtime does not honour the `model` parameter, fall back to
+   default behaviour. Stepper records the configured model in the
+   dispatch-spec.json + transcript markdown + JSON run log for audit
+   purposes (the configured model is the user's INTENT; runtime
+   acceptance is best-effort). See `commands/bmad-next.md` for the
+   canonical Task-with-model invocation shape and `docs/configuration.md`
+   `models:` section for configuration syntax.
+
+   Story 6.4 — the dispatch-spec.json's `budget.timeoutMs` field carries
+   the configured per-step timeout cap (default 300000ms / 5min;
+   `budget.contextTokens` defaults to 60000). The Claude Code Task tool
+   runtime is responsible for enforcing the cap and surfacing a TIMEOUT
+   condition if exceeded. Best-effort caveat (`where supported`):
+   runtime acceptance of the `timeoutMs` cap is tool-internal; the
+   Task tool does NOT accept a per-call `timeoutMs` parameter. Stepper
+   records the cap in the dispatch-spec.json + transcript markdown +
+   JSON run log for audit purposes (the configured cap is the user's
+   INTENT; runtime enforcement is best-effort). If the runtime exceeds
+   the cap, the slash-command markdown forwards `--error-code TIMEOUT`
+   to `verify-and-advance.ts` which constructs `TimeoutError` (registry
+   code TIMEOUT, exitCode 1, single-line hint). See
+   `docs/configuration.md` `budgets:` section for configuration syntax.
 4. **Bash verify-and-advance** (per-iteration): when the per-iteration
    `runNext` returns a `dispatch` action (production-wiring path), the
    runner is responsible for invoking
@@ -979,6 +1009,21 @@ NFR-M2 (errors-as-primary-UX). See `src/failure-ux/index.ts` for the
 `FailurePolicy` closed union; `src/schemas/config.ts` for
 `FailurePolicySchema` + `FailurePoliciesSchema`; `src/failure-ux/resolve-policy.ts`
 for the resolver's pure-function semantics.
+
+### Configuration file (Story 6.1 — full schema reference)
+
+Story 6.1 ships the file LOADER that reads `bmad-stepper.config.yaml`
+from disk and validates the result against `ConfigV1Schema`. The full
+configuration model — including all 9 top-level keys (`personas`,
+`overrides`, `verifiers`, `failurePolicies`, `models`, `budgets`,
+`paths`, `telemetry`, `schemaVersion`), the three-layer resolution rule
+(project > user > defaults), per-key examples, and the schema-
+versioning model — is documented in `docs/configuration.md`.
+
+The `failurePolicies:` block above is one of those nine keys; consult
+`docs/configuration.md` for the complete reference, including the user-
+config layer (`~/.config/bmad-stepper/config.yaml`) and the deep-merge
+semantics that govern how the layers compose.
 
 ### --interactive flag (Story 5.5 — per-step pause)
 

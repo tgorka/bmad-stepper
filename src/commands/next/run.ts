@@ -120,6 +120,7 @@ import {
 import { watchMostRecentRunLog } from "../../runs/watch.ts";
 import type { DispatchActionV1 } from "../../schemas/dispatch-protocol.ts";
 import type { LastAttempted, State } from "../../schemas/state.ts";
+import { runArchivalAtStartup } from "../../startup/archival-trigger.ts";
 import { diffState } from "../../state/diff.ts";
 import { exportState } from "../../state/export.ts";
 import { loadStateUnlocked } from "../../state/load.ts";
@@ -314,10 +315,83 @@ export interface RunNextOptions {
    * `failurePolicies` field is consumed by the resolver). The runNext
    * composer threads this directly to RunVerifyAndAdvanceOptions.config
    * (the per-step resolution happens at the dispatch site).
+   *
+   * Story 6.2 — extended with `overrides?: Overrides` (typed Zod-
+   * validated record from `loadConfig()` → `config.overrides`). The
+   * runNext composer threads this into `BuildInput.overrides` at every
+   * `build({...})` call site so the DAG builder uses the STRICT Tier 2
+   * path (no YAML parse, ConfigError on unknown predecessor / successor).
+   *
+   * Story 6.3 — extended with `models?: Models` (closed-enum record from
+   * `loadConfig()` → `config.models`). The runNext composer threads
+   * `config.models?.[stepName]` into `buildDispatchSpec({...modelOverride})`
+   * so the dispatch-spec.json's `model` field reflects the configured
+   * value (default "sonnet" — Story 6.1 SDR I-24 PRIMARY HONOURED).
    */
   readonly config?: {
     failurePolicies?: import("../../schemas/config.ts").FailurePolicies;
+    overrides?: import("../../schemas/config.ts").Overrides;
+    models?: import("../../schemas/config.ts").Models;
+    budgets?: import("../../schemas/config.ts").Budgets;
+    /**
+     * Story 6.5 — per-step verifier override map. Forwarded into
+     * `runVerifyAndAdvance` via `RunVerifyAndAdvanceOptions.config.verifiers`
+     * so the verifier registry merges / replaces baseline plugin defaults
+     * per the entry's `mode` field. AR17 + AC-2 enforced via the schema
+     * layer (no `custom` / `schema` field at the project-config tier).
+     */
+    verifiers?: import("../../schemas/config.ts").Verifiers;
+    /**
+     * Story 6.6 — opt-in telemetry config (FR39, FR40, NFR-S3). Forwarded
+     * into `runVerifyAndAdvance` via `RunVerifyAndAdvanceOptions.config.telemetry`.
+     * When `enabled === true`, the verify-and-advance finally block writes a
+     * TelemetryRecord JSONL line (Step 12.25). When `enabled !== true`
+     * (default `false` or absent), zero telemetry files are written (AC-3).
+     */
+    telemetry?: import("../../schemas/config.ts").Telemetry;
+    /**
+     * Story 6.8 — paths block forwarded into `runArchivalAtStartup`
+     * (consumes `paths.runs` + `paths.telemetry`). Production
+     * `import.meta.main` threads the full ConfigV1 via `opts.config`;
+     * tests with the runNext composer entrypoint may omit, in which
+     * case the archival trigger is SKIPPED at runtime per OQ-12.
+     */
+    paths?: import("../../schemas/config.ts").Paths;
   };
+  /**
+   * Story 6.1 — test-injection seam for the production `loadConfig()`
+   * call wired at the top of `runNext`. Tests pass a synthetic config
+   * loader that returns a deterministic `Config` (or throws to exercise
+   * the loader-error path). When the seam is supplied, the runner uses
+   * its return value for `opts.config` resolution; when omitted, the
+   * runner skips the load entirely (preserves test backwards-compat for
+   * the 1262-test baseline that did NOT have a config-loader call site).
+   *
+   * Production code does NOT supply this field — instead, the
+   * `import.meta.main` entrypoint at the bottom of this file invokes
+   * `loadConfig()` once and threads the result via `opts.config`.
+   *
+   * The seam returns a structural subset of ConfigV1 (only the fields
+   * consumed by `runNext`'s downstream resolvers). Throwing
+   * `ConfigError` from the seam exercises the AR21+AR22 surfacing path.
+   */
+  readonly loadConfigOverride?: () =>
+    | Promise<{
+        failurePolicies?: import("../../schemas/config.ts").FailurePolicies;
+        overrides?: import("../../schemas/config.ts").Overrides;
+        models?: import("../../schemas/config.ts").Models;
+        budgets?: import("../../schemas/config.ts").Budgets;
+        verifiers?: import("../../schemas/config.ts").Verifiers;
+        telemetry?: import("../../schemas/config.ts").Telemetry;
+      }>
+    | {
+        failurePolicies?: import("../../schemas/config.ts").FailurePolicies;
+        overrides?: import("../../schemas/config.ts").Overrides;
+        models?: import("../../schemas/config.ts").Models;
+        budgets?: import("../../schemas/config.ts").Budgets;
+        verifiers?: import("../../schemas/config.ts").Verifiers;
+        telemetry?: import("../../schemas/config.ts").Telemetry;
+      };
 }
 
 /**
@@ -1463,6 +1537,27 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
     // actionable hint when --skip is supplied alone.
     enforceSkipRequiresResume(args);
 
+    // Story 6.1 — config-loader test seam: when `opts.config` is not
+    // supplied AND a `loadConfigOverride` is provided (test path), invoke
+    // it to obtain a synthetic Config. Production callers receive
+    // opts.config from the `import.meta.main` block (which calls
+    // `loadConfig()` once and passes the result via opts.config). When
+    // neither is supplied, opts.config stays undefined → resolver
+    // fallback to escalate-default for every step (preserves the
+    // 1262-baseline behaviour).
+    let effectiveConfig:
+      | {
+          failurePolicies?: import("../../schemas/config.ts").FailurePolicies;
+          overrides?: import("../../schemas/config.ts").Overrides;
+        }
+      | undefined = opts?.config;
+    if (
+      effectiveConfig === undefined &&
+      opts?.loadConfigOverride !== undefined
+    ) {
+      effectiveConfig = await opts.loadConfigOverride();
+    }
+
     // Step 3: forward-deferral guards. Story 3.9 removes the `--watch`
     // entry from this block — the streaming-mode short-circuit is now
     // handled in a new position between `--doctor` (Step 5) and
@@ -1510,6 +1605,29 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
           `next: orphan staging cleanup failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
         );
       }
+    }
+
+    // Step 4b (Story 6.8): auto-archival of old runs + telemetry. Best-
+    // effort + non-blocking + dry-run gate (mirrors staging-cleanup gate
+    // per OQ-10). Fire-and-forget per AC-4 — the user's command does NOT
+    // block on the archival promise. Per OQ-12, `opts.config.paths` and
+    // `opts.config.telemetry` may be undefined when the runner is
+    // invoked without a loaded config (test seams); in that case the
+    // archival trigger is SKIPPED.
+    if (
+      !args.dryRun &&
+      opts?.config?.paths !== undefined &&
+      opts.config.telemetry !== undefined
+    ) {
+      const archivalConfig = {
+        paths: opts.config.paths,
+        telemetry: opts.config.telemetry,
+      };
+      void runArchivalAtStartup({ config: archivalConfig }).catch((err) => {
+        log.info(
+          `archival: trigger failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     }
 
     // Step 5: --doctor delegation (Story 1.12 reuse).
@@ -1596,6 +1714,9 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         ...(opts?.overridesPath !== undefined
           ? { overridesPath: opts.overridesPath }
           : {}),
+        ...(effectiveConfig?.overrides !== undefined
+          ? { overrides: effectiveConfig.overrides }
+          : {}),
       });
       const exported = await exportState({
         ...(opts?.statePath !== undefined ? { statePath: opts.statePath } : {}),
@@ -1656,6 +1777,9 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         projectRoot: opts?.projectRoot,
         pluginDir: opts?.pluginDir,
         overridesPath: opts?.overridesPath,
+        ...(effectiveConfig?.overrides !== undefined
+          ? { overrides: effectiveConfig.overrides }
+          : {}),
       });
 
       // All-done branch (AC lines 818-820). Verbatim AC-line-820 hint.
@@ -1751,6 +1875,9 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         projectRoot: opts?.projectRoot,
         pluginDir: opts?.pluginDir,
         overridesPath: opts?.overridesPath,
+        ...(effectiveConfig?.overrides !== undefined
+          ? { overrides: effectiveConfig.overrides }
+          : {}),
       });
       const lastStepName = state.lastSuccessfulStep?.step;
       // Collect the candidate set (existing filter logic).
@@ -1817,6 +1944,9 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       projectRoot: opts?.projectRoot,
       pluginDir: opts?.pluginDir,
       overridesPath: opts?.overridesPath,
+      ...(effectiveConfig?.overrides !== undefined
+        ? { overrides: effectiveConfig.overrides }
+        : {}),
     });
 
     // Story 3.2: --resume branch. When `args.resume === true`, substitute
@@ -1930,9 +2060,14 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
     //     on `src/io/lock.ts`; in v0.1 the no-lock invariant is structural.
     //   - Story 3.6 persona-tier enrichment ("resolved via tier 2: plugin-
     //     default"): v0.1 ships persona NAME only.
-    //   - Stories 6.3 + 6.4 (`models:` + `budgets:` per-step config): v0.1
-    //     hardcodes `model: "sonnet"`, `contextTokens: 60_000`,
-    //     `timeoutMs: 300_000` (matching `generate-spec.ts:196-200`).
+    //   - Story 6.3 (`models:` per-step config): `model` resolved from
+    //     `opts.config?.models?.[stepName] ?? "sonnet"` (Story 6.1 typed
+    //     `Config.models` field). The dry-run preview below surfaces the
+    //     resolved model so the user can audit per-step routing.
+    //   - Story 6.4 (`budgets:` per-step config): `budget.contextTokens` +
+    //     `budget.timeoutMs` resolved from `opts.config?.budgets?.[stepName]`
+    //     (default 60_000 / 300_000 per AC-1). The dry-run preview surfaces
+    //     the configured cap so the user can audit per-step routing.
     //
     // Dry-run runId convention: `<tsPart>-<stepName>-DRYRUN` (no
     // `node:crypto.randomUUID` entropy — predictable for tests; clearly
@@ -1949,9 +2084,24 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       const story =
         state.lastAttempted?.story ?? state.lastSuccessfulStep?.story ?? "0.0";
       const expectedOutput = `staging/${dryRunId}/outputs/${nextStep.name}.md`;
+      // Story 6.3 — resolve the model from opts.config.models (Story 6.1
+      // typed `Config.models` field) for the dry-run preview, falling
+      // back to "sonnet" when the per-step config is absent.
+      const resolvedModel = opts?.config?.models?.[nextStep.name] ?? "sonnet";
+      // Story 6.4 — resolve the budget from opts.config.budgets (Story 6.1
+      // typed `Config.budgets` field) for the dry-run preview, falling
+      // back to defaults (60_000 ctx / 300_000ms = 60k / 5min) when the
+      // per-step config is absent. Partial overrides supported per AC-1.
+      const resolvedBudget = opts?.config?.budgets?.[nextStep.name];
+      const contextTokensK = Math.round(
+        (resolvedBudget?.contextTokens ?? 60_000) / 1000,
+      );
+      const timeoutMins = Math.round(
+        (resolvedBudget?.timeoutMs ?? 300_000) / 60_000,
+      );
       const message =
         `Dry-run: would dispatch ${nextStep.name} (epic ${epic} / story ${story}) → ` +
-        `${persona} (sonnet, 60k context, 5min timeout). ` +
+        `${persona} (${resolvedModel}, ${contextTokensK}k context, ${timeoutMins}min timeout). ` +
         `Expected output: ${expectedOutput}`;
       return reportWithMessage(message);
     }
@@ -1973,6 +2123,20 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
     // The default behaviour in `generate-spec.ts:172-177` already prefers
     // `lastAttempted` over `lastSuccessfulStep`; the explicit override
     // makes the intent explicit in the runner-tier code.
+    // Story 6.3 — `models:` per-step config consumer wiring. Read the
+    // resolved model from `opts.config?.models?.[stepName]` (Story 6.1
+    // typed `Config.models` field). When undefined (no per-step config),
+    // omit the field so generate-spec.ts:196 falls through to the
+    // canonical "sonnet" default. Story 6.1 SDR I-24 PRIMARY HONOURED.
+    const configuredModel = opts?.config?.models?.[nextStep.name];
+    // Story 6.4 — `budgets:` per-step config consumer wiring. Read the
+    // resolved budget from `opts.config?.budgets?.[stepName]` (Story 6.1
+    // typed `Config.budgets` field). When undefined (no per-step config),
+    // omit the field so generate-spec.ts:208-211 falls through to the
+    // canonical defaults (60_000 / 300_000). Story 6.1 SDR I-25 PRIMARY
+    // HONOURED. Partial overrides supported (e.g., `{ contextTokens: 80000 }`
+    // overrides only contextTokens; timeoutMs falls through to default).
+    const configuredBudget = opts?.config?.budgets?.[nextStep.name];
     const result = await buildDispatchSpec({
       stepName: nextStep.name,
       state,
@@ -1982,6 +2146,12 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       phase: dagPhaseToDispatchPhase(nextStep.phase),
       contextRefs: finalContextRefs,
       requiredSections,
+      ...(configuredModel !== undefined
+        ? { modelOverride: configuredModel }
+        : {}),
+      ...(configuredBudget !== undefined
+        ? { budgetOverride: configuredBudget }
+        : {}),
       ...(args.resume && resumeEpicOverride !== undefined
         ? { epic: resumeEpicOverride }
         : {}),
@@ -2025,17 +2195,21 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
     // the priority chain. Priority order per OQ-5:
     //   1. --auto-fix → "route-to-fixer" (one-run scope per AC line 1144)
     //   2. opts.failurePolicyOverride (TEST-ONLY SEAM per OQ-5)
-    //   3. resolveFailurePolicy(action.step, opts.config) (production path)
+    //   3. resolveFailurePolicy(action.step, effectiveConfig) (production path)
     //   4. plugin default "escalate" (resolver fallback)
-    // Until Story 6.1 wires the file loader, opts.config is undefined in
-    // production → resolver returns escalate-default for every step.
+    //
+    // Story 6.1 — `effectiveConfig` is derived above from opts.config OR
+    // opts.loadConfigOverride() (test seam) OR the import.meta.main
+    // block's `loadConfig()` call (production). When all three are
+    // absent, effectiveConfig is undefined → resolver returns
+    // escalate-default for every step (preserves baseline behaviour).
     const resolvedFailurePolicy:
       | import("../../failure-ux/index.ts").FailurePolicy
       | undefined =
       args.autoFix === true
         ? "route-to-fixer"
         : (opts?.failurePolicyOverride ??
-          resolveFailurePolicy(nextStep.name, opts?.config));
+          resolveFailurePolicy(nextStep.name, effectiveConfig));
     return { exitCode: 0, action, resolvedFailurePolicy };
   } catch (err) {
     return haltFromError(err);
@@ -2170,8 +2344,35 @@ if (import.meta.main) {
   // body) to stdout instead of `emitDispatchAction(result.action)`. This
   // is the documented FR54 carve-out; every OTHER flag (including
   // `--diff-state`) preserves AR9 strictly.
+  //
+  // Story 6.1 — load the layered Stepper config (project > user >
+  // defaults) ONCE at the entrypoint and thread the parsed Config via
+  // `opts.config` to runNext. The loader throws ConfigError (exit 2)
+  // for invalid input with a single-line, Zod-derived, field-pointing
+  // hint per AR21+AR22 + Story 5.6 single-line constraint. Errors flow
+  // through the existing `catch (err)` block below which emits a halt
+  // AR9 line and exits with the StepperError exit code.
   try {
-    const result = await runNext();
+    const { loadConfig } = await import("../../config/load.ts");
+    let loadedConfig: import("../../schemas/config.ts").Config | undefined;
+    try {
+      loadedConfig = await loadConfig();
+    } catch (loadErr) {
+      // Surface the ConfigError / StateTooNewError as an AR9 halt line
+      // BEFORE attempting to dispatch (a config-load failure is fatal
+      // for every flag — even --doctor's full validation requires the
+      // schema to be intact at the loader's first parse).
+      if (loadErr instanceof StepperError) {
+        emitDispatchAction({
+          action: "halt",
+          message: loadErr.actionableHint,
+          exitCode: loadErr.exitCode === 0 ? 1 : loadErr.exitCode,
+        });
+        process.exit(loadErr.exitCode === 0 ? 1 : loadErr.exitCode);
+      }
+      throw loadErr;
+    }
+    const result = await runNext({ config: loadedConfig });
     const argvSlice = process.argv.slice(2);
     if (wasWatchRequested(argvSlice)) {
       // Story 3.9 SPECIAL CASE per FR42 + FR54: the watcher already

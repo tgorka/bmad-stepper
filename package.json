@@ -6,7 +6,8 @@
   "scripts": {
     "test": "bun test --pass-with-no-tests",
     "test:watch": "bun test --watch --pass-with-no-tests",
-    "check": "biome ci . && bun test --pass-with-no-tests"
+    "check": "biome ci . && bun test --pass-with-no-tests",
+    "aggregate-telemetry": "bun run src/telemetry/cli.ts"
   },
   "dependencies": {
     "zod": "4.4.1"

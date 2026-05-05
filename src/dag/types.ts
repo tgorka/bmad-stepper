@@ -110,13 +110,32 @@ export interface SeedEntry {
  * block of `bmad-stepper.config.yaml`.
  *
  * All fields except `name` are optional — overrides PATCH the seed entry
- * (when names match) or APPEND a new entry (when the name is new). The
- * full Zod-validated `OverridesSchema` lands in Story 6.2.
+ * (when names match) or APPEND a new entry (when the name is new).
+ *
+ * Story 6.2 — the shape is now lossless w.r.t. `z.infer<typeof
+ * OverrideEntrySchema>` from `src/schemas/config.ts` (OQ-6 ADDED the
+ * missing `before` field). The interface stays in this mid-tier module
+ * (no Zod import per AR41) but the field-set is byte-identical to the
+ * Zod-derived type. The runner-side wiring at `src/commands/next/run.ts`
+ * threads `opts.config?.overrides` (a Zod-validated record) into
+ * `BuildInput.overrides` — `build()` consumes the typed map directly
+ * (STRICT path) and falls back to the hand-rolled YAML extractor only
+ * when `BuildInput.overrides === undefined` (LEGACY graceful-degradation
+ * path per Story 1.10 backwards-compat).
  */
 export interface OverrideEntry {
-  readonly name: string;
+  /**
+   * Story 6.2 — `name` is OPTIONAL because Zod-derived overrides (from
+   * `OverridesSchema = z.record(z.string(), OverrideEntrySchema)`) carry
+   * the skill ID as the MAP KEY, not as a value field. `build()` fills
+   * `name` from the map key when iterating; the legacy parseOverridesYaml
+   * path (Story 1.10) populates `name` directly. This keeps the dag-
+   * local interface a structural superset of the schema-derived type.
+   */
+  readonly name?: string;
   readonly phase?: Phase;
   readonly after?: readonly string[];
+  readonly before?: readonly string[];
   readonly optional?: boolean;
   readonly persona?: string | readonly string[] | null;
   readonly idempotent?: boolean;
@@ -142,10 +161,26 @@ export interface OverrideEntry {
  * - `overridesPath` — Override the default config path. Test-only-but-
  *                     exported escape hatch (Story 1.4 `LockOptions` /
  *                     Story 1.8 `DetectSnapshotOptions` pattern).
+ * - `overrides`     — STORY 6.2 STRICT TIER-2 SEAM. When provided,
+ *                     `build()` consumes this typed map directly (no
+ *                     YAML parse, no graceful degradation; the loader is
+ *                     responsible for Zod validation per Story 6.1). When
+ *                     omitted, `build()` falls back to parsing
+ *                     `bmad-stepper.config.yaml` directly via the legacy
+ *                     hand-rolled extractor (LEGACY path per Story 1.10
+ *                     backwards-compat). Accepts either a `ReadonlyMap`
+ *                     or a plain `Record` — `build()` normalises
+ *                     internally. The map keys are skill IDs; the entry
+ *                     `name` field is redundant when keyed by ID and may
+ *                     be omitted from the value (build.ts uses the map
+ *                     key as the canonical name).
  */
 export interface BuildInput {
   readonly skillNames: readonly string[];
   readonly projectRoot?: string;
   readonly pluginDir?: string;
   readonly overridesPath?: string;
+  readonly overrides?:
+    | ReadonlyMap<string, OverrideEntry>
+    | Readonly<Record<string, OverrideEntry>>;
 }
