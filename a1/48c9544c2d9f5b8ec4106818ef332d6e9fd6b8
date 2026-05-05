@@ -1,0 +1,135 @@
+src/telemetry/aggregate.test.ts
+  053a814827ec1703 1-368
+src/schemas/config.ts
+  053a814827ec1703 3,8,13-21,32-55,93-293,296-310,319-336,342-346
+src/dag/build.test.ts
+  053a814827ec1703 23-27,29,420-426,440-445,447-448,461-782
+_bmad-output/implementation-artifacts/6-5-verifiers-per-step-config-override.md
+  053a814827ec1703 1-787
+src/dag/build.ts
+  053a814827ec1703 46-65,70-74,106-292,739-773,778-779,808-816,826-841,853-891,893-899,902,905-913,916
+src/telemetry/collect.test.ts
+  053a814827ec1703 1-322
+_bmad-output/implementation-artifacts/6-8-auto-archival-of-runs-and-telemetry.md
+  053a814827ec1703 1-1042
+src/config/defaults.ts
+  053a814827ec1703 1-51
+src/telemetry/aggregate.ts
+  053a814827ec1703 1-312
+src/integration/aggregate-telemetry-no-pii.test.ts
+  053a814827ec1703 1-217
+src/verifiers/checks.ts
+  053a814827ec1703 69,368-378,465
+src/config/defaults.test.ts
+  053a814827ec1703 1-57
+commands/bmad-next.md
+  053a814827ec1703 95-97,100-101,105-126,449-460
+commands/bmad-loop.md
+  053a814827ec1703 189-218,1013-1027
+src/commands/next/run.ts
+  053a814827ec1703 123,318-329,333-359,361-394,1540-1560,1610-1632,1717-1719,1780-1782,1878-1880,1947-1949,2063-2070,2087-2101,2104,2126-2139,2149-2154,2198,2200-2205,2212,2347-2354,2356-2375
+_bmad-output/implementation-artifacts/6-4-budgets-per-step-config.md
+  053a814827ec1703 1-757
+src/startup/archival-trigger.test.ts
+  053a814827ec1703 1-393
+_bmad-output/implementation-artifacts/6-6-telemetry-opt-in-collection.md
+  053a814827ec1703 1-849
+src/telemetry/cli.test.ts
+  053a814827ec1703 1-158
+src/schemas/config.test.ts
+  053a814827ec1703 19-20,26-36,96-101,104-105,107-108,216-950
+src/verifiers/registry.ts
+  053a814827ec1703 7-9,14-25,32,40-41,45-46,52-92,100-105,107-112,118-169
+src/runs/render-markdown.ts
+  053a814827ec1703 55,59-65,69-75,84-99,110,115,122,132,144
+src/telemetry/cli.ts
+  053a814827ec1703 1-134
+src/startup/archival-trigger.ts
+  053a814827ec1703 1-182
+_bmad-output/implementation-artifacts/6-3-models-per-step-config.md
+  053a814827ec1703 1-687
+src/runs/archive.test.ts
+  053a814827ec1703 1-274
+src/commands/loop/run.test.ts
+  053a814827ec1703 3622-3997
+src/commands/next/verify-and-advance.ts
+  053a814827ec1703 118,122,251-268,270-285,308-319,1097-1099,1304-1306,1679-1722
+src/runs/index.ts
+  053a814827ec1703 16-22
+src/commands/loop/run.ts
+  053a814827ec1703 64,456-467,471-496,498-526,861-886,911-931,972-973,978-983,1151,1212-1220,1919-1944
+src/config/load.test.ts
+  053a814827ec1703 1-501
+src/dispatch/generate-spec.ts
+  053a814827ec1703 45-70,266-279,281
+_bmad-output/implementation-artifacts/6-2-dag-overrides-block.md
+  053a814827ec1703 1-674
+src/telemetry/render-report.ts
+  053a814827ec1703 1-193
+src/verifiers/checks.test.ts
+  053a814827ec1703 521-587
+src/dispatch/generate-spec.test.ts
+  053a814827ec1703 23,480-725
+src/telemetry/rotate.test.ts
+  053a814827ec1703 1-228
+src/integration/auto-archival-startup.test.ts
+  053a814827ec1703 1-255
+src/runs/archive.ts
+  053a814827ec1703 1-196
+src/config/deep-merge.ts
+  053a814827ec1703 1-90
+src/telemetry/render-report.test.ts
+  053a814827ec1703 1-245
+_bmad-output/implementation-artifacts/6-1-bmad-stepper-config-yaml-schema-loader.md
+  053a814827ec1703 1-791
+src/telemetry/collect.ts
+  053a814827ec1703 1-149
+src/verifiers/registry.test.ts
+  053a814827ec1703 115-249
+src/commands/next/verify-and-advance.test.ts
+  053a814827ec1703 3655-4079
+src/config/index.ts
+  053a814827ec1703 1-16
+_bmad-output/implementation-artifacts/6-7-telemetry-aggregation-report.md
+  053a814827ec1703 1-818
+src/config/load.ts
+  053a814827ec1703 1-229
+src/runs/render-markdown.test.ts
+  053a814827ec1703 60,64,224-334
+docs/configuration.md
+  053a814827ec1703 1-828
+src/dag/types.ts
+  053a814827ec1703 113-124,127-135,138,164-176,183-185
+src/config/deep-merge.test.ts
+  053a814827ec1703 1-155
+src/commands/next/run.test.ts
+  053a814827ec1703 4160-4652
+_bmad-output/implementation-artifacts/sprint-status.yaml
+  053a814827ec1703 2,38,102-110
+package.json
+  053a814827ec1703 9-10
+src/telemetry/rotate.ts
+  053a814827ec1703 1-188
+src/telemetry/index.ts
+  053a814827ec1703 1-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "a148c9544c2d9f5b8ec4106818ef332d6e9fd6b8",
+  "prompts": {
+    "053a814827ec1703": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0dab5785-5f67-43d3-8537-4d2369d3b7d1",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka",
+      "messages": [],
+      "total_additions": 17911,
+      "total_deletions": 1511,
+      "accepted_lines": 16566,
+      "overriden_lines": 0
+    }
+  }
+}
