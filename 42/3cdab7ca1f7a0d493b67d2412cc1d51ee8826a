@@ -1,0 +1,120 @@
+src/failure-ux/retry.test.ts
+  888b45419981313f 1-143
+src/failure-ux/index.ts
+  888b45419981313f 1-115
+src/failure-ux/resolve-policy.test.ts
+  888b45419981313f 1-135
+commands/bmad-next.md
+  888b45419981313f 3,22-23,220-496,563-564
+src/schemas/state.ts
+  dc91f84776650f0e 290
+  888b45419981313f 38-95,139-157,169-289,316-317
+commands/bmad-loop.md
+  dc91f84776650f0e 1105
+  888b45419981313f 3,18-24,37,39,93-109,220-222,513-786,834-1104,1125-1130
+src/commands/loop/args.test.ts
+  dc91f84776650f0e 355-356
+  888b45419981313f 84,207,224,235-242,255-261,324-354
+src/failure-ux/skip.test.ts
+  888b45419981313f 1-126
+agents/bmad-step-fixer.md
+  888b45419981313f 1-216
+src/schemas/state.test.ts
+  888b45419981313f 18,21,79-84,88,94-99,103,109-121,125,210-642,644-768
+  dc91f84776650f0e 643,769-770
+src/commands/loop/run.ts
+  888b45419981313f 55,60-61,132-152,196-228,283-316,384-486,717-790,793-976,978-1070,1079,1081-1086,1095-1119,1122-1146,1150-1161,1164-1186,1188-1204,1206-1216,1218-1240,1242-1273,1275-1277,1279-1293,1295-1311,1313,1316-1323,1325-1334,1336-1362,1364-1368,1370-1384,1386-1393,1396-1410,1412-1422,1425-1428,1431-1440,1442,1444-1446,1448-1511,1515-1516,1518-1524,1526-1540,1542-1559,1590-1604,1606-1608,1644-1656,1658-1705,1707-1782,1801-1813,1819-1844
+  dc91f84776650f0e 1657
+src/failure-ux/retry.ts
+  888b45419981313f 1-52
+src/commands/next/args.test.ts
+  888b45419981313f 44-45,58-59,63,67-68,83-84,91,631-789
+  dc91f84776650f0e 790-791
+src/errors.test.ts
+  888b45419981313f 10-16,18-21,30,52,62-63,83-92,142-168
+  dc91f84776650f0e 17,93-95,169-170
+src/schemas/config.ts
+  888b45419981313f 3,14-22,24-31,36-68,74-81
+src/schemas/config.test.ts
+  dc91f84776650f0e 196-197
+  888b45419981313f 2-4,11,18-24,93-195
+src/commands/next/verify-and-advance.ts
+  888b45419981313f 81-83,96-103,113-118,201-338,387-426,557-708,713-720,723,728-752,825-840,853-991,1007-1081,1083-1322,1324-1325,1330-1335,1337,1346-1348,1353-1362,1366-1371,1378-1383,1385-1434,1449-1465,1469-1472,1509-1520,1529,1532-1544,1566-1569
+  dc91f84776650f0e 709-710
+src/commands/next/run.ts
+  dc91f84776650f0e 433-436
+  888b45419981313f 101,108-113,259-320,331-338,343,409-432,1461-1464,2017-2039
+src/commands/loop/args.ts
+  888b45419981313f 39,81-83,105-107
+src/failure-ux/escalate.test.ts
+  888b45419981313f 1-197
+src/commands/loop/run.test.ts
+  888b45419981313f 4-5,49-50,53-60,1302-1318,1912-1913,1915,1924-1926,2055-2738,2749-3620
+  dc91f84776650f0e 3621
+src/failure-ux/route-to-fixer.test.ts
+  888b45419981313f 1-153
+src/failure-ux/skip.ts
+  888b45419981313f 1-57
+src/commands/loop/plan.ts
+  888b45419981313f 99-103,107-111,113,117,310-326,334-340,344,346,350
+src/failure-ux/index.test.ts
+  888b45419981313f 1-184
+src/integration/escalate-actionable-hint.test.ts
+  888b45419981313f 1-393
+src/commands/next/verify-and-advance.test.ts
+  dc91f84776650f0e 3653-3654
+  888b45419981313f 36,43,1505-3652
+src/commands/loop/index.ts
+  888b45419981313f 35-36,38,44
+src/commands/next/args.ts
+  888b45419981313f 12-14,135-137,139,141,143-156,172-173,186-187,244-245,371-393,437-444,544-565,567-577,679-680
+  dc91f84776650f0e 566,578-580
+src/errors.ts
+  888b45419981313f 37-38,77,249-278,308
+src/commands/loop/plan.test.ts
+  888b45419981313f 206,208-209,214,219-244,401,406
+src/commands/next/run.test.ts
+  888b45419981313f 32,3917-4157
+  dc91f84776650f0e 4158-4159
+src/state/diff.test.ts
+  888b45419981313f 291-293,295-314
+src/failure-ux/resolve-policy.ts
+  888b45419981313f 1-53
+src/failure-ux/route-to-fixer.ts
+  888b45419981313f 1-74
+src/failure-ux/escalate.ts
+  888b45419981313f 1-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "423cdab7ca1f7a0d493b67d2412cc1d51ee8826a",
+  "prompts": {
+    "888b45419981313f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5b4d413d-d5ff-4701-b329-5bd52f998dbf",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "tgorka",
+      "messages": [],
+      "total_additions": 19941,
+      "total_deletions": 608,
+      "accepted_lines": 19945,
+      "overriden_lines": 0
+    },
+    "dc91f84776650f0e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "116ba729-2109-4fc5-a393-cb335191a1b3",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 42,
+      "overriden_lines": 0
+    }
+  }
+}
