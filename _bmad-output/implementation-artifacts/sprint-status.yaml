@@ -1,5 +1,5 @@
 # generated: 2026-04-30
-# last_updated: 2026-05-04T01:30:00Z  # Story 4.6 code-review complete (verdict approve)
+# last_updated: 2026-05-04T02:45:00Z  # Story 4.7 code-review complete (verdict approve)
 # project: bmad-stepper
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-30
-last_updated: 2026-05-04T01:30:00Z
+last_updated: 2026-05-04T02:45:00Z
 project: bmad-stepper
 project_key: NOKEY
 tracking_system: file-system
@@ -86,7 +86,7 @@ development_status:
   4-4-stop-condition-max-iters-and-default-cap: done
   4-5-stop-condition-time-budget-and-token-budget: done
   4-6-stop-condition-error-with-stop-on-error-continue-on-error: done
-  4-7-plan-first-dry-run-preview: backlog
+  4-7-plan-first-dry-run-preview: done
   4-8-checkpoint-each-step-type: backlog
   4-9-sigint-graceful-exit: backlog
   4-10-loop-exit-reason-resume-hint: backlog
