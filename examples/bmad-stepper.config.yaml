@@ -1,0 +1,72 @@
+# bmad-stepper.config.yaml
+#
+# Canonical example for the per-project Stepper configuration. Drop this file
+# at the project root (next to .bmad-stepper/) and Stepper will pick it up on
+# every /bmad-next or /bmad-loop invocation.
+#
+# Schema reference: docs/configuration.md (Story 6.1).
+# Each block below is OPTIONAL. Stepper ships with sensible defaults.
+
+schemaVersion: 1
+
+# Per-step persona overrides (FR12).
+# Map step name → persona. The persona name comes from BMAD's skills.yaml
+# or your own custom persona under personas/<name>.md.
+personas: {}
+  # Example:
+  # dev-story: senior-engineer
+  # tea-test-plan: test-architect
+
+# DAG placement overrides for unknown upstream BMAD skills (FR35).
+# Use when a new BMAD release adds a skill not yet in Stepper's seed.
+# See examples/bmad-6.4-overrides.yaml for the canonical override shape.
+overrides: {}
+  # Example:
+  # analyst-deep-dive:
+  #   phase: analysis
+  #   after: [analyst-research]
+  #   before: [analyst-summary]
+  #   optional: false
+
+# Verifier overrides per step (FR38).
+# Map step name → verifier name. Default verifiers are auto-resolved by step type.
+verifiers: {}
+  # Example:
+  # dev-story: schema-check
+  # code-review: lint-and-test
+
+# Failure policy per step (FR31).
+# Allowed values: retry | skip | route-to-fixer | escalate.
+# Default: escalate (halt with single-line actionable hint per AR22).
+failurePolicies: {}
+  # Example:
+  # code-review: route-to-fixer
+  # docs-only-step: skip
+
+# Model pinning per step (FR36).
+# Allowed values: sonnet | opus | haiku. Default: sonnet.
+models: {}
+  # Example:
+  # dev-story: sonnet
+  # code-review: opus
+
+# Sub-agent budgets per step (FR37).
+# context: max tokens (default 60000); timeout: max ms (default 300000 = 5 min).
+budgets: {}
+  # Example:
+  # dev-story:
+  #   context: 80000
+  #   timeout: 600000  # 10 min
+
+# Path overrides (default uses _bmad-output/.stepper/).
+paths:
+  state: "_bmad-output/.stepper/state.yaml"
+  runs: "_bmad-output/.stepper/runs/"
+  staging: "_bmad-output/.stepper/staging/"
+  telemetry: "_bmad-output/.stepper/telemetry/"
+
+# Telemetry: opt-in; default false (FR39).
+# When enabled, Stepper writes local-only counters to telemetry/. No PII;
+# no source code; no paths outside the project root. Rotated at 12 months.
+telemetry:
+  enabled: false

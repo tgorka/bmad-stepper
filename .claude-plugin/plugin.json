@@ -1,6 +1,6 @@
 {
   "name": "bmad-stepper",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Stateful workflow orchestrator for BMAD Method projects in Claude Code.",
   "author": {
     "name": "Tgorka"

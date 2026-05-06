@@ -60,15 +60,15 @@ Deeper exposition lives in [`docs/getting-started.md`](docs/getting-started.md) 
 
 ## What you get
 
-- `/bmad-next` zero-config single-step advance — see `docs/examples/single-step.md` (ships in Epic 6 Story 6.10).
-- `/bmad-loop` bounded loop with eight stop conditions — see `docs/examples/overnight-loop.md` (Epic 6 Story 6.10).
-- `/bmad-next --resume` after halt — see `docs/examples/halt-recovery.md` (Epic 6 Story 6.10).
-- `--auto-fix` route-to-fixer recovery — see `docs/examples/skip-on-failure.md` (Epic 6 Story 6.10).
-- `/bmad-next --doctor` first-run diagnostic — see `docs/examples/doctor-diagnostic.md` (Epic 6 Story 6.10).
-- `--export-state` for CI integration — see `docs/examples/state-export-ci.md` (Epic 6 Story 6.10).
-- `/bmad-next --resume` cold-start return — see `docs/examples/cold-start-return.md` (Epic 6 Story 6.10).
+- `/bmad-next` zero-config single-step advance — see [docs/examples/single-step.md](docs/examples/single-step.md).
+- `/bmad-loop` bounded loop with eight stop conditions — see [docs/examples/overnight-loop.md](docs/examples/overnight-loop.md).
+- `/bmad-next --resume` after halt — see [docs/examples/halt-recovery.md](docs/examples/halt-recovery.md).
+- `--auto-fix` route-to-fixer recovery — see [docs/examples/skip-on-failure.md](docs/examples/skip-on-failure.md).
+- `/bmad-next --doctor` first-run diagnostic — see [docs/examples/doctor-diagnostic.md](docs/examples/doctor-diagnostic.md).
+- `--export-state` for CI integration — see [docs/examples/state-export-for-ci.md](docs/examples/state-export-for-ci.md).
+- `/bmad-next --resume` cold-start return — see [docs/examples/cold-start-return.md](docs/examples/cold-start-return.md).
 
-The seven worked example bodies ship with the v0.1.0 marketplace release; this README links forward to their final paths.
+The seven worked example bodies ship with the v0.1.0 marketplace release.
 
 ## Uninstall preserves your data
 
@@ -88,16 +88,16 @@ To re-create from scratch after a wipe, just run `/bmad-next` again — the stat
 |----------|---------|
 | [`docs/getting-started.md`](docs/getting-started.md) | Deeper onboarding — prerequisites, commands surface, state location, troubleshooting top-5 |
 | [`docs/exit-codes.md`](docs/exit-codes.md) | Exit codes 0–5 with verbatim remediation hints (FR53) |
-| `docs/configuration.md` | `bmad-stepper.config.yaml` schema reference (Epic 6 Story 6.1 — placeholder) |
+| [`docs/configuration.md`](docs/configuration.md) | `bmad-stepper.config.yaml` schema reference |
 | `docs/bmad-compatibility.md` | Per-Stepper-release BMAD compat history (Epic 6 Story 6.10 — placeholder) |
 | `docs/architecture.md` | Mirror of the planning architecture (Epic 6 Story 6.10 — placeholder) |
-| `docs/examples/` | Seven worked examples (Epic 6 Story 6.10 — placeholder) |
+| [`docs/examples/`](docs/examples/) | Seven worked examples (cold-start return, single-step, overnight loop, halt recovery, skip-on-failure, doctor diagnostic, state export for CI) |
 
 ## Repo links
 
-- `CHANGELOG.md` — release history (ships with Epic 6 Story 6.10 — placeholder).
-- `CONTRIBUTING.md` — contribution guide (Epic 6 Story 6.10 — placeholder).
-- `LICENSE` — MIT (Epic 6 Story 6.10 — placeholder).
-- `SECURITY.md` — security policy (Epic 6 Story 6.10 — placeholder).
+- [`CHANGELOG.md`](CHANGELOG.md) — release history (Changesets-managed; *BMAD Compatibility — vX.Y.x* per release).
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribution guide.
+- [`LICENSE`](LICENSE) — MIT.
+- [`SECURITY.md`](SECURITY.md) — security policy.
 - Issues: <https://github.com/Tgorka/bmad-stepper/issues> (live once v0.1.0 ships).
 - Discussions: <https://github.com/Tgorka/bmad-stepper/discussions> (live once v0.1.0 ships).
