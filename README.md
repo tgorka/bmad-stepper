@@ -89,8 +89,8 @@ To re-create from scratch after a wipe, just run `/bmad-next` again — the stat
 | [`docs/getting-started.md`](docs/getting-started.md) | Deeper onboarding — prerequisites, commands surface, state location, troubleshooting top-5 |
 | [`docs/exit-codes.md`](docs/exit-codes.md) | Exit codes 0–5 with verbatim remediation hints (FR53) |
 | [`docs/configuration.md`](docs/configuration.md) | `bmad-stepper.config.yaml` schema reference |
-| `docs/bmad-compatibility.md` | Per-Stepper-release BMAD compat history (Epic 6 Story 6.10 — placeholder) |
-| `docs/architecture.md` | Mirror of the planning architecture (Epic 6 Story 6.10 — placeholder) |
+| [`docs/bmad-compatibility.md`](docs/bmad-compatibility.md) | Per-Stepper-release BMAD compat history |
+| [`docs/architecture.md`](docs/architecture.md) | Mirror of the planning architecture |
 | [`docs/examples/`](docs/examples/) | Seven worked examples (cold-start return, single-step, overnight loop, halt recovery, skip-on-failure, doctor diagnostic, state export for CI) |
 
 ## Repo links
