@@ -1,0 +1,35 @@
+src/telemetry/cli.test.ts
+  s_cc5492ea889231::t_76f40214209cf3 102
+src/commands/loop/run.test.ts
+  s_cc5492ea889231::t_9e0826aebabb5b 4035,4054
+  s_cc5492ea889231::t_47e3876f03b42e 4009
+src/commands/loop/run.ts
+  s_cc5492ea889231::t_47e3876f03b42e 1501
+src/commands/next/run.ts
+  s_cc5492ea889231::t_47e3876f03b42e 2181-2185
+src/telemetry/aggregate.test.ts
+  s_cc5492ea889231::t_76f40214209cf3 116,154,174-176,213,273
+src/commands/doctor/checks.ts
+  s_cc5492ea889231::t_47e3876f03b42e 477-481
+  s_cc5492ea889231::t_5190b5324277a3 469
+src/integration/aggregate-telemetry-no-pii.test.ts
+  s_cc5492ea889231::t_76f40214209cf3 190
+.github/workflows/ci.yml
+  s_cc5492ea889231::t_d49e9b33d92334 11-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "55ebea92edab7099e611d976a5545188332a8423",
+  "prompts": {},
+  "sessions": {
+    "s_cc5492ea889231": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63f3df9b-5bf5-43d5-a7df-99dd07c71b81",
+        "model": "unknown"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
