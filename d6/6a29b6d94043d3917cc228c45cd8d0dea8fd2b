@@ -1,0 +1,19 @@
+src/integration/no-network-on-main.test.ts
+  s_ed4623cbe2b9f9::t_b4ba8f8644a1bc 1-159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "d66a29b6d94043d3917cc228c45cd8d0dea8fd2b",
+  "prompts": {},
+  "sessions": {
+    "s_ed4623cbe2b9f9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75233bb3-83f9-4b23-b3d5-95c1d753b767",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
