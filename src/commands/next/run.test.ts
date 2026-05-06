@@ -604,18 +604,6 @@ describe("runNext — mutually-exclusive flags (Story 1.7 cross-validation gap)"
 // ─── Forward-deferral guards ──────────────────────────────────────────────
 
 describe("runNext — forward-deferral guards", () => {
-  it("--upgrade halts with exitCode 1 + Story 6.9 hint", async () => {
-    const statePath = await writeMinimalState();
-    const result = await runNext({
-      ...commonOpts(statePath),
-      argv: ["--upgrade"],
-    });
-    expect(result.exitCode).toBe(1);
-    expect(result.action.action).toBe("halt");
-    if (result.action.action !== "halt") return;
-    expect(result.action.message).toContain("Story 6.9");
-  });
-
   it("--force-unlock halts with exitCode 1 + Story 6.x hint", async () => {
     const statePath = await writeMinimalState();
     const result = await runNext({
@@ -626,6 +614,111 @@ describe("runNext — forward-deferral guards", () => {
     expect(result.action.action).toBe("halt");
     if (result.action.action !== "halt") return;
     expect(result.action.message).toContain("Story 6.x");
+  });
+});
+
+// ─── Story 6.9 — `--upgrade` short-circuit at Step 0a ────────────────────
+
+describe("runNext — Story 6.9 --upgrade short-circuit", () => {
+  function makeStubFetch(opts: {
+    body?: unknown;
+    throws?: unknown;
+  }): typeof globalThis.fetch {
+    return ((_input: unknown, _init?: RequestInit) => {
+      if (opts.throws !== undefined) {
+        return Promise.reject(opts.throws);
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => opts.body,
+      } as unknown as Response);
+    }) as unknown as typeof globalThis.fetch;
+  }
+
+  it("UPGRADE_69_RUN_SHORT_CIRCUIT_1: --upgrade returns report action with AC-1 hint", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--upgrade"],
+      upgradeFetchOverride: makeStubFetch({
+        body: {
+          tag_name: "v0.2.0",
+          html_url:
+            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+          body: "## BMAD Compatibility — v6.5.x\n\nNotes.",
+        },
+      }),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    expect(result.action.message).toContain("# Stepper Upgrade Check");
+    expect(result.action.message).toContain(
+      "Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.",
+    );
+  });
+
+  it("UPGRADE_69_RUN_NETWORK_FAILURE_1: stub fetch rejects → halt with AC-2 hint byte-identical", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--upgrade"],
+      upgradeFetchOverride: makeStubFetch({
+        throws: new TypeError("fetch failed"),
+      }),
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.action.action).toBe("halt");
+    if (result.action.action !== "halt") return;
+    expect(result.action.message).toBe(
+      "Could not reach GitHub Releases. Check your network or try again later.",
+    );
+  });
+
+  it("UPGRADE_69_RUN_TAKES_PRECEDENCE_1: --upgrade short-circuits BEFORE --doctor", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--upgrade", "--doctor"],
+      upgradeFetchOverride: makeStubFetch({
+        body: {
+          tag_name: "v0.0.0",
+          html_url:
+            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.0.0",
+          body: "",
+        },
+      }),
+    });
+    // The runner SHOULD return the upgrade report (NOT a doctor halt or
+    // doctor success). When upgrade fires first, the action is "report"
+    // (up-to-date or upgrade-available); the doctor branch never runs.
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    expect(result.action.message).toContain("# Stepper Upgrade Check");
+  });
+
+  it("UPGRADE_69_RUN_BYPASSES_BMAD_DETECT_1: upgrade returns report when BMAD not installed (no skill names supplied)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--upgrade"],
+      // skillNames: [] in commonOpts simulates a fixture without
+      // BMAD detection / installed skills. The upgrade short-circuit
+      // fires regardless and returns the report action.
+      upgradeFetchOverride: makeStubFetch({
+        body: {
+          tag_name: "v0.0.0",
+          html_url:
+            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.0.0",
+          body: "",
+        },
+      }),
+    });
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    expect(result.action.message).toContain("# Stepper Upgrade Check");
   });
 });
 

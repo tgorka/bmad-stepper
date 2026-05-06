@@ -124,6 +124,9 @@ import { runArchivalAtStartup } from "../../startup/archival-trigger.ts";
 import { diffState } from "../../state/diff.ts";
 import { exportState } from "../../state/export.ts";
 import { loadStateUnlocked } from "../../state/load.ts";
+// Story 6.9 — `--upgrade` short-circuit. Top-tier consumes mid-tier per
+// AR41; the upgrade modules are foundational + node:* + zod only.
+import { renderUpgradeReport, runUpgradeCheck } from "../../upgrade/index.ts";
 import { getVerifierConfig } from "../../verifiers/index.ts";
 import { runDoctor } from "../doctor/run.ts";
 import { type NextArgs, type ParseError, parseNextArgs } from "./args.ts";
@@ -392,6 +395,20 @@ export interface RunNextOptions {
         verifiers?: import("../../schemas/config.ts").Verifiers;
         telemetry?: import("../../schemas/config.ts").Telemetry;
       };
+  /**
+   * Story 6.9 — test-injection seam for the `--upgrade` short-circuit at
+   * Step 0a. When supplied, the runner forwards this `fetch` to
+   * `runUpgradeCheck({ fetch })` so tests stub the network response
+   * without touching the real GitHub Releases API. Per OQ-12 this is a
+   * SEPARATE seam from `opts.config` (the upgrade flow does NOT consume
+   * any config field — the existing `loadConfigOverride` Story 6.1
+   * seam is unrelated). Production callers omit this field; the
+   * `runUpgradeCheck` defaults to `globalThis.fetch`.
+   *
+   * The seam mirrors the Story 6.7 `loadConfigOverride` precedent —
+   * test-injection only; production code paths use the global fetch.
+   */
+  readonly upgradeFetchOverride?: typeof globalThis.fetch;
 }
 
 /**
@@ -1562,11 +1579,35 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
     // entry from this block — the streaming-mode short-circuit is now
     // handled in a new position between `--doctor` (Step 5) and
     // `--export-state` (Step 6 first branch).
+    //
+    // Step 0a (Story 6.9): --upgrade short-circuit. Per AC-1: invokes
+    // the GitHub releases endpoint via the upgrade module (NFR-S1
+    // EXCEPTION — the only main-thread network I/O permitted, isolated
+    // to src/upgrade/), reads currentVersion from
+    // .claude-plugin/plugin.json, compares; emits the markdown report
+    // on stdout via the AR9 carve-out (third documented carve-out
+    // alongside Story 3.8 --export-state + Story 3.9 --watch per OQ-5).
+    // Per AC-1 + NFR-S2: never writes to ~/.claude/plugins/ from this
+    // code path (enforced by src/integration/upgrade-no-plugin-write
+    // .test.ts). On API failure (offline, rate limit, timeout,
+    // malformed response): exits 1 with the AC-2 verbatim hint.
     if (args.upgrade) {
-      return haltWithHint(
-        1,
-        "Run /bmad-next --doctor to verify your install. The --upgrade flow is implemented in Story 6.9 (Epic 6).",
-      );
+      try {
+        const result = await runUpgradeCheck(
+          opts?.upgradeFetchOverride !== undefined
+            ? { fetch: opts.upgradeFetchOverride }
+            : {},
+        );
+        const report = renderUpgradeReport(result);
+        return reportWithMessage(report);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        error(`upgrade: ${msg}`);
+        return haltWithHint(
+          1,
+          "Could not reach GitHub Releases. Check your network or try again later.",
+        );
+      }
     }
     if (args.forceUnlock) {
       return haltWithHint(
@@ -2326,6 +2367,34 @@ function wasWatchRequested(argv: readonly string[]): boolean {
   return false;
 }
 
+/**
+ * Story 6.9: detect whether the current invocation was driven by
+ * `--upgrade` so the `import.meta.main` block can SPECIAL-CASE the
+ * stdout emission. Per AC-1 + OQ-5, the upgrade report goes to stdout
+ * DIRECTLY (NOT wrapped in the AR9 line) — the renderer emits a
+ * multi-line markdown-style human-readable document. Mirrors Story
+ * 3.8's `wasExportStateRequested` + Story 3.9's `wasWatchRequested`
+ * precedents — substring match for the flag name; runs in the post-
+ * `runNext` path to decide whether to bypass the AR9 emit. False
+ * positives are impossible because the runner only reaches the upgrade
+ * short-circuit branch when `args.upgrade === true` (the parsed arg
+ * agrees with the substring scan).
+ *
+ * The failure path PRESERVES AR9 — when the upgrade short-circuit
+ * returns a `halt` action (network failure / timeout / malformed
+ * response), the AR9 line is emitted normally so the user sees the
+ * structured halt message in addition to the stderr error from
+ * log.error.
+ */
+function wasUpgradeRequested(argv: readonly string[]): boolean {
+  for (const arg of argv) {
+    if (arg === "--upgrade" || arg.startsWith("--upgrade=")) {
+      return true;
+    }
+  }
+  return false;
+}
+
 if (import.meta.main) {
   // The outer entrypoint per Story 1.12 doctor precedent. `runNext`
   // returns the structured `NextResult`; the entrypoint emits the AR9
@@ -2381,6 +2450,22 @@ if (import.meta.main) {
       // `emitDispatchAction` so the AR9 summary line does NOT trail
       // the streamed content. The structural `report` action remains
       // available on the `runNext` return value for tests.
+    } else if (wasUpgradeRequested(argvSlice)) {
+      // Story 6.9 SPECIAL CASE per AC-1 + OQ-5: the upgrade report goes
+      // to stdout DIRECTLY (NOT wrapped in the AR9 line). The renderer
+      // already emits the trailing newline; no extra is needed. Third
+      // documented AR9 carve-out alongside Story 3.8 --export-state +
+      // Story 3.9 --watch.
+      if (result.action.action === "report") {
+        process.stdout.write(`${result.action.message}\n`);
+      } else {
+        // Halt path (network failure) — the haltWithHint return path
+        // produces an action: "halt" with the AC-2 verbatim hint.
+        // Emit via emitDispatchAction so the AR9 line is preserved on
+        // the failure path (the user sees the JSON line + the stderr
+        // error from log.error per Step 0a's catch).
+        emitDispatchAction(result.action);
+      }
     } else if (
       wasExportStateRequested(argvSlice) &&
       result.action.action === "report"

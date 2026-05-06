@@ -826,3 +826,76 @@ notice is SUPPRESSED to avoid spam.
   — architectural source for the schema shape.
 - `_bmad-output/planning-artifacts/prd.md` FR34-FR40 — functional
   requirements covered by Story 6.1.
+
+## Upgrade flow (Story 6.9 — DONE)
+
+The `--upgrade` flag (`/bmad-next --upgrade` or the standalone CLI
+`bun run upgrade`) checks the GitHub Releases API for a newer Stepper
+version. The flow is read-only — Stepper NEVER auto-installs and NEVER
+writes to `~/.claude/plugins/` (NFR-S2 + AC-1 verbatim).
+
+### Endpoint and payload
+
+- **Endpoint:** `https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest`.
+- **Permitted by NFR-S1:** the ONLY main-thread network I/O in the
+  Stepper code path; all other paths are network-free (architecture
+  §line 646-657 D14 + §line 1396 NFR-S1 mapping).
+- **Current version source:** `.claude-plugin/plugin.json:version` —
+  read at runtime via `fs.readFile` + `JSON.parse` + Zod-validated
+  `PluginManifestSchema`. No hard-coded version (NFR-M3).
+- **CHANGELOG link:** taken from the release's `html_url` field
+  (e.g., `https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0`).
+- **BMAD compatibility extraction:** the GitHub release body is
+  searched for a `## BMAD Compatibility — vX.Y.x` heading (regex
+  `/(?:^|\n)#{1,6}\s+BMAD Compatibility\s+[—\-]\s+(v?\d+\.\d+\.[\d.x]+)/i`);
+  when present the captured version is rendered; when absent the
+  report shows `(BMAD compat info not present in release notes)`.
+- **Tag normalization:** GitHub releases conventionally use `v<version>`
+  (e.g., `v0.1.0`); the upgrade flow strips a leading `v` before
+  comparing to the bare manifest version.
+- **Semver compare:** numeric `[major, minor, patch]` integer-tuple
+  compare (NOT lexicographic string compare — `0.10.0 > 0.9.0` is
+  numerically correct).
+
+### Failure semantics
+
+- **Exit code 1 + AC-2 hint:** when the API call fails (offline, 403
+  rate limit, 4xx/5xx, 10s `AbortController` timeout, malformed
+  response, missing or malformed plugin manifest), Stepper exits 1 with
+  the byte-identical hint `Could not reach GitHub Releases. Check your
+  network or try again later.` See `docs/exit-codes.md` for the
+  verbatim exit-1 catalog entry.
+
+### Security and discipline
+
+- **Never auto-installs:** ZERO writes to `~/.claude/plugins/` from
+  this code path (AC-1 verbatim + NFR-S2 enforced by integration test
+  `src/integration/upgrade-no-plugin-write.test.ts` — sweeps
+  `fs.writeFile` / `fs.appendFile` / `fs.copyFile` / `fs.rename` /
+  `fs.unlink` for ZERO calls + snapshot-before-after of a synthetic
+  `~/.claude/plugins/` analogue).
+- **User-Agent header:** the GH API request includes
+  `User-Agent: bmad-stepper/<currentVersion>` per GitHub's API
+  documentation recommendation. The Stepper version is the only audit
+  signal Stepper exposes to GitHub.
+- **Timeout budget:** 10 seconds (`UPGRADE_FETCH_TIMEOUT_MS = 10_000`
+  ms; explicit `AbortController` budget; not configurable in v0.1).
+- **Errors registry HELD AT 17:** Story 6.9 ships ZERO new error
+  classes. Network / data failures throw bare `Error` and the
+  orchestrator (cli.ts + runner-tier wiring) surfaces the AC-2 hint
+  at the catch site. The 33-test `escalate-actionable-hint.test.ts`
+  sweep over all 17 error classes is UNCHANGED.
+
+### AR9 carve-out (third documented)
+
+The upgrade success report goes to stdout DIRECTLY (NOT wrapped in the
+AR9 JSON line) — alongside Story 3.8 `--export-state` (JSON body) and
+Story 3.9 `--watch` (raw transcript). The runner detects `--upgrade`
+in argv at the `import.meta.main` block via the `wasUpgradeRequested`
+helper and bypasses `emitDispatchAction` for the success path. The
+failure path PRESERVES AR9 — the halt action is emitted normally so the
+user sees the structured halt message in addition to the stderr error.
+
+See `docs/exit-codes.md` for the verbatim exit-1 hint and the
+`commands/bmad-next.md` `### --upgrade (Story 6.9)` section for the
+slash-command surface.
