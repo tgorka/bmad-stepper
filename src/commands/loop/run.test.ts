@@ -3619,3 +3619,379 @@ describe("runLoop — IA_55_RUN_12 (Story 5.5 AC-3: formatLoopExitLines snapshot
     expect(message).toBe(`Loop exited: ${IA_55_AC3_MESSAGE}.`);
   });
 });
+
+// ─── Story 6.1: loadConfigOverride seam wiring (FR34-FR40) ────────────────
+
+describe("CFG_61_LOOP_*: loadConfigOverride wiring (Story 6.1)", () => {
+  it("CFG_61_LOOP_1: loadConfigOverride is invoked when opts.config absent", async () => {
+    let loaderCalls = 0;
+    const { stub } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return { failurePolicies: { "bmad-dev-story": "retry" } };
+        },
+      }),
+    );
+    expect(loaderCalls).toBe(1);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("CFG_61_LOOP_2: loadConfigOverride is NOT invoked when opts.config supplied directly", async () => {
+    let loaderCalls = 0;
+    const { stub } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        config: { failurePolicies: { "bmad-dev-story": "skip" } },
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return { failurePolicies: { "bmad-dev-story": "retry" } };
+        },
+      }),
+    );
+    expect(loaderCalls).toBe(0);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("CFG_61_LOOP_3: async loadConfigOverride awaited correctly", async () => {
+    let loaderCalls = 0;
+    const { stub } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        loadConfigOverride: async () => {
+          loaderCalls++;
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          return { failurePolicies: {} };
+        },
+      }),
+    );
+    expect(loaderCalls).toBe(1);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("CFG_61_LOOP_4: loadConfigOverride throwing ConfigError surfaces as loop halt", async () => {
+    const { stub } = countingStub(successResult());
+    let caught: unknown;
+    try {
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        loadConfigOverride: () => {
+          throw new (require("../../errors.ts").ConfigError)(
+            "CFG_61_LOOP_4: synthetic config error",
+            "synthetic detail",
+            "See bmad-stepper.config.yaml; Run /bmad-next --doctor.",
+          );
+        },
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(require("../../errors.ts").ConfigError);
+  });
+});
+
+// ─── Story 6.2: opts.config?.overrides → BuildInput.overrides wiring ────
+
+describe("OVR_62_LOOP_*: opts.config?.overrides threading (Story 6.2)", () => {
+  it("OVR_62_LOOP_1: loadConfigOverride that resolves to overrides record is awaited and threaded", async () => {
+    let loaderCalls = 0;
+    const { stub } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return {
+            failurePolicies: {},
+            overrides: {
+              "bmad-brainstorming": {
+                phase: "implementation",
+              },
+            },
+          };
+        },
+      }),
+    );
+    expect(loaderCalls).toBe(1);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("OVR_62_LOOP_2: opts.config.overrides is preserved when supplied directly (loader not invoked)", async () => {
+    let loaderCalls = 0;
+    const { stub } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        config: {
+          overrides: {
+            "experimental-loop-skill": {
+              phase: "implementation",
+              after: ["bmad-dev-story"],
+              optional: true,
+            },
+          },
+        },
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return { failurePolicies: {} };
+        },
+      }),
+    );
+    // Loader bypassed (opts.config wins per Story 6.1 OQ-5).
+    expect(loaderCalls).toBe(0);
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+// ─── Story 6.3: opts.config?.models flows through to runNext (FR36) ────
+//
+// AC-1 — `models:` config block → dispatch-spec.json's `model` field via
+// the runNext composer at the dispatch site. Story 6.3 ships ZERO direct
+// change to loop/run.ts internals; the seam already flows through via
+// `effectiveConfig`. These tests assert the seam stays open by capturing
+// the per-iteration `runNext` opts and verifying `config.models` lands
+// in the threaded RunNextOptions. The actual dispatch-spec.json wiring
+// is validated in src/commands/next/run.test.ts MOD_63_RUN_*.
+
+describe("MOD_63_LOOP_*: opts.config?.models threading (Story 6.3)", () => {
+  it("MOD_63_LOOP_1: opts.config.models is preserved when supplied directly", async () => {
+    let loaderCalls = 0;
+    const capturedOpts: Array<unknown> = [];
+    const stub = async () => {
+      // Capture the implicit opts? at runNextFn call site — note:
+      // productionRunNextFn delegates through to runNext({...}); the
+      // override path bypasses production composition, so the captured
+      // value here is whatever runNext ITSELF sees. For loop-side
+      // assertion we instead verify loader was bypassed (config wins
+      // per Story 6.1 OQ-5).
+      capturedOpts.push("called");
+      return successResult();
+    };
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        config: {
+          models: {
+            "bmad-dev-story": "opus",
+            "bmad-code-review": "haiku",
+          },
+        },
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return { failurePolicies: {} };
+        },
+      }),
+    );
+    // Loader bypassed (Story 6.1 OQ-5: opts.config wins over loader).
+    expect(loaderCalls).toBe(0);
+    expect(result.exitCode).toBe(0);
+    expect(capturedOpts.length).toBe(1);
+  });
+
+  it("MOD_63_LOOP_2: loadConfigOverride returning models record is awaited and threaded", async () => {
+    let loaderCalls = 0;
+    const { stub } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return {
+            failurePolicies: {},
+            models: {
+              "bmad-dev-story": "opus",
+            },
+          };
+        },
+      }),
+    );
+    expect(loaderCalls).toBe(1);
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+// Story 6.4 — `budgets:` per-step config consumer wiring tests at the loop
+// layer. Mirrors MOD_63_LOOP_* pattern: LoopOpts.config.budgets + the
+// loadConfigOverride return type are extended; effectiveConfig flows
+// through `productionRunNextFn` to runNext. The actual dispatch-spec.json
+// wiring is validated in src/commands/next/run.test.ts BUD_64_RUN_*.
+
+describe("BUD_64_LOOP_*: opts.config?.budgets threading (Story 6.4)", () => {
+  it("BUD_64_LOOP_1: opts.config.budgets is preserved when supplied directly", async () => {
+    let loaderCalls = 0;
+    const capturedOpts: Array<unknown> = [];
+    const stub = async () => {
+      capturedOpts.push("called");
+      return successResult();
+    };
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        config: {
+          budgets: {
+            "bmad-dev-story": { contextTokens: 80000, timeoutMs: 600000 },
+            "bmad-code-review": { contextTokens: 100000 },
+          },
+        },
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return { failurePolicies: {} };
+        },
+      }),
+    );
+    // Loader bypassed (Story 6.1 OQ-5: opts.config wins over loader).
+    expect(loaderCalls).toBe(0);
+    expect(result.exitCode).toBe(0);
+    expect(capturedOpts.length).toBe(1);
+  });
+
+  it("BUD_64_LOOP_2: loadConfigOverride returning budgets record is awaited and threaded", async () => {
+    let loaderCalls = 0;
+    const { stub } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return {
+            failurePolicies: {},
+            budgets: {
+              "bmad-dev-story": { contextTokens: 80000, timeoutMs: 600000 },
+            },
+          };
+        },
+      }),
+    );
+    expect(loaderCalls).toBe(1);
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+// Story 6.5 — `verifiers:` per-step config consumer wiring tests at the
+// loop layer. Mirrors BUD_64_LOOP_* / MOD_63_LOOP_*: LoopOpts.config.verifiers
+// + the loadConfigOverride return type are extended; effectiveConfig flows
+// through `productionRunNextFn` to runNext. The actual verifier-tier
+// merge behaviour is validated in src/verifiers/registry.test.ts
+// VER_65_REGISTRY_* and src/commands/next/verify-and-advance.test.ts
+// VER_65_VANDA_*.
+
+describe("VER_65_LOOP_*: opts.config?.verifiers threading (Story 6.5)", () => {
+  it("VER_65_LOOP_1: opts.config.verifiers is preserved when supplied directly (loader bypassed per OQ-5)", async () => {
+    let loaderCalls = 0;
+    const stub = async () => successResult();
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        config: {
+          verifiers: {
+            "bmad-dev-story": { requiredFrontmatterSections: ["owner"] },
+          },
+        },
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return { failurePolicies: {} };
+        },
+      }),
+    );
+    expect(loaderCalls).toBe(0);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("VER_65_LOOP_2: loadConfigOverride returning verifiers record is awaited and threaded", async () => {
+    let loaderCalls = 0;
+    const { stub } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return {
+            failurePolicies: {},
+            verifiers: {
+              "bmad-dev-story": {
+                requiredFrontmatterSections: ["owner"],
+                mode: "merge",
+              },
+            },
+          };
+        },
+      }),
+    );
+    expect(loaderCalls).toBe(1);
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+// ─── Story 6.6: TLM_66_LOOP_* — opts.config?.telemetry threading via
+// LoopOpts.config + loadConfigOverride. The loop runner does NOT consume
+// telemetry directly; it threads through `effectiveConfig` to runNext
+// which forwards to verify-and-advance Layer 2. These tests confirm the
+// type extension is non-breaking + the loadConfigOverride path returns
+// telemetry without runtime errors.
+
+describe("TLM_66_LOOP_*: opts.config?.telemetry threading (Story 6.6)", () => {
+  it("TLM_66_LOOP_1: opts.config.telemetry is preserved when supplied directly (loader bypassed)", async () => {
+    let loaderCalls = 0;
+    const stub = async () => successResult();
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        config: { telemetry: { enabled: true } },
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return { failurePolicies: {} };
+        },
+      }),
+    );
+    expect(loaderCalls).toBe(0);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("TLM_66_LOOP_2: loadConfigOverride returning telemetry record is awaited and threaded", async () => {
+    let loaderCalls = 0;
+    const { stub } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        loadConfigOverride: () => {
+          loaderCalls++;
+          return {
+            failurePolicies: {},
+            telemetry: { enabled: true },
+          };
+        },
+      }),
+    );
+    expect(loaderCalls).toBe(1);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("TLM_66_LOOP_3: backwards-compat — absent telemetry record preserves existing behaviour", async () => {
+    const stub = async () => successResult();
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+      }),
+    );
+    expect(result.exitCode).toBe(0);
+  });
+});

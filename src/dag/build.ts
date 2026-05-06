@@ -43,20 +43,35 @@
  * runner — the runner consults the epics/stories directory listing on
  * demand.
  *
- * Tier 2 parser strategy: hand-rolled minimal YAML extractor for the
- * `overrides:` block. Full Zod-validated YAML loader is Story 6.1
- * (`config-yaml-schema-loader`); strict `OverridesSchema` is Story 6.2.
- * The hand-rolled extractor is intentionally narrow — split on lines,
- * find `overrides:`, walk indented children, parse simple types (strings,
- * booleans, inline lists `[a, b]`, dash lists `- a`). On parse failure
- * or missing file, log `warn` once and skip Tier 2 entirely (graceful
- * degradation per "Story 1.10 is foundational; Story 6.1 owns strict
- * validation" scoping).
+ * Tier 2 parser strategy: TWO orthogonal paths per Story 6.2.
+ *   - **STRICT path (Story 6.2 — preferred)**: when `BuildInput.overrides`
+ *     is provided (typed Zod-validated record from `loadConfig()` →
+ *     `config.overrides`), build() consumes the map directly. NO YAML
+ *     parse. NO graceful degradation. Edge validation throws
+ *     `ConfigError` (exit 2) with a single-line, field-pointing hint
+ *     when an override declares an unknown predecessor / successor.
+ *   - **LEGACY path (Story 1.10 — graceful)**: when `BuildInput.overrides
+ *     === undefined`, build() reads `bmad-stepper.config.yaml` directly
+ *     via the hand-rolled extractor (split on lines, find `overrides:`,
+ *     walk indented children, parse simple types). On parse failure or
+ *     missing file, log `warn` once and skip Tier 2 entirely (Story 1.10
+ *     graceful-degradation per "Story 1.10 is foundational; Story 6.1+
+ *     own strict validation" scoping). Edge validation throws
+ *     `UnknownBmadSkillError` (exit 3) with the AC-3 verbatim hint.
+ *
+ * The origin of each entry's edges is tracked via a per-build
+ * `overrideSources: Map<string, Set<string>>` so the dangling-edge check
+ * can switch error class on origin (override → ConfigError; seed/
+ * frontmatter → UnknownBmadSkillError) per AC line 1182-1184.
  */
 
 import { existsSync } from "node:fs";
 import * as path from "node:path";
-import { DagCycleError, UnknownBmadSkillError } from "../errors.ts";
+import {
+  ConfigError,
+  DagCycleError,
+  UnknownBmadSkillError,
+} from "../errors.ts";
 import { warn } from "../io/log.ts";
 import { seedV6_x } from "./seed-v6.x.ts";
 import { tarjanScc } from "./tarjan.ts";
@@ -86,6 +101,193 @@ const VALID_PHASES: ReadonlySet<string> = new Set([
  */
 function ac3UnknownSkillHint(skillName: string): string {
   return `Add an override for ${skillName} in bmad-stepper.config.yaml under the overrides: block.`;
+}
+
+/**
+ * Story 6.2 — single-line edge-pointing hint for an override-introduced
+ * unknown predecessor / successor (per OQ-5).
+ *
+ * Format:
+ *   See bmad-stepper.config.yaml at overrides.<skillName>.<edgeKind>[<index>]:
+ *   <edgeKind> "<unknownDep>" is not a known skill. Run /bmad-next --doctor
+ *   to validate the file against the schema.
+ *
+ * Both "See" and "Run" verbs satisfy the AR22 actionable-hint regex
+ * `/^.*(Run|See|Try|Check) /`. The format is single-line (no `\n`/`\r`)
+ * to satisfy Story 5.6's single-line constraint. The full multi-error
+ * list (if more than one edge fails) is reserved for `--doctor` per
+ * Story 6.1 SDR I-29 forward-tracker; the throw-site reports the FIRST
+ * failure only.
+ */
+function overrideEdgeHint(
+  skillName: string,
+  edgeKind: "after" | "before",
+  index: number,
+  unknownDep: string,
+): string {
+  const noun = edgeKind === "after" ? "predecessor" : "successor";
+  return `See bmad-stepper.config.yaml at overrides.${skillName}.${edgeKind}[${index}]: ${noun} "${unknownDep}" is not a known skill. Run /bmad-next --doctor to validate the file against the schema.`;
+}
+
+/**
+ * Story 6.2 — apply a single override entry to the resolved node Map,
+ * either patching an existing seed entry (when names match) or appending
+ * a new node (when the name is new).
+ *
+ * Shared by the STRICT path (Story 6.2 — `BuildInput.overrides`
+ * provided) and the LEGACY path (Story 1.10 — `parseOverridesYaml`
+ * fallback) so the merge semantics stay identical between the two.
+ *
+ * Throws when an APPEND-mode entry (no seed match) lacks the required
+ * `phase` field. The strict path catches this at the loader layer (Zod
+ * does not require `phase`, so this is a runtime guard for new appends).
+ */
+function applyOverride(
+  resolved: Map<string, DagNode>,
+  name: string,
+  override: OverrideEntry,
+): void {
+  const existing = resolved.get(name);
+  if (existing !== undefined) {
+    // Patch the seed entry with non-undefined override fields.
+    const merged: DagNode = {
+      name,
+      phase: override.phase ?? existing.phase,
+      after:
+        override.after !== undefined
+          ? [...override.after]
+          : [...existing.after],
+      before: [],
+      optional: override.optional ?? existing.optional,
+      persona:
+        override.persona !== undefined ? override.persona : existing.persona,
+      ...(override.idempotent !== undefined
+        ? { idempotent: override.idempotent }
+        : existing.idempotent !== undefined
+          ? { idempotent: existing.idempotent }
+          : {}),
+    };
+    resolved.set(name, merged);
+    return;
+  }
+  // Append a new entry — phase is required for new entries.
+  if (override.phase === undefined) {
+    throw new Error(
+      `override for new skill "${name}" missing required "phase" field`,
+    );
+  }
+  resolved.set(name, {
+    name,
+    phase: override.phase,
+    after: override.after !== undefined ? [...override.after] : [],
+    before: [],
+    optional: override.optional ?? false,
+    persona: override.persona ?? null,
+    ...(override.idempotent !== undefined
+      ? { idempotent: override.idempotent }
+      : {}),
+  });
+}
+
+/**
+ * Story 6.2 — origin tracker for override-introduced edges. Keyed by
+ * skill name, value is the union of edge targets (from both `after` and
+ * `before`) declared in an override entry. The dangling-edge check
+ * consults this map to decide which error class to throw — `ConfigError`
+ * for override-introduced unknowns (AC-2), `UnknownBmadSkillError` for
+ * seed/frontmatter-introduced unknowns (Story 1.10 AC-3 unchanged).
+ *
+ * Stored alongside per-edge index Maps so the hint can point at the
+ * exact `after[i]` or `before[i]` position (per OQ-5 hint format). The
+ * `name → after-index` and `name → before-index` Maps key by edge target
+ * (the unknown name) and value the index in the OVERRIDE entry's array.
+ */
+interface OverrideOriginTracking {
+  readonly sources: Map<string, Set<string>>;
+  /** name → (depTarget → index in override's `after` array) */
+  readonly afterIndices: Map<string, Map<string, number>>;
+  /** name → (depTarget → index in override's `before` array) */
+  readonly beforeIndices: Map<string, Map<string, number>>;
+}
+
+/**
+ * Story 6.2 — normalise `BuildInput.overrides` into a `Map<string,
+ * OverrideEntry>` regardless of whether the caller supplied a
+ * `ReadonlyMap` or a plain `Record` (Zod's `z.record` infers to
+ * `Record<string, T>`). Iteration order matches the input — Map
+ * insertion order or Object.entries order — both deterministic.
+ *
+ * Each entry's `name` field is filled from the map key (the canonical
+ * skill ID) when undefined on the value object. This keeps the two
+ * shapes interchangeable for downstream consumers.
+ */
+function normaliseOverridesInput(
+  overrides:
+    | ReadonlyMap<string, OverrideEntry>
+    | Readonly<Record<string, OverrideEntry>>,
+): Map<string, OverrideEntry> {
+  const out = new Map<string, OverrideEntry>();
+  if (overrides instanceof Map) {
+    for (const [name, override] of overrides) {
+      out.set(
+        name,
+        override.name === undefined ? { ...override, name } : override,
+      );
+    }
+    return out;
+  }
+  for (const [name, override] of Object.entries(overrides)) {
+    out.set(
+      name,
+      override.name === undefined ? { ...override, name } : override,
+    );
+  }
+  return out;
+}
+
+function recordOverrideEdges(
+  tracking: OverrideOriginTracking,
+  name: string,
+  override: OverrideEntry,
+): void {
+  const targets = new Set<string>();
+  const afterIndex = new Map<string, number>();
+  const beforeIndex = new Map<string, number>();
+  if (override.after !== undefined) {
+    for (let i = 0; i < override.after.length; i += 1) {
+      const t = override.after[i];
+      if (t === undefined) {
+        continue;
+      }
+      targets.add(t);
+      // First index wins (the offending edge surfaces the FIRST
+      // declaration of the unknown name).
+      if (!afterIndex.has(t)) {
+        afterIndex.set(t, i);
+      }
+    }
+  }
+  if (override.before !== undefined) {
+    for (let i = 0; i < override.before.length; i += 1) {
+      const t = override.before[i];
+      if (t === undefined) {
+        continue;
+      }
+      targets.add(t);
+      if (!beforeIndex.has(t)) {
+        beforeIndex.set(t, i);
+      }
+    }
+  }
+  if (targets.size > 0) {
+    tracking.sources.set(name, targets);
+  }
+  if (afterIndex.size > 0) {
+    tracking.afterIndices.set(name, afterIndex);
+  }
+  if (beforeIndex.size > 0) {
+    tracking.beforeIndices.set(name, beforeIndex);
+  }
 }
 
 /**
@@ -534,54 +736,47 @@ export async function build(input: BuildInput): Promise<DagAdjacency> {
     });
   }
 
-  // Tier 2: overrides — graceful degradation on missing/malformed.
-  if (existsSync(overridesPath)) {
+  // Tier 2: overrides — Story 6.2 STRICT path branches on
+  // `input.overrides` provided; falls back to LEGACY parseOverridesYaml
+  // (graceful degradation per Story 1.10) when undefined.
+  const overrideTracking: OverrideOriginTracking = {
+    sources: new Map(),
+    afterIndices: new Map(),
+    beforeIndices: new Map(),
+  };
+
+  if (input.overrides !== undefined) {
+    // STRICT path (Story 6.2): consume the typed map directly. NO YAML
+    // parse. NO graceful degradation — schema validation is the loader's
+    // responsibility. Edge-validation errors throw ConfigError per AC-2.
+    const overrides = normaliseOverridesInput(input.overrides);
+    for (const [name, override] of overrides) {
+      // Skip entries with nothing to merge (empty `{}`) — treat as a
+      // no-op rather than throwing on missing `phase` (the user
+      // declaring an empty entry is a no-op intent; `applyOverride`'s
+      // append branch would otherwise fail).
+      const existing = resolved.get(name);
+      if (existing === undefined && override.phase === undefined) {
+        // Defensive: empty append → no-op (not a runtime fault per AC).
+        // The schema layer (.strict() + Zod) is the source-of-truth for
+        // structural validation; missing `phase` for an APPEND simply
+        // means the user did not author enough info to materialise the
+        // node, so we skip.
+        continue;
+      }
+      applyOverride(resolved, name, override);
+      recordOverrideEdges(overrideTracking, name, override);
+    }
+  } else if (existsSync(overridesPath)) {
+    // LEGACY path (Story 1.10): parse YAML directly with graceful
+    // degradation on missing/malformed. Origin tracking still populated
+    // so override-introduced unknowns surface as ConfigError per AC-2.
     try {
       const text = await Bun.file(overridesPath).text();
       const overrides = parseOverridesYaml(text);
       for (const [name, override] of overrides) {
-        const existing = resolved.get(name);
-        if (existing !== undefined) {
-          // Patch the seed entry with non-undefined override fields.
-          const merged: DagNode = {
-            name,
-            phase: override.phase ?? existing.phase,
-            after:
-              override.after !== undefined
-                ? [...override.after]
-                : [...existing.after],
-            before: [],
-            optional: override.optional ?? existing.optional,
-            persona:
-              override.persona !== undefined
-                ? override.persona
-                : existing.persona,
-            ...(override.idempotent !== undefined
-              ? { idempotent: override.idempotent }
-              : existing.idempotent !== undefined
-                ? { idempotent: existing.idempotent }
-                : {}),
-          };
-          resolved.set(name, merged);
-        } else {
-          // Append a new entry — phase is required for new entries.
-          if (override.phase === undefined) {
-            throw new Error(
-              `override for new skill "${name}" missing required "phase" field`,
-            );
-          }
-          resolved.set(name, {
-            name,
-            phase: override.phase,
-            after: override.after !== undefined ? [...override.after] : [],
-            before: [],
-            optional: override.optional ?? false,
-            persona: override.persona ?? null,
-            ...(override.idempotent !== undefined
-              ? { idempotent: override.idempotent }
-              : {}),
-          });
-        }
+        applyOverride(resolved, name, override);
+        recordOverrideEdges(overrideTracking, name, override);
       }
     } catch (cause) {
       const reason = cause instanceof Error ? cause.message : String(cause);
@@ -610,6 +805,15 @@ export async function build(input: BuildInput): Promise<DagAdjacency> {
   }
 
   // Step 4: compute edges + dangling-edge check.
+  //
+  // Story 6.2 — the dangling-edge check now BRANCHES on origin:
+  //   - if the offending edge originated from an OVERRIDE entry's
+  //     `after` or `before` array, throw ConfigError (exit 2) with a
+  //     single-line, field-pointing hint pointing at the offending
+  //     edge index per AC-2 + OQ-5;
+  //   - else (seed-introduced or frontmatter-introduced unknown), throw
+  //     UnknownBmadSkillError (exit 3) with the AC-3 verbatim hint
+  //     (Story 1.10 behaviour preserved).
   const edgesOut = new Map<string, Set<string>>();
   const edgesIn = new Map<string, Set<string>>();
   for (const name of resolved.keys()) {
@@ -619,6 +823,22 @@ export async function build(input: BuildInput): Promise<DagAdjacency> {
   for (const node of resolved.values()) {
     for (const dep of node.after) {
       if (!resolved.has(dep)) {
+        // Check if this `after` edge came from an override.
+        const overrideTargets = overrideTracking.sources.get(node.name);
+        if (overrideTargets?.has(dep)) {
+          const idx =
+            overrideTracking.afterIndices.get(node.name)?.get(dep) ?? 0;
+          throw new ConfigError(
+            `Unknown predecessor: ${dep} — referenced by overrides.${node.name}.after[${idx}] but not in seed/overrides/frontmatter`,
+            JSON.stringify({
+              skill: dep,
+              referencedBy: node.name,
+              edgeKind: "after",
+              edgeIndex: idx,
+            }),
+            overrideEdgeHint(node.name, "after", idx, dep),
+          );
+        }
         throw new UnknownBmadSkillError(
           `Unknown BMAD skill: ${dep} — referenced by ${node.name}.after but not in seed/overrides/frontmatter`,
           JSON.stringify({ skill: dep, referencedBy: node.name }),
@@ -630,17 +850,70 @@ export async function build(input: BuildInput): Promise<DagAdjacency> {
     }
   }
 
-  // Step 5: compute `before` field by inverting `after` across all
-  // resolved entries.
-  const finalNodes = new Map<string, DagNode>();
-  for (const [name, node] of resolved) {
-    const before: string[] = [];
-    for (const other of resolved.values()) {
-      if (other.after.includes(name)) {
-        before.push(other.name);
+  // Story 6.2 — symmetric dangling-edge check for override `before`
+  // edges. These edges DO NOT live on the resolved node's `after` (they
+  // were authored as `before` on the override entry and represent the
+  // SUCCESSOR side of the relationship). We validate them HERE: each
+  // `before` target must exist in the resolved set so the inverse-edge
+  // computation (Step 5) can complete. AC-2 symmetric: unknown
+  // successor → ConfigError pointing at `before[<index>]`.
+  for (const [name, beforeIndex] of overrideTracking.beforeIndices) {
+    for (const [target, idx] of beforeIndex) {
+      if (!resolved.has(target)) {
+        throw new ConfigError(
+          `Unknown successor: ${target} — referenced by overrides.${name}.before[${idx}] but not in seed/overrides/frontmatter`,
+          JSON.stringify({
+            skill: target,
+            referencedBy: name,
+            edgeKind: "before",
+            edgeIndex: idx,
+          }),
+          overrideEdgeHint(name, "before", idx, target),
+        );
       }
     }
-    before.sort();
+  }
+
+  // Story 6.2 — apply override `before` edges into the adjacency Maps
+  // (the node owning the override authored the `before:` list, so for
+  // each `before: T`, we record T.after += [name] equivalent — i.e.,
+  // the node-owner is a SUCCESSOR of T, so edges T → name flow). The
+  // inverse-edge propagation here is what Step 5 (`before` field
+  // inversion) consumes for the final node materialisation.
+  for (const [name, beforeIndex] of overrideTracking.beforeIndices) {
+    for (const target of beforeIndex.keys()) {
+      // edges flow from name → target (since `before: T` means "this
+      // step is required BEFORE T begins" — name precedes T).
+      edgesOut.get(name)?.add(target);
+      edgesIn.get(target)?.add(name);
+    }
+  }
+
+  // Step 5: compute `before` field by inverting `after` across all
+  // resolved entries + folding in override-introduced `before` edges.
+  //
+  // Story 6.2 — when an override authored a `before: [T]` list, the
+  // node-owner's relationship is "owner → T" (owner precedes T). This
+  // means T.before includes owner. We surface that here by walking the
+  // overrideTracking.beforeIndices map; each (ownerName → target) entry
+  // corresponds to "target.before += ownerName".
+  const finalNodes = new Map<string, DagNode>();
+  for (const [name, node] of resolved) {
+    const beforeSet = new Set<string>();
+    for (const other of resolved.values()) {
+      if (other.after.includes(name)) {
+        beforeSet.add(other.name);
+      }
+    }
+    // Fold override-authored `before` edges: any owner whose
+    // `before: [name]` mentions this node makes the owner a predecessor
+    // of `name` — so name's before-set includes the owner.
+    for (const [ownerName, beforeIndex] of overrideTracking.beforeIndices) {
+      if (beforeIndex.has(name)) {
+        beforeSet.add(ownerName);
+      }
+    }
+    const before = [...beforeSet].sort();
     finalNodes.set(name, {
       ...node,
       before,

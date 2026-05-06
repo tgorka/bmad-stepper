@@ -1,5 +1,5 @@
 # generated: 2026-04-30
-# last_updated: 2026-05-05T06:57:21Z  # epic-5-retrospective COMPLETE (optional → done); EPIC 5 fully closed (all 6 stories + retrospective done); next surface = Story 6.1
+# last_updated: 2026-05-05T13:25:00Z  # Story 6.8 review (dev-story iter 23 of /bmad-loop --until=story:6.8, runId 2026-05-05T131200Z-bmad-next)
 # project: bmad-stepper
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-30
-last_updated: 2026-05-05T06:57:21Z
+last_updated: 2026-05-05T13:25:00Z
 project: bmad-stepper
 project_key: NOKEY
 tracking_system: file-system
@@ -99,15 +99,15 @@ development_status:
   5-5-interactive-pause-between-steps: done
   5-6-per-step-failure-policy-via-config-actionable-errors: done
   epic-5-retrospective: done
-  epic-6: backlog
-  6-1-bmad-stepper-config-yaml-schema-loader: backlog
-  6-2-dag-overrides-block: backlog
-  6-3-models-per-step-config: backlog
-  6-4-budgets-per-step-config: backlog
-  6-5-verifiers-per-step-config-override: backlog
-  6-6-telemetry-opt-in-collection: backlog
-  6-7-telemetry-aggregation-report: backlog
-  6-8-auto-archival-of-runs-and-telemetry: backlog
+  epic-6: in-progress
+  6-1-bmad-stepper-config-yaml-schema-loader: done
+  6-2-dag-overrides-block: done
+  6-3-models-per-step-config: done
+  6-4-budgets-per-step-config: done
+  6-5-verifiers-per-step-config-override: done
+  6-6-telemetry-opt-in-collection: done
+  6-7-telemetry-aggregation-report: done
+  6-8-auto-archival-of-runs-and-telemetry: done
   6-9-upgrade-flow: backlog
   6-10-repo-files-v0-1-0-marketplace-release: backlog
   epic-6-retrospective: optional

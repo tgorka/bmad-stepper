@@ -3652,3 +3652,428 @@ describe("runVerifyAndAdvance — Story 5.4 escalate-mode integration (ESC_54_VA
     }
   });
 });
+
+// ─── Story 6.5: VER_65_VANDA_* — RunVerifyAndAdvanceOptions.config.verifiers
+// threading. Mirrors BUD_64_VANDA pattern: opts.config.verifiers field
+// + verifierFn test stub captures projectVerifiers + end-to-end via real
+// runVerifier to confirm merged config surfaces in checks.
+
+describe("VER_65_VANDA: RunVerifyAndAdvanceOptions.config.verifiers threading (Story 6.5 AC-1)", () => {
+  it("VER_65_VANDA_1: stub captures projectVerifiers from opts.config.verifiers", async () => {
+    const paths = await seedFixture({
+      runId: "ver-65-vanda-1",
+      stepName: "bmad-dev-story",
+      epic: 6,
+      story: "6.5",
+    });
+
+    let capturedProjectVerifiers: unknown = "NOT-CALLED";
+    const stub = async (
+      _runId: string,
+      callOpts: {
+        stepName: string;
+        stagingRoot: string;
+        projectVerifiers?: import("../../schemas/config.ts").Verifiers;
+      },
+    ) => {
+      capturedProjectVerifiers = callOpts.projectVerifiers;
+      return {
+        schemaVersion: 1 as const,
+        status: "pass" as const,
+        checks: [],
+        promotedTo: null,
+        resultPath: "/tmp/x.json",
+      };
+    };
+
+    const verifiers = {
+      "bmad-dev-story": { requiredFrontmatterSections: ["owner"] },
+    };
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "ver-65-vanda-1",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T11:30:00.000Z",
+      verifierOverride: stub,
+      config: { verifiers },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(capturedProjectVerifiers).toEqual(verifiers);
+  });
+
+  it("VER_65_VANDA_2: end-to-end real runVerifier — extra requiredFrontmatterSections surface as fail", async () => {
+    const paths = await seedFixture({
+      runId: "ver-65-vanda-2",
+      stepName: "bmad-dev-story",
+      epic: 6,
+      story: "6.5",
+      // Default seedFixture body has title+status frontmatter; lacks owner.
+    });
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "ver-65-vanda-2",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T11:30:01.000Z",
+      // Story 5.6 — escalate policy ensures the failure throws as
+      // VerifierFailureError per the existing baseline behaviour.
+      failurePolicyOverride: "escalate",
+      maxRetriesOverride: 0,
+      config: {
+        verifiers: {
+          "bmad-dev-story": { requiredFrontmatterSections: ["owner"] },
+        },
+      },
+    });
+
+    // The merged config requires "owner" → frontmatter check fails.
+    expect(result.action.action).toBe("halt");
+  });
+
+  it("VER_65_VANDA_3: backwards-compat — undefined opts.config → stub sees undefined projectVerifiers", async () => {
+    const paths = await seedFixture({
+      runId: "ver-65-vanda-3",
+      stepName: "bmad-dev-story",
+      epic: 6,
+      story: "6.5",
+    });
+
+    let captured: unknown = "NOT-CALLED";
+    const stub = async (
+      _runId: string,
+      callOpts: {
+        stepName: string;
+        stagingRoot: string;
+        projectVerifiers?: import("../../schemas/config.ts").Verifiers;
+      },
+    ) => {
+      captured = callOpts.projectVerifiers;
+      return {
+        schemaVersion: 1 as const,
+        status: "pass" as const,
+        checks: [],
+        promotedTo: null,
+        resultPath: "/tmp/x.json",
+      };
+    };
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "ver-65-vanda-3",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T11:30:02.000Z",
+      verifierOverride: stub,
+    });
+
+    expect(result.exitCode).toBe(0);
+    // No config supplied → stub receives undefined projectVerifiers.
+    expect(captured).toBeUndefined();
+  });
+});
+
+// ─── Story 6.6: TLM_66_VANDA_* — RunVerifyAndAdvanceOptions.config.telemetry
+// + telemetryRoot test seam. AC-1 (write happens), AC-2 (Zod-throw fall-
+// through), AC-3 (opt-in gate skips writes when disabled / undefined).
+// Mirrors VER_65_VANDA pattern.
+
+describe("TLM_66_VANDA: RunVerifyAndAdvanceOptions.config.telemetry threading (Story 6.6)", () => {
+  it("TLM_66_VANDA_ENABLED_1: AC-1 — telemetry.enabled=true → JSONL line written with valid record", async () => {
+    const paths = await seedFixture({
+      runId: "tlm-66-vanda-enabled-1",
+      stepName: "bmad-dev-story",
+      epic: 6,
+      story: "6.6",
+    });
+    const telemetryRoot = path.join(tmp, "telemetry");
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "tlm-66-vanda-enabled-1",
+        "--tokens-in",
+        "100",
+        "--tokens-out",
+        "50",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T12:00:00.000Z",
+      telemetryRoot,
+      config: { telemetry: { enabled: true } },
+    });
+
+    expect(result.exitCode).toBe(0);
+
+    const expectedFile = path.join(telemetryRoot, "2026-05.jsonl");
+    const content = await fs.readFile(expectedFile, "utf8");
+    const lines = content.split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBe(1);
+    const record = JSON.parse(lines[0] as string);
+    expect(record.schemaVersion).toBe(1);
+    expect(record.step).toBe("bmad-dev-story");
+    expect(record.verifierStatus).toBe("pass");
+    expect(record.retries).toBe(0);
+    expect(record.tokensIn).toBe(100);
+    expect(record.tokensOut).toBe(50);
+    expect(record.model).toBe("sonnet");
+    expect(record.persona).toBe("dev");
+    expect(record.ts).toBe("2026-05-05T12:00:00.000Z");
+  });
+
+  it("TLM_66_VANDA_DISABLED_1: AC-3 — telemetry.enabled=false → no telemetry file written", async () => {
+    const paths = await seedFixture({
+      runId: "tlm-66-vanda-disabled-1",
+      stepName: "bmad-dev-story",
+      epic: 6,
+      story: "6.6",
+    });
+    const telemetryRoot = path.join(tmp, "telemetry-disabled");
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "tlm-66-vanda-disabled-1",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T12:01:00.000Z",
+      telemetryRoot,
+      config: { telemetry: { enabled: false } },
+    });
+
+    expect(result.exitCode).toBe(0);
+
+    let exists = true;
+    try {
+      await fs.access(telemetryRoot);
+    } catch {
+      exists = false;
+    }
+    expect(exists).toBe(false);
+  });
+
+  it("TLM_66_VANDA_NO_CONFIG_1: AC-3 — opts.config undefined → no telemetry file written", async () => {
+    const paths = await seedFixture({
+      runId: "tlm-66-vanda-no-config-1",
+      stepName: "bmad-dev-story",
+      epic: 6,
+      story: "6.6",
+    });
+    const telemetryRoot = path.join(tmp, "telemetry-noconfig");
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "tlm-66-vanda-no-config-1",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T12:02:00.000Z",
+      telemetryRoot,
+    });
+
+    expect(result.exitCode).toBe(0);
+
+    let exists = true;
+    try {
+      await fs.access(telemetryRoot);
+    } catch {
+      exists = false;
+    }
+    expect(exists).toBe(false);
+  });
+
+  it("TLM_66_VANDA_ZOD_REJECT_1: AC-2 best-effort fall-through — writeTelemetryRecord throws → log.warn fires; exit code preserved", async () => {
+    const paths = await seedFixture({
+      runId: "tlm-66-vanda-zod-1",
+      stepName: "bmad-dev-story",
+      epic: 6,
+      story: "6.6",
+    });
+    const telemetryRoot = path.join(tmp, "telemetry-zod");
+
+    let warnedMessage: string | undefined;
+    const logStub = {
+      info(_message: string): void {},
+      warn(message: string): void {
+        if (message.includes("telemetry write failed")) {
+          warnedMessage = message;
+        }
+      },
+      error(_message: string): void {},
+    };
+
+    const throwingWriter: typeof import("../../telemetry/index.ts").writeTelemetryRecord =
+      async (_record, _opts) => {
+        throw new Error("synthetic Zod parse failure");
+      };
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "tlm-66-vanda-zod-1",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T12:03:00.000Z",
+      logger: logStub,
+      telemetryRoot,
+      writeTelemetryRecordOverride: throwingWriter,
+      config: { telemetry: { enabled: true } },
+    });
+
+    // Verifier outcome preserved (AC-2 best-effort discipline).
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("report");
+    // log.warn was called with the telemetry-failure prefix.
+    expect(warnedMessage).toBeDefined();
+    expect(warnedMessage).toContain("telemetry write failed");
+    expect(warnedMessage).toContain("synthetic Zod parse failure");
+  });
+
+  it("TLM_66_VANDA_ON_VERIFIER_FAIL_1: AC-1 — verifier fail still writes telemetry with verifierStatus=fail", async () => {
+    const paths = await seedFixture({
+      runId: "tlm-66-vanda-vfail-1",
+      stepName: "bmad-dev-story",
+      epic: 6,
+      story: "6.6",
+    });
+    const telemetryRoot = path.join(tmp, "telemetry-vfail");
+
+    const failStub = async (
+      _runId: string,
+      _opts: {
+        stepName: string;
+        stagingRoot: string;
+        projectVerifiers?: import("../../schemas/config.ts").Verifiers;
+      },
+    ) => ({
+      schemaVersion: 1 as const,
+      status: "fail" as const,
+      checks: [],
+      promotedTo: null,
+      resultPath: "/tmp/fail.json",
+    });
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "tlm-66-vanda-vfail-1",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T12:04:00.000Z",
+      verifierOverride: failStub,
+      failurePolicyOverride: "escalate",
+      maxRetriesOverride: 0,
+      telemetryRoot,
+      config: { telemetry: { enabled: true } },
+    });
+
+    // The escalate path returns action: "halt" (verifier-failure -> halt).
+    expect(result.action.action).toBe("halt");
+
+    // Telemetry record MUST have been written in the finally block.
+    const expectedFile = path.join(telemetryRoot, "2026-05.jsonl");
+    const content = await fs.readFile(expectedFile, "utf8");
+    const lines = content.split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBe(1);
+    const record = JSON.parse(lines[0] as string);
+    expect(record.verifierStatus).toBe("fail");
+    // errorCode populated when the escalate path produces an outcomeError.
+    expect(record.errorCode).toBeDefined();
+  });
+
+  it("TLM_66_VANDA_BACKWARDS_COMPAT_1: telemetryRoot omitted when telemetry disabled → no behavior change", async () => {
+    const paths = await seedFixture({
+      runId: "tlm-66-vanda-bc-1",
+      stepName: "bmad-dev-story",
+      epic: 6,
+      story: "6.6",
+    });
+
+    // Existing baseline pattern (no telemetry-related opts).
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "tlm-66-vanda-bc-1",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T12:05:00.000Z",
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("report");
+  });
+});

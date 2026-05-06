@@ -66,6 +66,7 @@ import * as path from "node:path";
 import { VerifierFailureError } from "../errors.ts";
 import { atomicWrite } from "../io/atomic-write.ts";
 import { info } from "../io/log.ts";
+import type { Verifiers } from "../schemas/config.ts";
 import {
   type VerifierResult,
   VerifierResultV1Schema,
@@ -364,6 +365,17 @@ export interface RunVerifierOptions {
    * convention for markdown artifacts.
    */
   readonly artifactFilename?: string;
+  /**
+   * Story 6.5 — optional project-config `Verifiers` map; when supplied,
+   * `getVerifierConfig` merges (or replaces) the per-step entry on top
+   * of the plugin baseline per the entry's `mode` field. Production
+   * callers (Story 6.5 `verify-and-advance.ts`) thread
+   * `opts.config?.verifiers` from the typed `Config` returned by
+   * `loadConfig()` (Story 6.1); tests pass synthetic `Verifiers` objects
+   * directly. When omitted, behaviour is byte-identical to Story 2.1
+   * baseline (no project-config layer).
+   */
+  readonly projectVerifiers?: Verifiers;
 }
 
 /**
@@ -450,7 +462,7 @@ export async function runVerifier(
     );
   }
 
-  const config = getVerifierConfig(opts.stepName);
+  const config = getVerifierConfig(opts.stepName, opts.projectVerifiers);
 
   const artifactFilename = opts.artifactFilename ?? `${opts.stepName}.md`;
   const artifact: ArtifactRef = {

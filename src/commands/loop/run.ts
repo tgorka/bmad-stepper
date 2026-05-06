@@ -61,6 +61,7 @@ import { atomicWrite } from "../../io/atomic-write.ts";
 import { error, warn } from "../../io/log.ts";
 import type { DispatchActionV1 } from "../../schemas/dispatch-protocol.ts";
 import type { State } from "../../schemas/state.ts";
+import { runArchivalAtStartup } from "../../startup/archival-trigger.ts";
 import { loadStateUnlocked } from "../../state/load.ts";
 import { type NextResult, type RunNextOptions, runNext } from "../next/run.ts";
 import { type LoopArgs, parseLoopArgs } from "./args.ts";
@@ -452,10 +453,77 @@ export interface LoopOpts {
    * `failurePolicies` field is consumed by the resolver). Using a
    * narrow shape here keeps the LoopOpts surface minimal and
    * decouples the runner from the full ConfigV1Schema.
+   *
+   * Story 6.2 — extended with `overrides?: Overrides` so the loop
+   * runner can thread the typed override map into per-iteration
+   * `runNext({ config: ... })` invocations; runNext in turn forwards
+   * `config.overrides` into `BuildInput.overrides` at every build()
+   * call site (STRICT Tier 2 path).
+   *
+   * Story 6.3 — extended with `models?: Models` so the loop runner can
+   * thread the per-step model map into per-iteration `runNext({...})`;
+   * runNext threads `config.models?.[stepName]` into
+   * `buildDispatchSpec({modelOverride})`. The dispatch-spec.json's
+   * `model` field reflects the configured value (default "sonnet").
    */
   readonly config?: {
     failurePolicies?: import("../../schemas/config.ts").FailurePolicies;
+    overrides?: import("../../schemas/config.ts").Overrides;
+    models?: import("../../schemas/config.ts").Models;
+    budgets?: import("../../schemas/config.ts").Budgets;
+    /**
+     * Story 6.5 — per-step verifier override map. Threaded to
+     * `runNext` via `RunNextOptions.config.verifiers` and ultimately to
+     * `runVerifyAndAdvance` via `RunVerifyAndAdvanceOptions.config.verifiers`.
+     */
+    verifiers?: import("../../schemas/config.ts").Verifiers;
+    /**
+     * Story 6.6 — opt-in telemetry config (FR39, FR40, NFR-S3). Threaded
+     * to `runNext` via `RunNextOptions.config.telemetry` and ultimately
+     * to `runVerifyAndAdvance` via `RunVerifyAndAdvanceOptions.config.telemetry`.
+     * When `enabled === true`, the verify-and-advance finally block writes
+     * a TelemetryRecord JSONL line; when `enabled !== true` (default
+     * `false`), zero telemetry files are written (AC-3).
+     */
+    telemetry?: import("../../schemas/config.ts").Telemetry;
+    /**
+     * Story 6.8 — paths block forwarded into `runArchivalAtStartup`
+     * (consumes `paths.runs` + `paths.telemetry`). Production
+     * `import.meta.main` threads the full ConfigV1 via `opts.config`;
+     * tests with the runLoop composer entrypoint may omit, in which
+     * case the archival trigger is SKIPPED at runtime per OQ-12.
+     */
+    paths?: import("../../schemas/config.ts").Paths;
   };
+  /**
+   * Story 6.1 — test-injection seam for the production `loadConfig()`
+   * call wired at the top of `runLoop`. Tests pass a synthetic config
+   * loader that returns a deterministic `Config` (or throws to exercise
+   * the loader-error path). Mirrors `RunNextOptions.loadConfigOverride`.
+   *
+   * Production code does NOT supply this field — instead the
+   * `import.meta.main` entrypoint at the bottom of this file invokes
+   * `loadConfig()` once (BEFORE entering runLoop) and threads the result
+   * via `opts.config`. The test seam is a convenience for unit-test
+   * isolation without the import.meta.main wiring.
+   */
+  readonly loadConfigOverride?: () =>
+    | Promise<{
+        failurePolicies?: import("../../schemas/config.ts").FailurePolicies;
+        overrides?: import("../../schemas/config.ts").Overrides;
+        models?: import("../../schemas/config.ts").Models;
+        budgets?: import("../../schemas/config.ts").Budgets;
+        verifiers?: import("../../schemas/config.ts").Verifiers;
+        telemetry?: import("../../schemas/config.ts").Telemetry;
+      }>
+    | {
+        failurePolicies?: import("../../schemas/config.ts").FailurePolicies;
+        overrides?: import("../../schemas/config.ts").Overrides;
+        models?: import("../../schemas/config.ts").Models;
+        budgets?: import("../../schemas/config.ts").Budgets;
+        verifiers?: import("../../schemas/config.ts").Verifiers;
+        telemetry?: import("../../schemas/config.ts").Telemetry;
+      };
   /**
    * Story 5.1 test-injection seam: max-retries override threaded to
    * `verify-and-advance.ts` via `RunNextOptions.maxRetriesOverride`.
@@ -790,6 +858,32 @@ export async function runLoop(
       args = parsed.value;
     }
 
+    // Story 6.1 — config-loader test seam: when `opts.config` is not
+    // supplied AND a `loadConfigOverride` is provided (test path), invoke
+    // it to obtain a synthetic Config. Production callers receive
+    // opts.config from the `import.meta.main` block (which calls
+    // `loadConfig()` once and passes the result via opts.config). When
+    // neither is supplied, opts.config stays undefined → resolver
+    // fallback to escalate-default for every step (preserves the
+    // baseline behaviour for tests that did NOT have a config-loader).
+    let effectiveConfig:
+      | {
+          failurePolicies?: import("../../schemas/config.ts").FailurePolicies;
+          overrides?: import("../../schemas/config.ts").Overrides;
+          models?: import("../../schemas/config.ts").Models;
+          budgets?: import("../../schemas/config.ts").Budgets;
+          verifiers?: import("../../schemas/config.ts").Verifiers;
+          telemetry?: import("../../schemas/config.ts").Telemetry;
+          paths?: import("../../schemas/config.ts").Paths;
+        }
+      | undefined = opts?.config;
+    if (
+      effectiveConfig === undefined &&
+      opts?.loadConfigOverride !== undefined
+    ) {
+      effectiveConfig = await opts.loadConfigOverride();
+    }
+
     // Story 4.9 AC-4/AC-5 setup-phase check #1: if SIGINT arrived during
     // args resolution, halt immediately without entering plan-mode or the
     // iteration loop. The check happens AFTER args resolution (so argv
@@ -812,6 +906,27 @@ export async function runLoop(
         startedAt: completedAt,
         completedAt,
       };
+    }
+
+    // Story 6.8: auto-archival of old runs + telemetry at startup. Best-
+    // effort + non-blocking. Plan-first gate analogous to next/run.ts dry-
+    // run gate (plan-mode is read-only; archival WOULD mutate inventory).
+    // Per OQ-12, the trigger is SKIPPED when paths or telemetry config
+    // fields are absent (test seams typically omit them).
+    if (
+      !args.planFirst &&
+      effectiveConfig?.paths !== undefined &&
+      effectiveConfig.telemetry !== undefined
+    ) {
+      const archivalConfig = {
+        paths: effectiveConfig.paths,
+        telemetry: effectiveConfig.telemetry,
+      };
+      void runArchivalAtStartup({ config: archivalConfig }).catch((err) => {
+        warn(
+          `archival: trigger failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     }
 
     // Story 4.7 AC-1: --plan-first short-circuits the iteration body.
@@ -854,11 +969,18 @@ export async function runLoop(
       }
 
       // One-shot DAG build (always — plan-mode requires the DAG to walk).
+      // Story 6.2 — thread effectiveConfig?.overrides into BuildInput so
+      // the strict Tier 2 path applies in plan-mode preview as well.
       const planDagFn =
         opts?.dagOverride ??
         (async () => {
           try {
-            return await buildDag({ skillNames: [] });
+            return await buildDag({
+              skillNames: [],
+              ...(effectiveConfig?.overrides !== undefined
+                ? { overrides: effectiveConfig.overrides }
+                : {}),
+            });
           } catch {
             return null;
           }
@@ -1026,7 +1148,7 @@ export async function runLoop(
         ...(opts?.maxRetriesOverride !== undefined
           ? { maxRetriesOverride: opts.maxRetriesOverride }
           : {}),
-        ...(opts?.config !== undefined ? { config: opts.config } : {}),
+        ...(effectiveConfig !== undefined ? { config: effectiveConfig } : {}),
       });
     };
     const runNextFn = opts?.runNextOverride ?? productionRunNextFn;
@@ -1087,7 +1209,15 @@ export async function runLoop(
       opts?.dagOverride ??
       (async () => {
         try {
-          return await buildDag({ skillNames: [] });
+          // Story 6.2 — thread effectiveConfig?.overrides into BuildInput
+          // so the loop's per-iteration phase-end check uses the typed
+          // override map (STRICT Tier 2 path).
+          return await buildDag({
+            skillNames: [],
+            ...(effectiveConfig?.overrides !== undefined
+              ? { overrides: effectiveConfig.overrides }
+              : {}),
+          });
         } catch {
           return null;
         }
@@ -1786,7 +1916,32 @@ export async function writeLoopExitTranscript(
 
 if (import.meta.main) {
   try {
-    const result = await runLoop({ argv: process.argv.slice(2) });
+    // Story 6.1 — load the layered Stepper config (project > user >
+    // defaults) ONCE at the loop entrypoint and thread the parsed
+    // Config via `opts.config` to runLoop. The loader throws ConfigError
+    // (exit 2) for invalid input with a single-line, Zod-derived,
+    // field-pointing hint per AR21+AR22. Errors flow through the
+    // existing `catch (err)` block which emits a halt AR9 line and
+    // exits with the StepperError exit code.
+    const { loadConfig } = await import("../../config/load.ts");
+    let loadedConfig: import("../../schemas/config.ts").Config | undefined;
+    try {
+      loadedConfig = await loadConfig();
+    } catch (loadErr) {
+      if (loadErr instanceof StepperError) {
+        emitDispatchAction({
+          action: "halt",
+          message: loadErr.actionableHint,
+          exitCode: loadErr.exitCode === 0 ? 1 : loadErr.exitCode,
+        });
+        process.exit(loadErr.exitCode === 0 ? 1 : loadErr.exitCode);
+      }
+      throw loadErr;
+    }
+    const result = await runLoop({
+      argv: process.argv.slice(2),
+      config: loadedConfig,
+    });
     if (result.mode === "plan") {
       // Story 4.7 AC-1: plan-mode emits a single AR9 "report" line
       // carrying the human-readable plan in its message field. Exit

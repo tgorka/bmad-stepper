@@ -13,6 +13,13 @@
  * re-export schemas through this barrel per AR41 mid-tier rule.
  */
 
+export {
+  type ArchiveOldRunsOptions,
+  type ArchiveOldRunsResult,
+  archiveOldRuns,
+  RUNS_AGE_THRESHOLD_MS_90D,
+  RUNS_DEFAULT_PATH,
+} from "./archive.ts";
 export { buildRunLog } from "./build-run-log.ts";
 export { renderTranscriptMarkdown } from "./render-markdown.ts";
 export type {

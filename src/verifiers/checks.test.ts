@@ -518,6 +518,73 @@ describe("runVerifier — NFR-R1 atomic write + .bak rotation", () => {
   });
 });
 
+describe("VER_65_CHECKS_THREADING: runVerifier({ projectVerifiers }) (Story 6.5 AC-1)", () => {
+  it("VER_65_CHECKS_THREADING_1: merge-mode override surfaces additional frontmatter requirement", async () => {
+    // Baseline story-create requires title/status/story_id; project adds owner.
+    const md = `---\ntitle: Doc\nstatus: ready\nstory_id: 6.5\n---\n`;
+    const { stagingRoot } = await stageArtifact(
+      "ver-65-t1",
+      "story-create.md",
+      md,
+    );
+
+    const result = await runVerifier("ver-65-t1", {
+      stepName: "story-create",
+      stagingRoot,
+      projectVerifiers: {
+        "story-create": { requiredFrontmatterSections: ["owner"] },
+      },
+    });
+
+    // The merged config requires owner (baseline + override union); fail.
+    expect(result.status).toBe("fail");
+    const fm = result.checks.find((c) => c.name === "frontmatter");
+    expect(fm?.status).toBe("fail");
+    expect(fm?.detail).toContain("owner");
+  });
+
+  it("VER_65_CHECKS_THREADING_2: replace-mode clears baseline requirements", async () => {
+    // Baseline story-create requires title/status/story_id; replace with only [owner].
+    // Artifact has owner only, NOT story_id — replace mode clears the baseline.
+    const md = `---\ntitle: Doc\nstatus: ready\nowner: alice\n---\n`;
+    const { stagingRoot } = await stageArtifact(
+      "ver-65-t2",
+      "story-create.md",
+      md,
+    );
+
+    const result = await runVerifier("ver-65-t2", {
+      stepName: "story-create",
+      stagingRoot,
+      projectVerifiers: {
+        "story-create": {
+          requiredFrontmatterSections: ["owner"],
+          mode: "replace",
+        },
+      },
+    });
+
+    // Owner present + replace clears story_id requirement → pass.
+    expect(result.status).toBe("pass");
+  });
+
+  it("VER_65_CHECKS_THREADING_3: backwards-compat — no projectVerifiers identical to Story 2.1 baseline", async () => {
+    const md = `---\ntitle: Doc\nstatus: ready-for-dev\n---\nbody`;
+    const { stagingRoot } = await stageArtifact(
+      "ver-65-t3",
+      "dev-story.md",
+      md,
+    );
+
+    const result = await runVerifier("ver-65-t3", {
+      stepName: "dev-story",
+      stagingRoot,
+    });
+
+    expect(result.status).toBe("pass");
+  });
+});
+
 describe("runVerifier — AC-5 custom callback (deterministic)", () => {
   it("is exercised when configured via a wrapper that mirrors registry resolution", async () => {
     // Story 2.1 ships no project-config layer, so the registry's

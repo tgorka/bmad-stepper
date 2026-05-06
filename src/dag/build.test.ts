@@ -20,8 +20,13 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { DagCycleError, UnknownBmadSkillError } from "../errors.ts";
+import {
+  ConfigError,
+  DagCycleError,
+  UnknownBmadSkillError,
+} from "../errors.ts";
 import { build } from "./build.ts";
+import type { OverrideEntry } from "./types.ts";
 
 let tmp = "";
 
@@ -412,7 +417,13 @@ describe("build — Dangling-edge defensive check", () => {
     await Bun.write(path.join(tmp, "bmad-stepper.config.yaml"), yaml);
   }
 
-  it("throws UnknownBmadSkillError when an override's `after` references an unknown name", async () => {
+  it("throws ConfigError when an override's `after` references an unknown name (Story 6.2 AC-2 — was UnknownBmadSkillError pre-Story-6.2)", async () => {
+    // Story 6.2 — the LEGACY hand-rolled YAML path also tracks override
+    // origin via overrideTracking, so override-introduced unknown
+    // predecessors uniformly surface as ConfigError (exit 2) per AC-2,
+    // regardless of whether they arrived via STRICT (BuildInput.overrides)
+    // or LEGACY (parseOverridesYaml on disk) entry. The hint format is
+    // the OQ-5 single-line edge-pointing format.
     await writeOverrides(`overrides:
   my-skill:
     phase: implementation
@@ -426,11 +437,15 @@ describe("build — Dangling-edge defensive check", () => {
     } catch (err) {
       caught = err;
     }
-    expect(caught).toBeInstanceOf(UnknownBmadSkillError);
-    if (caught instanceof UnknownBmadSkillError) {
-      expect(caught.actionableHint).toBe(
-        "Add an override for some-undeclared-name in bmad-stepper.config.yaml under the overrides: block.",
+    expect(caught).toBeInstanceOf(ConfigError);
+    if (caught instanceof ConfigError) {
+      expect(caught.code).toBe("CONFIG_ERROR");
+      expect(caught.exitCode).toBe(2);
+      expect(caught.actionableHint).toMatch(
+        /See bmad-stepper\.config\.yaml at overrides\.my-skill\.after\[0\]: predecessor "some-undeclared-name"/,
       );
+      expect(caught.actionableHint).toMatch(/Run \/bmad-next --doctor/);
+      expect(caught.actionableHint).not.toMatch(/[\n\r]/);
     }
   });
 });
@@ -441,5 +456,327 @@ describe("build — Determinism (AR33)", () => {
     const b = await build({ skillNames: [], projectRoot: tmp });
     expect([...a.nodes.keys()]).toEqual([...b.nodes.keys()]);
     expect([...a.edgesOut.keys()]).toEqual([...b.edgesOut.keys()]);
+  });
+});
+
+// ─── Story 6.2 — Tier 2 strict path (BuildInput.overrides) ──────────────
+
+describe("OVR_62: Tier 2 strict path via BuildInput.overrides (Story 6.2)", () => {
+  it("OVR_62_REPLACE_1: AC-1 — places override at declared phase + replaces seed entry of same name", async () => {
+    // AC-1 verbatim — supply { architecture-validator: { phase:
+    // solutioning, after: [bmad-create-architecture], optional: true } }
+    // (the AC's example uses the more concrete `bmad-create-architecture`
+    // seed name as the predecessor). Verify the override entry is placed
+    // at the declared phase with the declared edges.
+    const overrides = new Map<string, OverrideEntry>([
+      [
+        "architecture-validator",
+        {
+          name: "architecture-validator",
+          phase: "solutioning",
+          after: ["bmad-create-architecture"],
+          optional: true,
+        },
+      ],
+    ]);
+    const dag = await build({
+      skillNames: [],
+      projectRoot: tmp,
+      overrides,
+    });
+    const node = dag.nodes.get("architecture-validator");
+    expect(node).toBeDefined();
+    expect(node?.phase).toBe("solutioning");
+    expect(node?.optional).toBe(true);
+    expect([...(node?.after ?? [])]).toEqual(["bmad-create-architecture"]);
+  });
+
+  it("OVR_62_REPLACE_2: replaces an EXISTING seed entry — phase + after fields override", async () => {
+    // bmad-create-prd is in the seed at planning; override pins it to
+    // implementation with a different `after`.
+    const overrides = new Map<string, OverrideEntry>([
+      [
+        "bmad-create-prd",
+        {
+          name: "bmad-create-prd",
+          phase: "implementation",
+          after: ["bmad-product-brief"],
+          optional: true,
+        },
+      ],
+    ]);
+    const dag = await build({
+      skillNames: [],
+      projectRoot: tmp,
+      overrides,
+    });
+    const node = dag.nodes.get("bmad-create-prd");
+    expect(node?.phase).toBe("implementation");
+    expect(node?.optional).toBe(true);
+    expect([...(node?.after ?? [])]).toEqual(["bmad-product-brief"]);
+  });
+
+  it("OVR_62_APPEND_1: appends a new skill not in the seed", async () => {
+    const overrides = new Map<string, OverrideEntry>([
+      [
+        "experimental-skill",
+        {
+          name: "experimental-skill",
+          phase: "implementation",
+          after: ["bmad-dev-story"],
+          optional: true,
+          persona: "dev",
+        },
+      ],
+    ]);
+    const dag = await build({
+      skillNames: [],
+      projectRoot: tmp,
+      overrides,
+    });
+    expect(dag.nodes.has("experimental-skill")).toBe(true);
+    const node = dag.nodes.get("experimental-skill");
+    expect(node?.phase).toBe("implementation");
+    expect(node?.persona).toBe("dev");
+    expect([...(node?.after ?? [])]).toEqual(["bmad-dev-story"]);
+  });
+
+  it("OVR_62_UNKNOWN_PRED_1: AC-2 — unknown predecessor surfaces ConfigError with hint pointing at after[0]", async () => {
+    const overrides = new Map<string, OverrideEntry>([
+      [
+        "foo",
+        {
+          name: "foo",
+          phase: "solutioning",
+          after: ["nonexistent-skill"],
+          optional: true,
+        },
+      ],
+    ]);
+    let caught: unknown;
+    try {
+      await build({ skillNames: [], projectRoot: tmp, overrides });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ConfigError);
+    if (caught instanceof ConfigError) {
+      expect(caught.code).toBe("CONFIG_ERROR");
+      expect(caught.exitCode).toBe(2);
+      expect(caught.actionableHint).toMatch(
+        /See bmad-stepper\.config\.yaml at overrides\.foo\.after\[0\]: predecessor "nonexistent-skill" is not a known skill\./,
+      );
+      expect(caught.actionableHint).toMatch(/Run \/bmad-next --doctor/);
+      expect(caught.actionableHint).not.toMatch(/[\n\r]/);
+    }
+  });
+
+  it("OVR_62_UNKNOWN_PRED_2: hint satisfies AR22 regex /^.*(Run|See|Try|Check) /", async () => {
+    const overrides = new Map<string, OverrideEntry>([
+      [
+        "bar",
+        {
+          name: "bar",
+          phase: "solutioning",
+          after: ["nonexistent-2"],
+          optional: true,
+        },
+      ],
+    ]);
+    let caught: unknown;
+    try {
+      await build({ skillNames: [], projectRoot: tmp, overrides });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ConfigError);
+    if (caught instanceof ConfigError) {
+      expect(caught.actionableHint).toMatch(/^.*(Run|See|Try|Check) /);
+    }
+  });
+
+  it("OVR_62_UNKNOWN_SUCC_1: AC-2 symmetric — unknown successor (before) surfaces ConfigError pointing at before[0]", async () => {
+    const overrides = new Map<string, OverrideEntry>([
+      [
+        "qux",
+        {
+          name: "qux",
+          phase: "solutioning",
+          before: ["nonexistent-target"],
+          optional: true,
+        },
+      ],
+    ]);
+    let caught: unknown;
+    try {
+      await build({ skillNames: [], projectRoot: tmp, overrides });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ConfigError);
+    if (caught instanceof ConfigError) {
+      expect(caught.code).toBe("CONFIG_ERROR");
+      expect(caught.exitCode).toBe(2);
+      expect(caught.actionableHint).toMatch(
+        /See bmad-stepper\.config\.yaml at overrides\.qux\.before\[0\]: successor "nonexistent-target" is not a known skill\./,
+      );
+      expect(caught.actionableHint).not.toMatch(/[\n\r]/);
+    }
+  });
+
+  it("OVR_62_TYPED_INPUT_1: AC-1 — when BuildInput.overrides is provided, malformed YAML on disk is IGNORED (strict path bypasses YAML)", async () => {
+    // Write a malformed YAML to disk. Then supply a valid typed
+    // overrides Map. The strict path should fire and bypass the YAML
+    // entirely, so build() succeeds.
+    await Bun.write(
+      path.join(tmp, "bmad-stepper.config.yaml"),
+      `overrides:
+  bmad-create-prd:
+    phase: not-a-valid-phase
+    optional: notabool
+`,
+    );
+    const overrides = new Map<string, OverrideEntry>([
+      [
+        "experimental-2",
+        {
+          name: "experimental-2",
+          phase: "implementation",
+          after: ["bmad-dev-story"],
+          optional: true,
+        },
+      ],
+    ]);
+    const dag = await build({
+      skillNames: [],
+      projectRoot: tmp,
+      overrides,
+    });
+    // Strict path applied → experimental-2 present, bmad-create-prd
+    // unchanged (seed phase).
+    expect(dag.nodes.has("experimental-2")).toBe(true);
+    expect(dag.nodes.get("bmad-create-prd")?.phase).toBe("planning");
+  });
+
+  it("OVR_62_LEGACY_FALLBACK_1: regression — BuildInput.overrides === undefined → LEGACY parseOverridesYaml fallback fires", async () => {
+    await Bun.write(
+      path.join(tmp, "bmad-stepper.config.yaml"),
+      `overrides:
+  bmad-create-prd:
+    phase: solutioning
+    after: [bmad-product-brief]
+    optional: true
+    persona: architect
+`,
+    );
+    const dag = await build({ skillNames: [], projectRoot: tmp });
+    const node = dag.nodes.get("bmad-create-prd");
+    expect(node?.phase).toBe("solutioning");
+    expect(node?.persona).toBe("architect");
+  });
+
+  it("OVR_62_CYCLE_1: AC-3 — override introduces a 2-cycle → DagCycleError (existing path unchanged)", async () => {
+    const overrides = new Map<string, OverrideEntry>([
+      [
+        "cycle-x",
+        {
+          name: "cycle-x",
+          phase: "implementation",
+          after: ["cycle-y"],
+          optional: true,
+          persona: "dev",
+        },
+      ],
+      [
+        "cycle-y",
+        {
+          name: "cycle-y",
+          phase: "implementation",
+          after: ["cycle-x"],
+          optional: true,
+          persona: "dev",
+        },
+      ],
+    ]);
+    let caught: unknown;
+    try {
+      await build({ skillNames: [], projectRoot: tmp, overrides });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(DagCycleError);
+  });
+
+  it("OVR_62_RECORD_INPUT_1: accepts a plain Record<string, OverrideEntry> (Zod-record shape)", async () => {
+    // Zod's `z.record(z.string(), OverrideEntrySchema)` infers to
+    // `Record<string, OverrideEntry>`; build() must normalise it to a
+    // Map internally.
+    const overrides: Record<string, OverrideEntry> = {
+      "experimental-3": {
+        name: "experimental-3",
+        phase: "implementation",
+        after: ["bmad-dev-story"],
+        optional: true,
+      },
+    };
+    const dag = await build({
+      skillNames: [],
+      projectRoot: tmp,
+      overrides,
+    });
+    expect(dag.nodes.has("experimental-3")).toBe(true);
+  });
+
+  it("OVR_62_HINT_SINGLE_LINE_1: ConfigError hint passes the Story 5.6 single-line constraint", async () => {
+    const overrides = new Map<string, OverrideEntry>([
+      [
+        "single-line-test",
+        {
+          name: "single-line-test",
+          phase: "solutioning",
+          after: ["nonexistent-x"],
+          optional: true,
+        },
+      ],
+    ]);
+    let caught: unknown;
+    try {
+      await build({ skillNames: [], projectRoot: tmp, overrides });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ConfigError);
+    if (caught instanceof ConfigError) {
+      // No newline characters anywhere in the hint.
+      expect(caught.actionableHint).not.toMatch(/[\n\r]/);
+    }
+  });
+
+  it("OVR_62_BEFORE_INVERSION_1: override-authored `before` edges are folded into adjacency", async () => {
+    // When override authors `before: [bmad-dev-story]`, the override
+    // owner becomes a predecessor of bmad-dev-story — so
+    // bmad-dev-story.before should include the owner name.
+    const overrides = new Map<string, OverrideEntry>([
+      [
+        "pre-dev-step",
+        {
+          name: "pre-dev-step",
+          phase: "implementation",
+          before: ["bmad-dev-story"],
+          optional: true,
+          persona: "dev",
+        },
+      ],
+    ]);
+    const dag = await build({
+      skillNames: [],
+      projectRoot: tmp,
+      overrides,
+    });
+    const target = dag.nodes.get("bmad-dev-story");
+    expect(target).toBeDefined();
+    expect(target?.before).toContain("pre-dev-step");
+    // edgesOut: pre-dev-step → bmad-dev-story.
+    expect(dag.edgesOut.get("pre-dev-step")?.has("bmad-dev-story")).toBe(true);
   });
 });

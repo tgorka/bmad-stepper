@@ -42,6 +42,32 @@
  *   - Empty/whitespace stepName → ConfigError with AC-aligned hintOverride.
  *   - Schema-parse failure → ConfigError wrapping the Zod issue.
  *   - Filesystem errors propagate to caller.
+ *
+ * Story 6.3 (`models:` per-step config consumer wiring):
+ *   - The `model` field (DispatchSpecV1Schema.model: z.string()) is
+ *     populated from `input.modelOverride ?? "sonnet"` at Step 5. The
+ *     caller (src/commands/next/run.ts) sources `modelOverride` from
+ *     `opts.config?.models?.[stepName]` (Story 6.1 typed Config.models).
+ *   - The Step 8 info() log line includes the resolved model substring
+ *     `(model ${dispatchSpec.model})` per AC-3. Single-line preserved.
+ *   - The DispatchSpecV1Schema.model remains `z.string()` (open shape) at
+ *     the dispatch-spec.json file boundary — validation is at the
+ *     LOADER layer per AR42 (forward-tracker I-40).
+ *
+ * Story 6.4 (`budgets:` per-step config consumer wiring):
+ *   - The `budget.contextTokens` + `budget.timeoutMs` fields are populated
+ *     from `input.budgetOverride?.{contextTokens,timeoutMs} ?? {60_000,300_000}`
+ *     at Step 5. The caller sources `budgetOverride` from
+ *     `opts.config?.budgets?.[stepName]` (Story 6.1 typed Config.budgets).
+ *   - The Step 8 info() log line ADDITIONALLY includes the budget substring
+ *     `(model X, budget <ctxTokens>/<timeoutMs>ms)` ONLY when the resolved
+ *     budget differs from defaults (60_000 / 300_000) per AC-3. When at
+ *     defaults, the log line stays at the Story 6.3 shape (no budget
+ *     substring) — minimises log noise for the common case. Full audit
+ *     trail is in the markdown transcript Section 2 (Story 6.3 baseline)
+ *     + JSON run log (Story 2.5 baseline).
+ *   - Single-line constraint preserved (template literal concatenation; no
+ *     `\n`/`\r` per AR21+22 progress-log discipline).
  */
 
 import { randomUUID } from "node:crypto";
@@ -237,8 +263,22 @@ export async function buildDispatchSpec(
   await atomicWrite(dispatchSpecPath, JSON.stringify(dispatchSpec, null, 2));
 
   // Step 8: progress log to stderr (FR54).
+  // Story 6.3 AC-3 — extended single-line info() log includes the model
+  // resolved by Step 5 (config.models[step] ?? "sonnet" — wired by the
+  // runner via input.modelOverride). Single-line preserved (template
+  // literal; no `\n`/`\r` per AR21+22 progress-log discipline).
+  // Story 6.4 AC-3 — additionally surfaces the budget substring
+  // `, budget <ctxTokens>/<timeoutMs>ms` ONLY when the resolved budget
+  // differs from defaults (60_000 / 300_000) — minimises log noise for
+  // the common case. Full audit in markdown transcript + JSON run log.
+  const isDefaultBudget =
+    dispatchSpec.budget.contextTokens === 60_000 &&
+    dispatchSpec.budget.timeoutMs === 300_000;
+  const budgetSubstring = isDefaultBudget
+    ? ""
+    : `, budget ${dispatchSpec.budget.contextTokens}/${dispatchSpec.budget.timeoutMs}ms`;
   info(
-    `dispatch: built spec for step ${input.stepName} at ${dispatchSpecPath}`,
+    `dispatch: built spec for step ${input.stepName} (model ${dispatchSpec.model}${budgetSubstring}) at ${dispatchSpecPath}`,
   );
 
   return { runId, dispatchSpec, stagingDir, dispatchSpecPath };

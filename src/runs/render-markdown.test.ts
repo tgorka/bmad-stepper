@@ -57,10 +57,11 @@ function canonicalTranscriptInput(
 }
 
 describe("renderTranscriptMarkdown — AC-1 section ordering", () => {
-  it("emits the seven AR25 sections in fixed order", () => {
+  it("emits the eight AR25 sections in fixed order (Story 6.3 added Section 2)", () => {
     const md = renderTranscriptMarkdown(canonicalTranscriptInput());
     const headings = [
       "# Step ",
+      "## Dispatch metadata",
       "## Inputs",
       "## Sub-agent prompt (6 sections)",
       "## Sub-agent output (excerpt",
@@ -218,5 +219,116 @@ describe("renderTranscriptMarkdown — purity & trailing newline", () => {
     expect(md.endsWith("\n")).toBe(true);
     // No double trailing newline.
     expect(md.endsWith("\n\n")).toBe(false);
+  });
+});
+
+// ─── Story 6.3 — `## Dispatch metadata` Section 2 (AC-3) ────────────────
+//
+// AC-3 — "Stepper logs the model on dispatch line so the user can audit
+// which model handled each step" — the markdown channel of the
+// audit-trail dual-channel pair (the JSON run log records the same
+// fields per Story 2.5; the markdown channel was the gap closed here).
+// The new section sits between the H1 (Section 1) and "## Inputs"
+// (renumbered to Section 3) and surfaces Model + Persona + Phase + Budget.
+// Null fields render as `(not recorded)` per the OQ-3 idempotency note.
+
+describe("renderTranscriptMarkdown — Story 6.3 Dispatch metadata (AC-3)", () => {
+  it("MOD_63_TRANSCRIPT_MD_1: emits `Model: opus` when input.model === 'opus'", () => {
+    const md = renderTranscriptMarkdown(
+      canonicalTranscriptInput({ model: "opus" }),
+    );
+    expect(md).toContain("- Model: opus");
+  });
+
+  it("MOD_63_TRANSCRIPT_MD_2: emits `Model: sonnet` when input.model === 'sonnet'", () => {
+    const md = renderTranscriptMarkdown(
+      canonicalTranscriptInput({ model: "sonnet" }),
+    );
+    expect(md).toContain("- Model: sonnet");
+  });
+
+  it("MOD_63_TRANSCRIPT_MD_3: emits `Model: (not recorded)` when input.model === null", () => {
+    const md = renderTranscriptMarkdown(
+      canonicalTranscriptInput({ model: null }),
+    );
+    expect(md).toContain("- Model: (not recorded)");
+  });
+
+  it("MOD_63_TRANSCRIPT_MD_4: dispatch metadata section sits between H1 and `## Inputs`", () => {
+    const md = renderTranscriptMarkdown(canonicalTranscriptInput());
+    const h1Idx = md.indexOf("# Step ");
+    const dispatchIdx = md.indexOf("## Dispatch metadata");
+    const inputsIdx = md.indexOf("## Inputs");
+    expect(h1Idx).toBeGreaterThanOrEqual(0);
+    expect(dispatchIdx).toBeGreaterThan(h1Idx);
+    expect(inputsIdx).toBeGreaterThan(dispatchIdx);
+  });
+
+  it("MOD_63_TRANSCRIPT_MD_5: surfaces Persona + Phase + Budget alongside Model (4 metadata bullets)", () => {
+    const md = renderTranscriptMarkdown(
+      canonicalTranscriptInput({
+        model: "opus",
+        persona: "dev",
+        phase: "implementation",
+        budget: { contextTokens: 80000, timeoutMs: 600000 },
+      }),
+    );
+    expect(md).toContain("- Model: opus");
+    expect(md).toContain("- Persona: dev");
+    expect(md).toContain("- Phase: implementation");
+    expect(md).toContain("- Budget: 80000 tokens / 600s timeout");
+  });
+
+  it("MOD_63_TRANSCRIPT_MD_6: persona/phase/budget render `(not recorded)` when null", () => {
+    const md = renderTranscriptMarkdown(
+      canonicalTranscriptInput({
+        model: null,
+        persona: null,
+        phase: null,
+        budget: null,
+      }),
+    );
+    expect(md).toContain("- Model: (not recorded)");
+    expect(md).toContain("- Persona: (not recorded)");
+    expect(md).toContain("- Phase: (not recorded)");
+    expect(md).toContain("- Budget: (not recorded)");
+  });
+});
+
+// ─── Story 6.4 — `## Dispatch metadata` Budget bullet test density (AC-3) ──
+//
+// Story 6.3 OQ-3 ALREADY shipped the Section 2 Budget bullet at
+// render-markdown.ts:84-97 emitting `Budget: ${contextTokens} tokens /
+// ${timeoutMs/1000}s timeout` (or "(not recorded)" when null). Story 6.4
+// adds tests covering configured non-default per-step budget values to
+// verify the audit trail surfaces correctly. ZERO mutation to render-
+// markdown.ts.
+
+describe("renderTranscriptMarkdown — Story 6.4 Budget audit (AC-3)", () => {
+  it("BUD_64_TRANSCRIPT_MD_1: emits `Budget: 80000 tokens / 600s timeout` when configured per-step", () => {
+    const md = renderTranscriptMarkdown(
+      canonicalTranscriptInput({
+        budget: { contextTokens: 80000, timeoutMs: 600000 },
+      }),
+    );
+    expect(md).toContain("- Budget: 80000 tokens / 600s timeout");
+  });
+
+  it("BUD_64_TRANSCRIPT_MD_2: emits `Budget: 100000 tokens / 1200s timeout` when very large per-step", () => {
+    const md = renderTranscriptMarkdown(
+      canonicalTranscriptInput({
+        budget: { contextTokens: 100000, timeoutMs: 1200000 },
+      }),
+    );
+    expect(md).toContain("- Budget: 100000 tokens / 1200s timeout");
+  });
+
+  it("BUD_64_TRANSCRIPT_MD_3: emits `Budget: 60000 tokens / 300s timeout` for default values (regression)", () => {
+    const md = renderTranscriptMarkdown(
+      canonicalTranscriptInput({
+        budget: { contextTokens: 60000, timeoutMs: 300000 },
+      }),
+    );
+    expect(md).toContain("- Budget: 60000 tokens / 300s timeout");
   });
 });
