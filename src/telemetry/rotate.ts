@@ -36,9 +36,12 @@
  * `src/startup/archival-trigger.ts`) gates this on
  * `config.telemetry.enabled === true` per AC-2 verbatim.
  *
- * **OQ-6 ms-arithmetic threshold**: 12 months = `12 * 30 * 24 * 60 * 60 *
- * 1000` ms (~360 days). The ~5-day slack vs calendar-month subtraction
- * is acceptable per AC-2 wording "older than 12 months".
+ * **OQ-6 ms-arithmetic threshold (resolved)**: Production path now uses
+ * calendar-aware arithmetic via `setUTCMonth(now.getUTCMonth() - 12)` to
+ * avoid the ~5-day drift of the fixed `12 * 30 * 24 * 60 * 60 * 1000` ms
+ * approximation. The constant `TELEMETRY_AGE_THRESHOLD_MS_12M` is retained
+ * as a reference/docs value and as the test-seam default when
+ * `opts.ageThresholdMs` is supplied.
  *
  * **OQ-7 foreign-file regex skip**: only canonical
  * `<period>.{jsonl,md}` files are rotated. Files like `notes.txt`,
@@ -61,9 +64,12 @@ import { assertWithinScope } from "../io/paths.ts";
 import { DEFAULT_TELEMETRY_ROOT } from "./collect.ts";
 
 /**
- * 12-month threshold per NFR-Sc5 + AC-2 verbatim.
+ * 12-month threshold reference constant per NFR-Sc5 + AC-2 verbatim.
  * Computed: 12 * 30 * 24 * 60 * 60 * 1000 = 31,104,000,000 ms (~360 days).
- * Per OQ-6 the ~5-day slack vs calendar-month subtraction is acceptable.
+ *
+ * Kept for reference/docs and as the test-seam value when
+ * `opts.ageThresholdMs` is explicitly supplied. The production default path
+ * now uses calendar-aware arithmetic (`setUTCMonth`) — see OQ-6 (resolved).
  */
 export const TELEMETRY_AGE_THRESHOLD_MS_12M = 12 * 30 * 24 * 60 * 60 * 1000;
 
@@ -109,8 +115,14 @@ export async function rotateOldTelemetry(
   opts: RotateOldTelemetryOptions = {},
 ): Promise<RotateOldTelemetryResult> {
   const telemetryRoot = opts.telemetryRoot ?? DEFAULT_TELEMETRY_ROOT;
-  const ageThresholdMs = opts.ageThresholdMs ?? TELEMETRY_AGE_THRESHOLD_MS_12M;
   const now = opts.now ?? new Date();
+  const ageThresholdMs =
+    opts.ageThresholdMs ??
+    (() => {
+      const cutoff = new Date(now);
+      cutoff.setUTCMonth(cutoff.getUTCMonth() - 12);
+      return now.getTime() - cutoff.getTime();
+    })();
 
   // Step 2: no-op when telemetryRoot does not exist.
   try {
