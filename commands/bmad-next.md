@@ -606,3 +606,45 @@ For the lock-free pre-dispatch composer, see `src/commands/next/run.ts`
 sub-agent definition, see `agents/bmad-step-runner.md` (Story 2.3). For
 the AR9 JSON-line schema, see `src/schemas/dispatch-protocol.ts` (Story
 2.2). The end-to-end happy-path smoke test is Story 2.8 deliverable.
+
+### --upgrade (Story 6.9)
+
+Checks the GitHub Releases API at
+`https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest` for a
+newer Stepper version.
+
+- Reads `currentVersion` from `.claude-plugin/plugin.json`.
+- Compares to the latest GitHub Release tag (strips a leading `v` per
+  GitHub convention).
+- Prints a markdown-style report on stdout with the version diff,
+  CHANGELOG link, BMAD compatibility info, and the upgrade hint.
+
+**Never auto-installs.** The flow is read-only — Stepper does NOT write
+to `~/.claude/plugins/` from this code path. The user-action path is to
+copy-paste the emitted hint:
+
+```text
+Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.
+```
+
+**Network discipline (NFR-S1):** this is the ONLY main-thread network
+I/O permitted by the architecture (architecture §D14, line 645-660).
+All other code paths are network-free.
+
+**Exit codes:**
+
+- `0` — report emitted (newer release available OR up-to-date).
+- `1` — GitHub Releases unreachable (offline, rate limit, timeout,
+  malformed response). The single-line hint
+  `Could not reach GitHub Releases. Check your network or try again later.`
+  is emitted on stderr; the AR9 halt line is emitted on stdout. See
+  `docs/exit-codes.md` for the verbatim exit-1 catalog entry.
+
+**AR9 carve-out (third documented):** the upgrade success report goes
+to stdout DIRECTLY (NOT wrapped in the AR9 JSON line) — alongside Story
+3.8 `--export-state` and Story 3.9 `--watch`. Every other flag preserves
+AR9 strictly.
+
+The standalone CLI invocation is `bun run upgrade` (per `package.json`
+scripts entry); the slash-command form `/bmad-next --upgrade` is wired
+via the runner short-circuit at `src/commands/next/run.ts` Step 0a.

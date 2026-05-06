@@ -1,5 +1,5 @@
 # generated: 2026-04-30
-# last_updated: 2026-05-05T13:25:00Z  # Story 6.8 review (dev-story iter 23 of /bmad-loop --until=story:6.8, runId 2026-05-05T131200Z-bmad-next)
+# last_updated: 2026-05-06T02:55:00Z  # Story 6.9 done (code-review iter 3 of /bmad-loop --until=story:6.9, runId 2026-05-06T023733Z-bmad-next; FINAL TARGET REACHED)
 # project: bmad-stepper
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-30
-last_updated: 2026-05-05T13:25:00Z
+last_updated: 2026-05-06T02:55:00Z
 project: bmad-stepper
 project_key: NOKEY
 tracking_system: file-system
@@ -108,6 +108,6 @@ development_status:
   6-6-telemetry-opt-in-collection: done
   6-7-telemetry-aggregation-report: done
   6-8-auto-archival-of-runs-and-telemetry: done
-  6-9-upgrade-flow: backlog
+  6-9-upgrade-flow: done
   6-10-repo-files-v0-1-0-marketplace-release: backlog
   epic-6-retrospective: optional

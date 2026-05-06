@@ -63,6 +63,14 @@ Run /bmad-next --resume to retry; check bmad-stepper.config.yaml timeouts to ext
 
 **Remediation.** Per the per-class hint above. For `CorruptStateError`, `state.yaml` is a cache (NFR-R3); `--recompute-state` rebuilds it from disk. For `StateTooNewError`, your project state was written by a newer Stepper; upgrade via `--upgrade`. For `BranchSwitchError`, you switched git branches mid-run; review the state delta and resume.
 
+**Story 6.9 (`--upgrade` flow)** also surfaces exit 1 when the GitHub Releases API is unreachable (offline, 403 rate limit, 4xx/5xx, 10s `AbortController` timeout, malformed response, missing or malformed plugin manifest). The byte-identical hint is:
+
+```text
+Could not reach GitHub Releases. Check your network or try again later.
+```
+
+The hint is byte-identical to the failure message emitted by `src/upgrade/cli.ts` AND `src/commands/next/run.ts` Step 0a (verified by `CLI_69_NETWORK_FAILURE_EXIT_1_1`, `UPGRADE_69_RUN_NETWORK_FAILURE_1`, and the integration test `src/integration/upgrade-no-plugin-write.test.ts`). The hint is NOT a `StepperError actionableHint` — Story 6.9 ships ZERO new error classes (per AR22 N/A; bare `Error` throws on the network failure path; the orchestrator surfaces the hint at the catch site). The errors registry is HELD AT 17 codes.
+
 ### Exit Code 2
 
 **Meaning.** Configuration error. Stepper could not parse a configuration file (`bmad-stepper.config.yaml`) or you passed an unrecognised CLI flag.
