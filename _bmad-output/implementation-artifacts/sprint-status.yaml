@@ -1,5 +1,8 @@
 # generated: 2026-04-30
-# last_updated: 2026-05-06T02:55:00Z  # Story 6.9 done (code-review iter 3 of /bmad-loop --until=story:6.9, runId 2026-05-06T023733Z-bmad-next; FINAL TARGET REACHED)
+# last_updated: 2026-05-06T06:30:00Z  # epic-6-retrospective done; epic-6 in-progress → done (retrospective iter 4 of /bmad-loop --until=epic:6, loopId 2026-05-06T050748Z-bmad-loop, runId 2026-05-06T055616Z-bmad-next; FINAL TARGET REACHED — epic:6 closes; PROJECT v0.1.0 PLANNING-PHASE CLOSED)
+# previous: 2026-05-06T06:05:00Z  # Story 6.10 done (code-review iter 3 of /bmad-loop --until=epic:6, loopId 2026-05-06T050748Z-bmad-loop, runId 2026-05-06T054627Z-bmad-next)
+# previous: 2026-05-06T05:35:00Z  # Story 6.10 review (dev-story iter 2 of /bmad-loop --until=epic:6, loopId 2026-05-06T050748Z-bmad-loop, runId 2026-05-06T053026Z-bmad-next)
+# previous: 2026-05-06T05:12:30Z  # Story 6.10 ready-for-dev (create-story iter 1)
 # project: bmad-stepper
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +38,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-30
-last_updated: 2026-05-06T02:55:00Z
+last_updated: 2026-05-06T06:30:00Z
 project: bmad-stepper
 project_key: NOKEY
 tracking_system: file-system
@@ -99,7 +102,7 @@ development_status:
   5-5-interactive-pause-between-steps: done
   5-6-per-step-failure-policy-via-config-actionable-errors: done
   epic-5-retrospective: done
-  epic-6: in-progress
+  epic-6: done
   6-1-bmad-stepper-config-yaml-schema-loader: done
   6-2-dag-overrides-block: done
   6-3-models-per-step-config: done
@@ -109,5 +112,5 @@ development_status:
   6-7-telemetry-aggregation-report: done
   6-8-auto-archival-of-runs-and-telemetry: done
   6-9-upgrade-flow: done
-  6-10-repo-files-v0-1-0-marketplace-release: backlog
-  epic-6-retrospective: optional
+  6-10-repo-files-v0-1-0-marketplace-release: done
+  epic-6-retrospective: done
