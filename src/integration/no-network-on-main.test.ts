@@ -34,9 +34,7 @@ import { runUpgradeCheck } from "../upgrade/check.ts";
 let tmpDir: string;
 
 beforeEach(async () => {
-  tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), "stepper-no-network-int-"),
-  );
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "stepper-no-network-int-"));
 });
 
 afterEach(async () => {
@@ -130,24 +128,27 @@ describe("no-network-on-main — F-3 (AGENTS.md / CONTRIBUTING.md contract)", ()
     // Install a spy on globalThis.fetch that records calls and resolves with
     // a synthetic 'up-to-date' GitHub Releases response so the function can
     // complete without a real network connection.
-    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
-      ((_input: unknown, _init?: RequestInit) =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          json: async () => ({
-            tag_name: "v0.1.0",
-            html_url:
-              "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.1.0",
-            body: "",
-          }),
-        } as unknown as Response)) as typeof globalThis.fetch,
-    );
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(((
+      _input: unknown,
+      _init?: RequestInit,
+    ) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          tag_name: "v0.1.0",
+          html_url:
+            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.1.0",
+          body: "",
+        }),
+      } as unknown as Response)) as typeof globalThis.fetch);
 
     try {
       // Call WITHOUT the opts.fetch seam — the module must reach globalThis.fetch.
-      const result = await runUpgradeCheck({ pluginManifestPath: manifestPath });
+      const result = await runUpgradeCheck({
+        pluginManifestPath: manifestPath,
+      });
       expect(result.kind).toBe("up-to-date");
 
       // The upgrade module MUST have called globalThis.fetch exactly once.

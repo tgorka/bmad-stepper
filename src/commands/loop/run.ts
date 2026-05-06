@@ -556,7 +556,6 @@ export interface LoopOpts {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-
 /**
  * I-44: default per-step timeout when no explicit `timeoutMs` budget is
  * configured. 300 000 ms = 5 minutes — mirrors the Claude Code Task tool
@@ -1499,8 +1498,7 @@ export async function runLoop(
       // falling back to DEFAULT_STEP_TIMEOUT_MS (300 000 ms = 5 minutes).
       // A "*" key in the budgets record acts as a global override for all
       // steps when a step-specific key is absent.
-      const pendingStepLabel: string =
-        state?.lastAttempted?.step ?? "next";
+      const pendingStepLabel: string = state?.lastAttempted?.step ?? "next";
       const iterTimeoutMs: number =
         effectiveConfig?.budgets?.[pendingStepLabel]?.timeoutMs ??
         effectiveConfig?.budgets?.["*"]?.timeoutMs ??

@@ -187,7 +187,7 @@ describe("aggregate-telemetry — no PII / no source content (AC-3)", () => {
     const filePath = path.join(tmpDir, "2026-05.jsonl");
     await fs.writeFile(
       filePath,
-      records.map((r) => JSON.stringify(r)).join("\n") + "\n",
+      `${records.map((r) => JSON.stringify(r)).join("\n")}\n`,
       "utf8",
     );
 

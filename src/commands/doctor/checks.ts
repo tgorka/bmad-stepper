@@ -466,7 +466,7 @@ export async function checkStepRegistry(
   // I-37: validate that override keys are known BMAD skill IDs.
   const overridesFile = Bun.file(overridesPath);
   if (await overridesFile.exists()) {
-    let rawOverridesBlock: unknown = undefined;
+    let rawOverridesBlock: unknown;
     try {
       const text = await overridesFile.text();
       const raw = Bun.YAML.parse(text) as Record<string, unknown>;
@@ -474,7 +474,11 @@ export async function checkStepRegistry(
     } catch {
       // Malformed YAML: swallow; the DAG builder will surface the error.
     }
-    if (rawOverridesBlock !== null && rawOverridesBlock !== undefined && bmad.skillNames.length > 0) {
+    if (
+      rawOverridesBlock !== null &&
+      rawOverridesBlock !== undefined &&
+      bmad.skillNames.length > 0
+    ) {
       const parsed = OverridesSchema.safeParse(rawOverridesBlock);
       if (parsed.success) {
         validateOverrides(parsed.data, bmad.skillNames);
