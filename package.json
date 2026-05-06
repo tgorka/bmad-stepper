@@ -14,7 +14,7 @@
     "zod": "4.4.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.15",
+    "@biomejs/biome": "2.4.14",
     "@changesets/cli": "^2.31.0",
     "@types/bun": "latest"
   },
