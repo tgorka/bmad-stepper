@@ -99,7 +99,7 @@ describe("main — CLI_67_HAPPY", () => {
     };
     await fs.writeFile(
       path.join(telemetryDir, "2026-05.jsonl"),
-      JSON.stringify(record) + "\n",
+      `${JSON.stringify(record)}\n`,
       "utf8",
     );
 

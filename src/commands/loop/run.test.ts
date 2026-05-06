@@ -4006,11 +4006,7 @@ describe("withTimeout — I-44 (Bun-side timeout watchdog)", () => {
   });
 
   it("WT_I44_2: resolves immediately when promise resolves before timeout", async () => {
-    const result = await withTimeout(
-      Promise.resolve(42),
-      5_000,
-      "test-step",
-    );
+    const result = await withTimeout(Promise.resolve(42), 5_000, "test-step");
     expect(result).toBe(42);
   });
 
@@ -4036,7 +4032,7 @@ describe("withTimeout — I-44 (Bun-side timeout watchdog)", () => {
     const slow = new Promise((_, reject) =>
       setTimeout(() => reject(new Error("slow")), 10_000),
     );
-    let thrown;
+    let thrown: any;
     try {
       await withTimeout(slow, 1, "epic-writer");
     } catch (e) {
@@ -4055,7 +4051,7 @@ describe("withTimeout — I-44 (Bun-side timeout watchdog)", () => {
     const slow = new Promise((_, reject) =>
       setTimeout(() => reject(new Error("slow")), 10_000),
     );
-    let thrown;
+    let thrown: any;
     try {
       await withTimeout(slow, 1, "arch-doc");
     } catch (e) {

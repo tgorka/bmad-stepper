@@ -113,7 +113,7 @@ describe("aggregateTelemetry — AC-1 P95_NEAREST_RANK", () => {
       period: "2026-05",
       telemetryRoot: tmpDir,
     });
-    expect(result.perStep["uniform"]?.p95DurationMs).toBe(95);
+    expect(result.perStep.uniform?.p95DurationMs).toBe(95);
   });
 });
 
@@ -151,7 +151,7 @@ describe("aggregateTelemetry — AC-1 VERIFIER_FAIL_RATE", () => {
       period: "2026-05",
       telemetryRoot: tmpDir,
     });
-    expect(result.perStep["v"]?.verifierFailureRate).toBeCloseTo(0.25, 5);
+    expect(result.perStep.v?.verifierFailureRate).toBeCloseTo(0.25, 5);
     expect(result.verifierOutcomes).toEqual({ pass: 2, fail: 1, skip: 1 });
   });
 });
@@ -171,9 +171,9 @@ describe("aggregateTelemetry — AC-1 TOKENS", () => {
       period: "2026-05",
       telemetryRoot: tmpDir,
     });
-    expect(result.perStep["t"]?.meanTokensIn).toBe(2000);
-    expect(result.perStep["t"]?.meanTokensOut).toBe(1000);
-    expect(result.perStep["t"]?.meanTokensTotal).toBe(3000);
+    expect(result.perStep.t?.meanTokensIn).toBe(2000);
+    expect(result.perStep.t?.meanTokensOut).toBe(1000);
+    expect(result.perStep.t?.meanTokensTotal).toBe(3000);
   });
 });
 
@@ -210,7 +210,7 @@ describe("aggregateTelemetry — AC-1 ERROR_CODES (I-47)", () => {
       VERIFIER_FAILURE: 2,
       TIMEOUT: 1,
     });
-    expect(result.perStep["x"]?.errorCodeCounts).toEqual({
+    expect(result.perStep.x?.errorCodeCounts).toEqual({
       VERIFIER_FAILURE: 2,
       TIMEOUT: 1,
     });
@@ -270,7 +270,7 @@ describe("aggregateTelemetry — PARSE_REJECT_EXTRA_FIELD (NFR-S3)", () => {
     const valid = JSON.stringify(validRecord);
     const tainted = JSON.stringify({ ...validRecord, password: "x" });
     const filePath = path.join(tmpDir, "2026-05.jsonl");
-    await fs.writeFile(filePath, [valid, tainted].join("\n") + "\n", "utf8");
+    await fs.writeFile(filePath, `${[valid, tainted].join("\n")}\n`, "utf8");
 
     const result = await aggregateTelemetry({
       period: "2026-05",

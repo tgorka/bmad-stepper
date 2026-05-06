@@ -2178,7 +2178,11 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
     // typed `Config.models` field). When undefined (no per-step config),
     // omit the field so generate-spec.ts:196 falls through to the
     // canonical "sonnet" default. Story 6.1 SDR I-24 PRIMARY HONOURED.
-    const configuredModel = getStepConfig(opts?.config, "models", nextStep.name);
+    const configuredModel = getStepConfig(
+      opts?.config,
+      "models",
+      nextStep.name,
+    );
     // Story 6.4 — `budgets:` per-step config consumer wiring. Read the
     // resolved budget from `opts.config?.budgets?.[stepName]` (Story 6.1
     // typed `Config.budgets` field). When undefined (no per-step config),
