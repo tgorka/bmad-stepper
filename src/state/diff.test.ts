@@ -288,10 +288,30 @@ describe("diffState — Story 3.8 Task 8.1", () => {
     const statePath = await writeState({
       schemaVersion: 1,
       project: { name: projectName, bmadVersion: "6.5.0" },
-      // runHistory has 2 entries; recomputed always yields []
+      // runHistory has 2 entries; recomputed always yields [].
+      // Story 5.1: entries must validate against RunHistoryEntrySchema
+      // (typed) — supplying the 8 required fields per AC line 1062.
       runHistory: [
-        { step: "a", attemptedAt: "2026-04-30T10:00:00Z" },
-        { step: "b", attemptedAt: "2026-04-30T11:00:00Z" },
+        {
+          runId: "r-a",
+          step: "a",
+          epic: 1,
+          story: "1.1",
+          attemptNumber: 1,
+          outcome: "pass",
+          failureCode: null,
+          completedAt: "2026-04-30T10:00:00Z",
+        },
+        {
+          runId: "r-b",
+          step: "b",
+          epic: 1,
+          story: "1.2",
+          attemptNumber: 1,
+          outcome: "pass",
+          failureCode: null,
+          completedAt: "2026-04-30T11:00:00Z",
+        },
       ],
       checkpoints: [],
     });

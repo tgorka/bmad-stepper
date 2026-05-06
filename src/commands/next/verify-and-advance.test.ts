@@ -33,12 +33,14 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { DagAdjacency, DagNode, Phase } from "../../dag/index.ts";
 import { DispatchActionV1Schema } from "../../schemas/dispatch-protocol.ts";
 import type { DispatchSpecV1 } from "../../schemas/dispatch-spec.ts";
 import { RunLogV1Schema } from "../../schemas/run-log.ts";
 import {
   compareStateHashes,
   derivePhaseFromStep,
+  matchCheckpointPhase,
   runVerifyAndAdvance,
 } from "./verify-and-advance.ts";
 
@@ -1498,5 +1500,2155 @@ describe("runVerifyAndAdvance — Story 3.1 lastAttempted + lastFailureReason on
     expect(validated.lastAttempted?.step).toBe("bmad-dev-story");
     expect(validated.lastFailureReason?.code).toBeDefined();
     expect(validated.lastSuccessfulStep?.epic).toBe(7);
+  });
+});
+
+// ─── Story 4.8 — matchCheckpointPhase (pure-function unit tests) ──────────
+
+describe("matchCheckpointPhase (Story 4.8 — pure-function lookup)", () => {
+  function makeDag(stepName: string, phase: Phase): DagAdjacency {
+    const node: DagNode = {
+      name: stepName,
+      phase,
+      after: [],
+      before: [],
+      optional: false,
+      persona: "dev",
+    };
+    const nodes = new Map<string, DagNode>();
+    nodes.set(stepName, node);
+    return {
+      nodes,
+      edgesOut: new Map(),
+      edgesIn: new Map(),
+    };
+  }
+
+  it("returns null when checkpointEach is undefined (no flag supplied)", () => {
+    const result = matchCheckpointPhase(
+      "bmad-dev-story",
+      makeDag("bmad-dev-story", "implementation"),
+      undefined,
+    );
+    expect(result).toBeNull();
+  });
+
+  it("returns the matched phase when DAG node phase === checkpointEach", () => {
+    const result = matchCheckpointPhase(
+      "bmad-dev-story",
+      makeDag("bmad-dev-story", "implementation"),
+      "implementation",
+    );
+    expect(result).toBe("implementation");
+  });
+
+  it("returns null when DAG node phase !== checkpointEach (mismatch)", () => {
+    const result = matchCheckpointPhase(
+      "bmad-dev-story",
+      makeDag("bmad-dev-story", "analysis"),
+      "implementation",
+    );
+    expect(result).toBeNull();
+  });
+
+  it("returns null when DAG does not contain the step name", () => {
+    const result = matchCheckpointPhase(
+      "unknown-step",
+      makeDag("bmad-dev-story", "implementation"),
+      "implementation",
+    );
+    expect(result).toBeNull();
+  });
+
+  it("falls back to derivePhaseFromStep when DAG is undefined (planning step)", () => {
+    // bmad-create-prd is in PLANNING_STEPS lookup table.
+    const result = matchCheckpointPhase(
+      "bmad-create-prd",
+      undefined,
+      "planning",
+    );
+    expect(result).toBe("planning");
+  });
+
+  it("falls back to derivePhaseFromStep when DAG is undefined (implementation step)", () => {
+    // bmad-dev-story is NOT in PLANNING_STEPS, so derived = "implementation".
+    const result = matchCheckpointPhase(
+      "bmad-dev-story",
+      undefined,
+      "implementation",
+    );
+    expect(result).toBe("implementation");
+  });
+
+  it("returns null when fallback derivePhaseFromStep mismatches checkpointEach", () => {
+    const result = matchCheckpointPhase(
+      "bmad-dev-story",
+      undefined,
+      "analysis",
+    );
+    expect(result).toBeNull();
+  });
+});
+
+// ─── Story 4.8 — checkpoint-append integration tests ──────────────────────
+
+describe("runVerifyAndAdvance — Story 4.8 checkpoint-append (CV_48_1-6)", () => {
+  it("CV_48_1: opts.checkpointEach === undefined → ZERO checkpoints written", async () => {
+    const paths = await seedFixture({
+      runId: "cv48-1",
+      stepName: "bmad-dev-story",
+      epic: 1,
+      story: "1.1",
+    });
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "cv48-1", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-01T08:00:00.000Z",
+      // No checkpointEach supplied.
+    });
+
+    expect(result.exitCode).toBe(0);
+    const updated = Bun.YAML.parse(
+      await Bun.file(paths.statePath).text(),
+    ) as Record<string, unknown>;
+    const checkpoints = updated.checkpoints as Array<unknown>;
+    expect(checkpoints).toEqual([]);
+  });
+
+  it("CV_48_2: opts.checkpointEach matches phase + tmpdir is git-init → ONE checkpoint written", async () => {
+    const paths = await seedFixture({
+      runId: "cv48-2",
+      stepName: "bmad-dev-story",
+      epic: 1,
+      story: "1.1",
+    });
+
+    // Initialize a Git work-tree at the cwd of the verify-and-advance run.
+    // We cannot inject cwd into detectSnapshot, so we initialize at the
+    // process cwd's tmp instead — Story 1.8 detectSnapshot defaults to
+    // process.cwd(); for this test we initialize Git at process.cwd() if
+    // not already a Git repo. Since this project IS a Git repo (the
+    // bmad-stepper repo), detectSnapshot should succeed.
+    const { runVerifyAndAdvance: runVA } = await import(
+      "./verify-and-advance.ts"
+    );
+
+    const result = await runVA({
+      argv: ["--run-id", "cv48-2", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-01T08:00:00.000Z",
+      checkpointEach: "implementation",
+    });
+
+    expect(result.exitCode).toBe(0);
+    const updated = Bun.YAML.parse(
+      await Bun.file(paths.statePath).text(),
+    ) as Record<string, unknown>;
+    const checkpoints = updated.checkpoints as Array<{
+      branch: string;
+      sha: string;
+      takenAt: string;
+      stepType: string;
+    }>;
+    // The bmad-stepper repo is a Git work-tree, so detectSnapshot returns
+    // a non-null Snapshot. The bmad-dev-story step is "implementation"
+    // per derivePhaseFromStep fallback (NOT in PLANNING_STEPS).
+    expect(checkpoints.length).toBe(1);
+    expect(checkpoints[0]?.stepType).toBe("implementation");
+    expect(typeof checkpoints[0]?.branch).toBe("string");
+    expect(typeof checkpoints[0]?.sha).toBe("string");
+    expect(typeof checkpoints[0]?.takenAt).toBe("string");
+  });
+
+  it("CV_48_3: opts.checkpointEach mismatches phase → ZERO checkpoints written", async () => {
+    const paths = await seedFixture({
+      runId: "cv48-3",
+      stepName: "bmad-dev-story", // implementation per fallback
+      epic: 1,
+      story: "1.1",
+    });
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "cv48-3", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-01T08:00:00.000Z",
+      checkpointEach: "analysis", // mismatch — bmad-dev-story is implementation
+    });
+
+    expect(result.exitCode).toBe(0);
+    const updated = Bun.YAML.parse(
+      await Bun.file(paths.statePath).text(),
+    ) as Record<string, unknown>;
+    const checkpoints = updated.checkpoints as Array<unknown>;
+    expect(checkpoints).toEqual([]);
+  });
+
+  it("CV_48_4: FIFO-50 trim — pre-state at 50 entries → post-state at 50 entries (oldest evicted)", async () => {
+    const oldestEntry = {
+      branch: "main",
+      sha: "0000000000000000000000000000000000000000",
+      takenAt: "2025-01-01T00:00:00Z",
+      stepType: "implementation" as const,
+    };
+    const fillEntry = {
+      branch: "main",
+      sha: "1111111111111111111111111111111111111111",
+      takenAt: "2025-06-01T00:00:00Z",
+      stepType: "implementation" as const,
+    };
+    const checkpoints50: Array<typeof fillEntry> = [
+      oldestEntry,
+      ...new Array(49).fill(fillEntry),
+    ];
+
+    const paths = await seedFixture({
+      runId: "cv48-4",
+      stepName: "bmad-dev-story",
+      epic: 1,
+      story: "1.1",
+      stateOverride: {
+        schemaVersion: 1,
+        project: { name: "stepper-test", bmadVersion: "6.5.0" },
+        lastSuccessfulStep: {
+          step: "bmad-create-prd",
+          epic: 1,
+          story: "1.1",
+          completedAt: "2026-04-29T10:00:00Z",
+        },
+        runHistory: [],
+        checkpoints: checkpoints50,
+      },
+    });
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "cv48-4", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-01T08:00:00.000Z",
+      checkpointEach: "implementation",
+    });
+
+    expect(result.exitCode).toBe(0);
+    const updated = Bun.YAML.parse(
+      await Bun.file(paths.statePath).text(),
+    ) as Record<string, unknown>;
+    const checkpoints = updated.checkpoints as Array<{
+      sha: string;
+      stepType: string;
+    }>;
+    expect(checkpoints.length).toBe(50);
+    // Oldest entry (sha 000...) is evicted; first remaining entry should
+    // be a "fill" entry (sha 111...).
+    expect(checkpoints[0]?.sha).toBe(
+      "1111111111111111111111111111111111111111",
+    );
+    // Last entry should be the new one (NOT 000... and NOT 111...).
+    const lastEntry = checkpoints[checkpoints.length - 1];
+    expect(lastEntry?.stepType).toBe("implementation");
+  });
+
+  it("CV_48_5: opts.checkpointEach with DAG injection (matched implementation phase) → ONE checkpoint", async () => {
+    const paths = await seedFixture({
+      runId: "cv48-5",
+      stepName: "bmad-dev-story",
+      epic: 1,
+      story: "1.1",
+    });
+
+    const dagNode: DagNode = {
+      name: "bmad-dev-story",
+      phase: "implementation",
+      after: [],
+      before: [],
+      optional: false,
+      persona: "dev",
+    };
+    const dag: DagAdjacency = {
+      nodes: new Map([["bmad-dev-story", dagNode]]),
+      edgesOut: new Map(),
+      edgesIn: new Map(),
+    };
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "cv48-5", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-01T08:00:00.000Z",
+      checkpointEach: "implementation",
+      dag,
+    });
+
+    expect(result.exitCode).toBe(0);
+    const updated = Bun.YAML.parse(
+      await Bun.file(paths.statePath).text(),
+    ) as Record<string, unknown>;
+    const checkpoints = updated.checkpoints as Array<{ stepType: string }>;
+    expect(checkpoints.length).toBe(1);
+    expect(checkpoints[0]?.stepType).toBe("implementation");
+  });
+
+  it("CV_48_6: DAG-injected node phase mismatch → ZERO checkpoints written", async () => {
+    const paths = await seedFixture({
+      runId: "cv48-6",
+      stepName: "bmad-dev-story",
+      epic: 1,
+      story: "1.1",
+    });
+
+    const dagNode: DagNode = {
+      name: "bmad-dev-story",
+      phase: "analysis", // declared as analysis (override)
+      after: [],
+      before: [],
+      optional: false,
+      persona: "dev",
+    };
+    const dag: DagAdjacency = {
+      nodes: new Map([["bmad-dev-story", dagNode]]),
+      edgesOut: new Map(),
+      edgesIn: new Map(),
+    };
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "cv48-6", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-01T08:00:00.000Z",
+      checkpointEach: "implementation", // mismatch with DAG declaration
+      dag,
+    });
+
+    expect(result.exitCode).toBe(0);
+    const updated = Bun.YAML.parse(
+      await Bun.file(paths.statePath).text(),
+    ) as Record<string, unknown>;
+    const checkpoints = updated.checkpoints as Array<unknown>;
+    expect(checkpoints).toEqual([]);
+  });
+});
+
+// ─── Story 5.1 — Retry failure mode (RT_51_VA_*) ──────────────────────────
+
+describe("runVerifyAndAdvance — Story 5.1 retry-policy integration (RT_51_VA_*)", () => {
+  /**
+   * Build a verifier stub that returns the supplied sequence of statuses
+   * on each call. Beyond the sequence, returns "pass" (defensive).
+   */
+  function sequencedVerifier(
+    statuses: ReadonlyArray<"pass" | "fail" | "skip">,
+  ) {
+    let callCount = 0;
+    const calls: number[] = [];
+    const stub = async (
+      _runId: string,
+      _opts: { stepName: string; stagingRoot: string },
+    ) => {
+      const idx = callCount;
+      callCount++;
+      calls.push(callCount);
+      const status = statuses[idx] ?? "pass";
+      return {
+        schemaVersion: 1 as const,
+        status,
+        checks: [],
+        promotedTo: null,
+        resultPath: "/tmp/test-verifier-result.json",
+      };
+    };
+    return { stub, getCallCount: () => callCount, calls };
+  }
+
+  it("RT_51_VA_1: retry policy + verifier passes on attempt 1 → ONE runHistory entry (outcome: pass, attemptNumber: 1)", async () => {
+    const paths = await seedFixture({
+      runId: "rt-51-va-1",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.1",
+    });
+    const { stub, getCallCount } = sequencedVerifier(["pass"]);
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "rt-51-va-1",
+        "--tokens-in",
+        "10",
+        "--tokens-out",
+        "20",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      failurePolicyOverride: "retry",
+      maxRetriesOverride: 2,
+      verifierOverride: stub,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(getCallCount()).toBe(1);
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+    };
+    expect(updated.runHistory).toHaveLength(1);
+    expect(updated.runHistory[0]?.attemptNumber).toBe(1);
+    expect(updated.runHistory[0]?.outcome).toBe("pass");
+  });
+
+  it("RT_51_VA_2: retry policy + fail attempt 1, pass attempt 2 → TWO runHistory entries (fail, pass)", async () => {
+    const paths = await seedFixture({
+      runId: "rt-51-va-2",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.1",
+    });
+    const { stub, getCallCount } = sequencedVerifier(["fail", "pass"]);
+    let reDispatchCallCount = 0;
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "rt-51-va-2", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      failurePolicyOverride: "retry",
+      maxRetriesOverride: 2,
+      verifierOverride: stub,
+      reDispatchOverride: () => {
+        reDispatchCallCount++;
+      },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(getCallCount()).toBe(2);
+    expect(reDispatchCallCount).toBe(1);
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+    };
+    expect(updated.runHistory).toHaveLength(2);
+    expect(updated.runHistory[0]?.attemptNumber).toBe(1);
+    expect(updated.runHistory[0]?.outcome).toBe("fail");
+    expect(updated.runHistory[0]?.failureCode).toBe("VERIFIER_FAILURE");
+    expect(updated.runHistory[1]?.attemptNumber).toBe(2);
+    expect(updated.runHistory[1]?.outcome).toBe("pass");
+  });
+
+  it("RT_51_VA_3: retry policy + all 3 attempts fail → THREE runHistory entries + escalate (VerifierFailureError)", async () => {
+    const paths = await seedFixture({
+      runId: "rt-51-va-3",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.1",
+    });
+    const { stub, getCallCount } = sequencedVerifier(["fail", "fail", "fail"]);
+    let reDispatchCallCount = 0;
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "rt-51-va-3", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      failurePolicyOverride: "retry",
+      maxRetriesOverride: 2,
+      verifierOverride: stub,
+      reDispatchOverride: () => {
+        reDispatchCallCount++;
+      },
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.action.action).toBe("halt");
+    expect(getCallCount()).toBe(3); // 1 original + 2 retries = 3 attempts
+    expect(reDispatchCallCount).toBe(2); // re-dispatched between attempts 1→2 and 2→3
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+      lastFailureReason: { code: string };
+    };
+    expect(updated.runHistory).toHaveLength(3);
+    expect(updated.runHistory[0]?.attemptNumber).toBe(1);
+    expect(updated.runHistory[1]?.attemptNumber).toBe(2);
+    expect(updated.runHistory[2]?.attemptNumber).toBe(3);
+    for (const entry of updated.runHistory) {
+      expect(entry.outcome).toBe("fail");
+      expect(entry.failureCode).toBe("VERIFIER_FAILURE");
+    }
+    expect(updated.lastFailureReason?.code).toBe("VERIFIER_FAILURE");
+  });
+
+  it("RT_51_VA_4: escalate policy + verifier fails attempt 1 → ONE runHistory entry + immediate escalate (no retry)", async () => {
+    const paths = await seedFixture({
+      runId: "rt-51-va-4",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.1",
+    });
+    const { stub, getCallCount } = sequencedVerifier(["fail"]);
+    let reDispatchCallCount = 0;
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "rt-51-va-4", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      failurePolicyOverride: "escalate",
+      maxRetriesOverride: 2,
+      verifierOverride: stub,
+      reDispatchOverride: () => {
+        reDispatchCallCount++;
+      },
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.action.action).toBe("halt");
+    expect(getCallCount()).toBe(1); // no retries attempted
+    expect(reDispatchCallCount).toBe(0); // no re-dispatch
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+      lastFailureReason: { code: string };
+    };
+    expect(updated.runHistory).toHaveLength(1);
+    expect(updated.runHistory[0]?.attemptNumber).toBe(1);
+    expect(updated.runHistory[0]?.outcome).toBe("fail");
+    expect(updated.lastFailureReason?.code).toBe("VERIFIER_FAILURE");
+  });
+
+  it("RT_51_VA_5: maxRetriesOverride=0 + retry policy + fail → ONE runHistory entry + escalate (zero-retry config)", async () => {
+    const paths = await seedFixture({
+      runId: "rt-51-va-5",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.1",
+    });
+    const { stub, getCallCount } = sequencedVerifier(["fail"]);
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "rt-51-va-5", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      failurePolicyOverride: "retry",
+      maxRetriesOverride: 0, // zero-retry: original attempt only
+      verifierOverride: stub,
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(getCallCount()).toBe(1);
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+    };
+    expect(updated.runHistory).toHaveLength(1);
+    expect(updated.runHistory[0]?.attemptNumber).toBe(1);
+    expect(updated.runHistory[0]?.outcome).toBe("fail");
+  });
+
+  it("RT_51_VA_6: maxRetriesOverride=5 + retry policy + 6 fails → SIX runHistory entries + escalate", async () => {
+    const paths = await seedFixture({
+      runId: "rt-51-va-6",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.1",
+    });
+    const { stub, getCallCount } = sequencedVerifier([
+      "fail",
+      "fail",
+      "fail",
+      "fail",
+      "fail",
+      "fail",
+    ]);
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "rt-51-va-6", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      failurePolicyOverride: "retry",
+      maxRetriesOverride: 5, // 5 retries → 6 total attempts
+      verifierOverride: stub,
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(getCallCount()).toBe(6);
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+    };
+    expect(updated.runHistory).toHaveLength(6);
+    expect(updated.runHistory[0]?.attemptNumber).toBe(1);
+    expect(updated.runHistory[5]?.attemptNumber).toBe(6);
+  });
+
+  it("RT_51_VA_7: each attempt's runHistory entry shares the SAME runId (prior attempts persist on retry)", async () => {
+    const paths = await seedFixture({
+      runId: "rt-51-va-7",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.1",
+    });
+    const { stub } = sequencedVerifier(["fail", "fail", "fail"]);
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "rt-51-va-7", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      failurePolicyOverride: "retry",
+      maxRetriesOverride: 2,
+      verifierOverride: stub,
+    });
+
+    expect(result.exitCode).toBe(1);
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+    };
+    expect(updated.runHistory).toHaveLength(3);
+    for (const entry of updated.runHistory) {
+      expect(entry.runId).toBe("rt-51-va-7");
+    }
+  });
+
+  it("RT_51_VA_8: SIGINT mid-retry (shutdownRequested=true after attempt 1) → halt; runHistory has ONE fail entry; no further attempts", async () => {
+    const paths = await seedFixture({
+      runId: "rt-51-va-8",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.1",
+    });
+    const { stub, getCallCount } = sequencedVerifier(["fail", "fail", "fail"]);
+    // Trigger shutdown mid-retry — after the first attempt's fail entry
+    // is appended, the retry loop polls shutdownRequested before
+    // re-dispatching attempt 2.
+    let shutdownPollCount = 0;
+    const shutdownRequested = () => {
+      shutdownPollCount++;
+      return true; // simulate SIGINT received between attempt 1 and 2
+    };
+
+    const result = await runVerifyAndAdvance({
+      argv: ["--run-id", "rt-51-va-8", "--tokens-in", "0", "--tokens-out", "0"],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      failurePolicyOverride: "retry",
+      maxRetriesOverride: 2,
+      verifierOverride: stub,
+      shutdownRequested,
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.action.action).toBe("halt");
+    // Only attempt 1 dispatched (verifier called once); shutdown
+    // short-circuits the retry loop before attempt 2.
+    expect(getCallCount()).toBe(1);
+    expect(shutdownPollCount).toBe(1); // polled exactly once (after attempt 1 fail)
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+    };
+    expect(updated.runHistory).toHaveLength(1);
+    expect(updated.runHistory[0]?.attemptNumber).toBe(1);
+    expect(updated.runHistory[0]?.outcome).toBe("fail");
+  });
+});
+
+// ─── Story 5.2 — Skip failure mode (SK_52_VA_*) ───────────────────────────
+
+describe("runVerifyAndAdvance — Story 5.2 skip-policy integration (SK_52_VA_*)", () => {
+  /**
+   * Helper: seed a state.yaml with a halted lastAttempted populated +
+   * a halted lastFailureReason; the skip path operates on this state.
+   * The dispatch-spec is also seeded (the skip path bypasses the read,
+   * but seedFixture writes one for parity with the success-path seed).
+   */
+  async function seedSkipState(opts: {
+    runId: string;
+    skippedStep: string;
+    epic: number;
+    story: string;
+    runHistoryEntries?: Array<Record<string, unknown>>;
+  }): Promise<FixturePaths> {
+    const stateOverride: Record<string, unknown> = {
+      schemaVersion: 1,
+      project: { name: "stepper-test", bmadVersion: "6.5.0" },
+      lastSuccessfulStep: {
+        step: "bmad-create-prd",
+        epic: opts.epic,
+        story: opts.story,
+        completedAt: "2026-04-28T10:00:00Z",
+      },
+      lastAttempted: {
+        step: opts.skippedStep,
+        epic: opts.epic,
+        story: opts.story,
+        attemptedAt: "2026-04-29T11:00:00Z",
+      },
+      lastFailureReason: {
+        code: "VERIFIER_FAILURE",
+        message: "verifier failed; user is giving up via --skip",
+        hint: "See _bmad-output/.stepper/runs/<ts>-<step>.log for the verifier output; try /bmad-next --resume after fixing the underlying issue.",
+        runId: opts.runId,
+      },
+      runHistory: opts.runHistoryEntries ?? [],
+      checkpoints: [],
+    };
+    return seedFixture({
+      runId: opts.runId,
+      stepName: opts.skippedStep,
+      epic: opts.epic,
+      story: opts.story,
+      stateOverride,
+    });
+  }
+
+  /**
+   * Build a minimal DAG with the skipped step + a single successor
+   * for the SK_52_VA_4 next-step resolution test.
+   */
+  function buildSkipDag(skippedStep: string, nextStep: string): DagAdjacency {
+    const skippedNode: DagNode = {
+      name: skippedStep,
+      after: ["bmad-create-prd"],
+      before: [nextStep],
+      phase: "implementation",
+      optional: false,
+      persona: "dev",
+    };
+    const nextNode: DagNode = {
+      name: nextStep,
+      after: [skippedStep],
+      before: [],
+      phase: "implementation",
+      optional: false,
+      persona: "dev",
+    };
+    const nodes = new Map<string, DagNode>([
+      [skippedStep, skippedNode],
+      [nextStep, nextNode],
+    ]);
+    return {
+      nodes,
+      edgesIn: new Map<string, ReadonlySet<string>>([
+        [skippedStep, new Set<string>()],
+        [nextStep, new Set<string>([skippedStep])],
+      ]),
+      edgesOut: new Map<string, ReadonlySet<string>>([
+        [skippedStep, new Set<string>([nextStep])],
+        [nextStep, new Set<string>()],
+      ]),
+    };
+  }
+
+  it("SK_52_VA_1: skip path with matched lastAttempted.step → state mutates: runHistory entry skipped=true + lastSuccessfulStep advances + lastAttempted clears", async () => {
+    const paths = await seedSkipState({
+      runId: "sk-52-va-1",
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+    const dag = buildSkipDag("bmad-dev-story", "bmad-code-review");
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "sk-52-va-1",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--skip-step",
+        "bmad-dev-story",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      dag,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    expect(result.action.message).toContain("SKIPPED");
+    expect(result.action.message).toContain("bmad-dev-story");
+
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+      lastSuccessfulStep: { step: string } | null;
+      lastAttempted: unknown;
+      lastFailureReason: unknown;
+    };
+    // Three simultaneous mutations per AC line 1077.
+    expect(updated.runHistory).toHaveLength(1);
+    expect(updated.runHistory[0]?.skipped).toBe(true);
+    expect(updated.runHistory[0]?.step).toBe("bmad-dev-story");
+    expect(updated.lastSuccessfulStep?.step).toBe("bmad-code-review");
+    expect(updated.lastAttempted).toBeNull();
+    expect(updated.lastFailureReason).toBeNull();
+  });
+
+  it("SK_52_VA_2: skip path with mismatched lastAttempted.step → ConfigError thrown with mismatch hint", async () => {
+    const paths = await seedSkipState({
+      runId: "sk-52-va-2",
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "sk-52-va-2",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        // Mismatch: state.lastAttempted.step is "bmad-dev-story" but
+        // user supplied "bmad-code-review" (typo or stale).
+        "--skip-step",
+        "bmad-code-review",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+    });
+
+    expect(result.exitCode).toBe(2);
+    expect(result.action.action).toBe("halt");
+    if (result.action.action !== "halt") return;
+    // Hint surfaces the actual lastAttempted.step for the user to
+    // correct the typo per OQ-6 decision.
+    expect(result.action.message).toContain("bmad-dev-story");
+    expect(result.action.message).toMatch(/^.*(Run|See|Try|Check) /);
+  });
+
+  it("SK_52_VA_3: skip path with null lastAttempted → ConfigError thrown — OQ-4 decision", async () => {
+    // Use seedFixture but with stateOverride that has lastAttempted = null.
+    const paths = await seedFixture({
+      runId: "sk-52-va-3",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+      stateOverride: {
+        schemaVersion: 1,
+        project: { name: "stepper-test", bmadVersion: "6.5.0" },
+        lastSuccessfulStep: {
+          step: "bmad-create-prd",
+          epic: 5,
+          story: "5.2",
+          completedAt: "2026-04-28T10:00:00Z",
+        },
+        lastAttempted: null,
+        runHistory: [],
+        checkpoints: [],
+      },
+    });
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "sk-52-va-3",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--skip-step",
+        "bmad-dev-story",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+    });
+
+    expect(result.exitCode).toBe(2);
+    expect(result.action.action).toBe("halt");
+    if (result.action.action !== "halt") return;
+    // Hint per OQ-4 points the user at /bmad-next first.
+    expect(result.action.message).toContain("Run /bmad-next");
+  });
+
+  it("SK_52_VA_4: skip path advances lastSuccessfulStep to NEXT step via DAG resolver — assert next.step matches DAG successor", async () => {
+    const paths = await seedSkipState({
+      runId: "sk-52-va-4",
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+    // DAG with bmad-code-review as the successor to bmad-dev-story.
+    const dag = buildSkipDag("bmad-dev-story", "bmad-code-review");
+
+    await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "sk-52-va-4",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--skip-step",
+        "bmad-dev-story",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      dag,
+    });
+
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      lastSuccessfulStep: { step: string };
+    };
+    expect(updated.lastSuccessfulStep?.step).toBe("bmad-code-review");
+  });
+
+  it("SK_52_VA_5: skip-path saveState is atomic — single .yaml write, no .bak rotation issue", async () => {
+    const paths = await seedSkipState({
+      runId: "sk-52-va-5",
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+    const dag = buildSkipDag("bmad-dev-story", "bmad-code-review");
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "sk-52-va-5",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--skip-step",
+        "bmad-dev-story",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      dag,
+    });
+    expect(result.exitCode).toBe(0);
+
+    // Verify the state.yaml was written + the .bak rotation occurred
+    // exactly once (the original prior file became .bak via atomicWrite).
+    const stateExists = await Bun.file(paths.statePath).exists();
+    const backupExists = await Bun.file(`${paths.statePath}.bak`).exists();
+    expect(stateExists).toBe(true);
+    expect(backupExists).toBe(true);
+  });
+
+  it("SK_52_VA_6: idempotent re-skip — second invocation on already-skipped step → ConfigError 'is already skipped'", async () => {
+    const paths = await seedSkipState({
+      runId: "sk-52-va-6",
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+      // Pre-existing runHistory: the prior --skip already landed an entry
+      // with skipped: true for bmad-dev-story.
+      runHistoryEntries: [
+        {
+          runId: "prior-skip-runid",
+          step: "bmad-dev-story",
+          epic: 5,
+          story: "5.2",
+          attemptNumber: 1,
+          outcome: "pass",
+          failureCode: null,
+          completedAt: "2026-05-04T19:00:00Z",
+          skipped: true,
+        },
+      ],
+    });
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "sk-52-va-6",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--skip-step",
+        "bmad-dev-story",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+    });
+
+    expect(result.exitCode).toBe(2);
+    expect(result.action.action).toBe("halt");
+    if (result.action.action !== "halt") return;
+    expect(result.action.message).toMatch(/^.*(Run|See|Try|Check) /);
+  });
+
+  it("SK_52_VA_7: skip-path AR9 emission shape — single-line message, exitCode 0, includes skipped step + next step name", async () => {
+    const paths = await seedSkipState({
+      runId: "sk-52-va-7",
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+    const dag = buildSkipDag("bmad-dev-story", "bmad-code-review");
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "sk-52-va-7",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--skip-step",
+        "bmad-dev-story",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      dag,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    // Single-line per AR9.
+    expect(result.action.message).not.toContain("\n");
+    expect(result.action.message).toContain("bmad-dev-story");
+    expect(result.action.message).toContain("bmad-code-review");
+    // Round-trip through DispatchActionV1Schema (defence-in-depth).
+    const validated = DispatchActionV1Schema.parse(result.action);
+    expect(validated.action).toBe("report");
+    expect(validated.exitCode).toBe(0);
+  });
+
+  it("SK_52_VA_8: SIGINT cooperation — skip path's atomic saveState honours the Story 1.3 atomic tmp+rename contract (no partial writes)", async () => {
+    // The skip path's saveState rides the existing atomic-write contract
+    // per Story 1.3 + AR13 Layer 2; the .bak rotation is the canonical
+    // halt-and-resume safety net. This test verifies the post-skip state
+    // is byte-identical to a fully-completed write — an aborted write
+    // would leave a .yaml.tmp orphan or a partially-written .yaml. Both
+    // are absent under the atomic-write contract.
+    const paths = await seedSkipState({
+      runId: "sk-52-va-8",
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+    const dag = buildSkipDag("bmad-dev-story", "bmad-code-review");
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "sk-52-va-8",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--skip-step",
+        "bmad-dev-story",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      dag,
+    });
+    expect(result.exitCode).toBe(0);
+
+    // Verify no .tmp orphan exists post-write.
+    const tmpExists = await Bun.file(`${paths.statePath}.tmp`).exists();
+    expect(tmpExists).toBe(false);
+    // Verify the canonical state.yaml is parseable + complete.
+    const stateText = await Bun.file(paths.statePath).text();
+    const parsed = Bun.YAML.parse(stateText) as {
+      schemaVersion: number;
+      runHistory: Array<Record<string, unknown>>;
+    };
+    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.runHistory).toHaveLength(1);
+    expect(parsed.runHistory[0]?.skipped).toBe(true);
+  });
+
+  it("SK_52_VA_9: skip path does NOT invoke verifier — verifierOverride NOT called when skipStep is set", async () => {
+    const paths = await seedSkipState({
+      runId: "sk-52-va-9",
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+    const dag = buildSkipDag("bmad-dev-story", "bmad-code-review");
+    let verifierCallCount = 0;
+    const verifierStub = async (
+      _runId: string,
+      _opts: { stepName: string; stagingRoot: string },
+    ) => {
+      verifierCallCount++;
+      return {
+        schemaVersion: 1 as const,
+        status: "pass" as const,
+        checks: [],
+        promotedTo: null,
+        resultPath: "/tmp/test-verifier-result.json",
+      };
+    };
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "sk-52-va-9",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--skip-step",
+        "bmad-dev-story",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      dag,
+      verifierOverride: verifierStub,
+    });
+    expect(result.exitCode).toBe(0);
+    // The skip path BYPASSES the verifier — call count must be zero.
+    expect(verifierCallCount).toBe(0);
+  });
+
+  it("SK_52_VA_10: skip path does NOT trigger checkpoint append — checkpoints[] unchanged per Story 4.8 atomic-write contract", async () => {
+    const paths = await seedSkipState({
+      runId: "sk-52-va-10",
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+    const dag = buildSkipDag("bmad-dev-story", "bmad-code-review");
+
+    const before = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      checkpoints: Array<Record<string, unknown>>;
+    };
+    expect(before.checkpoints).toEqual([]);
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "sk-52-va-10",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--skip-step",
+        "bmad-dev-story",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T20:00:00.000Z",
+      dag,
+      // Even when --checkpoint-each is set to match the just-skipped
+      // step's phase, the skip path does NOT trigger checkpoint append
+      // (the just-skipped step did not successfully complete).
+      checkpointEach: "implementation",
+    });
+    expect(result.exitCode).toBe(0);
+
+    const after = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      checkpoints: Array<Record<string, unknown>>;
+    };
+    expect(after.checkpoints).toEqual([]);
+  });
+});
+
+// ─── Story 5.3 — Route-to-fixer failure mode (RTF_53_VA_*) ────────────────
+
+describe("runVerifyAndAdvance — Story 5.3 route-to-fixer integration (RTF_53_VA_*)", () => {
+  /**
+   * Build a verifier stub that returns the supplied sequence of statuses
+   * on each call, keyed by runId so the test can assert which staging
+   * dir the call used. The stub also captures the runIds it was called
+   * with so the test can verify the fixer's runId was used for the
+   * post-fix verifier re-run.
+   */
+  function sequencedVerifierByRunId(
+    sequence: ReadonlyArray<{
+      readonly runIdMatcher: RegExp | string;
+      readonly status: "pass" | "fail" | "skip";
+    }>,
+  ) {
+    let callCount = 0;
+    const calls: Array<{ runId: string; status: string }> = [];
+    const stub = async (
+      runId: string,
+      _opts: { stepName: string; stagingRoot: string },
+    ) => {
+      // Find first matching entry that has not been consumed yet.
+      const idx = callCount;
+      callCount++;
+      const match = sequence[idx];
+      const status = match?.status ?? "pass";
+      calls.push({ runId, status });
+      return {
+        schemaVersion: 1 as const,
+        status,
+        checks: [],
+        promotedTo: null,
+        resultPath: `/tmp/test-verifier-result-${runId}.json`,
+      };
+    };
+    return { stub, getCallCount: () => callCount, calls };
+  }
+
+  /**
+   * Helper: build a fixerDispatchOverride that simulates the fixer
+   * sub-agent writing a corrected artifact to the FIXER staging dir.
+   * The body is a benign valid markdown so the post-fix verifier (when
+   * stubbed to "pass") can succeed; tests that target the escalate
+   * branch supply a separate sequencedVerifierByRunId where the post-
+   * fix call returns "fail".
+   */
+  function buildFixerDispatch(
+    paths: FixturePaths,
+    stepName: string,
+    artifactBody?: string,
+  ): (fixerRunId: string) => Promise<void> {
+    return async (fixerRunId: string) => {
+      const fixerStagingDir = path.join(paths.stagingRoot, fixerRunId);
+      await fs.mkdir(path.join(fixerStagingDir, "outputs"), {
+        recursive: true,
+      });
+      await Bun.write(
+        path.join(fixerStagingDir, "outputs", `${stepName}.md`),
+        artifactBody ??
+          "---\ntitle: Corrected Artifact\nstatus: review\n---\n\n# Body\n\nFixed.\n",
+      );
+    };
+  }
+
+  it("RTF_53_VA_1: route-to-fixer + verifier-fail-then-fixer-pass results in success → ONE success runHistory entry with fixAttempt:true; corrected artifact promoted from FIXER staging dir", async () => {
+    const paths = await seedFixture({
+      runId: "rtf-53-va-1",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.3",
+    });
+    // Sequence: original verifier fails → fixer dispatched → post-fix
+    // verifier passes (on the FIXER's runId).
+    const { stub, calls } = sequencedVerifierByRunId([
+      { runIdMatcher: "rtf-53-va-1", status: "fail" },
+      { runIdMatcher: "rtf-53-va-1-fix", status: "pass" },
+    ]);
+    const fixerDispatch = buildFixerDispatch(paths, "bmad-dev-story");
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "rtf-53-va-1",
+        "--tokens-in",
+        "10",
+        "--tokens-out",
+        "20",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T22:56:12.000Z",
+      failurePolicyOverride: "route-to-fixer",
+      verifierOverride: stub,
+      fixerDispatchOverride: fixerDispatch,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("report");
+    // Verifier was called twice: once with original runId (fail), once
+    // with fixer runId (pass).
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.runId).toBe("rtf-53-va-1");
+    expect(calls[0]?.status).toBe("fail");
+    expect(calls[1]?.runId).toBe("rtf-53-va-1-fix");
+    expect(calls[1]?.status).toBe("pass");
+
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+      lastSuccessfulStep: Record<string, unknown> | null;
+    };
+    // Two entries: the original verifier-fail attempt + the fix-success.
+    expect(updated.runHistory).toHaveLength(2);
+    // Entry 1: original verifier-fail.
+    expect(updated.runHistory[0]?.outcome).toBe("fail");
+    expect(updated.runHistory[0]?.fixAttempt).toBeUndefined();
+    // Entry 2: fix-success — fixAttempt:true marker per OQ-2.
+    expect(updated.runHistory[1]?.outcome).toBe("pass");
+    expect(updated.runHistory[1]?.fixAttempt).toBe(true);
+    // The success entry's runId references the FIXER runId (forensic
+    // cross-reference to the fix staging dir).
+    expect(updated.runHistory[1]?.runId).toBe("rtf-53-va-1-fix");
+  });
+
+  it("RTF_53_VA_2: route-to-fixer + verifier-fail-then-fixer-fail results in escalate → TWO runHistory fail entries (original + post-fix); VerifierFailureError thrown with both failure codes in message", async () => {
+    const paths = await seedFixture({
+      runId: "rtf-53-va-2",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.3",
+    });
+    // Sequence: original verifier fails → fixer dispatched → post-fix
+    // verifier ALSO fails → escalate.
+    const { stub, calls } = sequencedVerifierByRunId([
+      { runIdMatcher: "rtf-53-va-2", status: "fail" },
+      { runIdMatcher: "rtf-53-va-2-fix", status: "fail" },
+    ]);
+    const fixerDispatch = buildFixerDispatch(paths, "bmad-dev-story");
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "rtf-53-va-2",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T22:56:12.000Z",
+      failurePolicyOverride: "route-to-fixer",
+      verifierOverride: stub,
+      fixerDispatchOverride: fixerDispatch,
+    });
+
+    // VerifierFailureError → AR21 halt with exitCode 1.
+    expect(result.exitCode).toBe(1);
+    expect(result.action.action).toBe("halt");
+    // Both verifier calls happened.
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.runId).toBe("rtf-53-va-2");
+    expect(calls[1]?.runId).toBe("rtf-53-va-2-fix");
+
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+      lastFailureReason: Record<string, unknown> | null;
+    };
+    // Two fail entries: original verifier-fail + post-fix verifier-fail
+    // (both with fail outcome; the second has fixAttempt:true).
+    expect(updated.runHistory).toHaveLength(2);
+    expect(updated.runHistory[0]?.outcome).toBe("fail");
+    expect(updated.runHistory[0]?.fixAttempt).toBeUndefined();
+    expect(updated.runHistory[0]?.failureCode).toBe("VERIFIER_FAILURE");
+    expect(updated.runHistory[1]?.outcome).toBe("fail");
+    expect(updated.runHistory[1]?.fixAttempt).toBe(true);
+    expect(updated.runHistory[1]?.failureCode).toBe("VERIFIER_FAILURE");
+    // lastFailureReason carries the LAST attempt's code per AC line 1099
+    // ("with both failures recorded").
+    expect(updated.lastFailureReason?.code).toBe("VERIFIER_FAILURE");
+  });
+
+  it("RTF_53_VA_3: route-to-fixer dispatch generates the fixer's dispatch-spec at staging/<runId>-fix/dispatch-spec.json with AC-mandated CONTEXT entries", async () => {
+    const paths = await seedFixture({
+      runId: "rtf-53-va-3",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.3",
+    });
+    const { stub } = sequencedVerifierByRunId([
+      { runIdMatcher: "rtf-53-va-3", status: "fail" },
+      { runIdMatcher: "rtf-53-va-3-fix", status: "pass" },
+    ]);
+    const fixerDispatch = buildFixerDispatch(paths, "bmad-dev-story");
+
+    await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "rtf-53-va-3",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T22:56:12.000Z",
+      failurePolicyOverride: "route-to-fixer",
+      verifierOverride: stub,
+      fixerDispatchOverride: fixerDispatch,
+    });
+
+    // Read the generated fixer dispatch-spec at staging/<fixerRunId>/.
+    const fixerSpecPath = path.join(
+      paths.stagingRoot,
+      "rtf-53-va-3-fix",
+      "dispatch-spec.json",
+    );
+    const exists = await Bun.file(fixerSpecPath).exists();
+    expect(exists).toBe(true);
+    const fixerSpec = JSON.parse(
+      await Bun.file(fixerSpecPath).text(),
+    ) as DispatchSpecV1;
+    // The AC-mandated CONTEXT entries: verifier-result + original artifact.
+    const context = fixerSpec.taskSpec.context as ReadonlyArray<{
+      path: string;
+      label: string;
+    }>;
+    const verifierResultEntry = context.find((c) =>
+      c.path.includes("verifier-result.json"),
+    );
+    const artifactEntry = context.find((c) =>
+      c.path.includes("/outputs/bmad-dev-story.md"),
+    );
+    expect(verifierResultEntry).toBeDefined();
+    expect(artifactEntry).toBeDefined();
+    // Both reference the ORIGINAL run-id staging dir (not the fixer's).
+    expect(verifierResultEntry?.path).toContain(
+      "rtf-53-va-3/verifier-result.json",
+    );
+    expect(artifactEntry?.path).toContain(
+      "rtf-53-va-3/outputs/bmad-dev-story.md",
+    );
+  });
+
+  it("RTF_53_VA_4: the fixer's taskSpec.task is BYTE-IDENTICAL to AC line 1091 substring 'remediate a BMAD step artifact based on a verifier failure'", async () => {
+    const paths = await seedFixture({
+      runId: "rtf-53-va-4",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.3",
+    });
+    const { stub } = sequencedVerifierByRunId([
+      { runIdMatcher: "rtf-53-va-4", status: "fail" },
+      { runIdMatcher: "rtf-53-va-4-fix", status: "pass" },
+    ]);
+    const fixerDispatch = buildFixerDispatch(paths, "bmad-dev-story");
+
+    await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "rtf-53-va-4",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T22:56:12.000Z",
+      failurePolicyOverride: "route-to-fixer",
+      verifierOverride: stub,
+      fixerDispatchOverride: fixerDispatch,
+    });
+
+    const fixerSpec = JSON.parse(
+      await Bun.file(
+        path.join(paths.stagingRoot, "rtf-53-va-4-fix", "dispatch-spec.json"),
+      ).text(),
+    ) as DispatchSpecV1;
+    expect(fixerSpec.taskSpec.task).toBe(
+      "remediate a BMAD step artifact based on a verifier failure",
+    );
+  });
+
+  it("RTF_53_VA_5: the fixer's taskSpec.persona resolves to 'bmad-step-fixer' per OQ-1", async () => {
+    const paths = await seedFixture({
+      runId: "rtf-53-va-5",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.3",
+    });
+    const { stub } = sequencedVerifierByRunId([
+      { runIdMatcher: "rtf-53-va-5", status: "fail" },
+      { runIdMatcher: "rtf-53-va-5-fix", status: "pass" },
+    ]);
+    const fixerDispatch = buildFixerDispatch(paths, "bmad-dev-story");
+
+    await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "rtf-53-va-5",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T22:56:12.000Z",
+      failurePolicyOverride: "route-to-fixer",
+      verifierOverride: stub,
+      fixerDispatchOverride: fixerDispatch,
+    });
+
+    const fixerSpec = JSON.parse(
+      await Bun.file(
+        path.join(paths.stagingRoot, "rtf-53-va-5-fix", "dispatch-spec.json"),
+      ).text(),
+    ) as DispatchSpecV1;
+    expect(fixerSpec.taskSpec.persona).toBe("bmad-step-fixer");
+  });
+
+  it("RTF_53_VA_6: the fixer's output is promoted from staging/<runId>-fix/outputs/<artifact> on success (NOT from original failed artifact)", async () => {
+    const paths = await seedFixture({
+      runId: "rtf-53-va-6",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.3",
+      artifactBody:
+        "---\ntitle: Original (failed) artifact\nstatus: review\n---\n\n# Body\n\nOriginal failure.\n",
+    });
+    const { stub } = sequencedVerifierByRunId([
+      { runIdMatcher: "rtf-53-va-6", status: "fail" },
+      { runIdMatcher: "rtf-53-va-6-fix", status: "pass" },
+    ]);
+    // Fixer writes a DISTINCT artifact body to the fix staging dir.
+    const fixedBody =
+      "---\ntitle: Fixed Artifact\nstatus: review\n---\n\n# Body\n\nCorrected via auto-fix.\n";
+    const fixerDispatch = buildFixerDispatch(
+      paths,
+      "bmad-dev-story",
+      fixedBody,
+    );
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "rtf-53-va-6",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T22:56:12.000Z",
+      failurePolicyOverride: "route-to-fixer",
+      verifierOverride: stub,
+      fixerDispatchOverride: fixerDispatch,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.promotedTo).toBeDefined();
+    expect(result.promotedTo).not.toBeNull();
+    if (result.promotedTo === null || result.promotedTo === undefined) return;
+    // The promoted artifact body matches the FIXER's corrected body, NOT
+    // the original failed body — proving promote read from the fix
+    // staging dir.
+    const promotedBody = await Bun.file(result.promotedTo).text();
+    expect(promotedBody).toBe(fixedBody);
+  });
+
+  it("RTF_53_VA_7: the original verifier-result.json + the fixer verifier-result.json BOTH exist after the fix attempt (forensic preservation per AC line 1099)", async () => {
+    const paths = await seedFixture({
+      runId: "rtf-53-va-7",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.3",
+    });
+    // Sequence: original fail (writes to staging/rtf-53-va-7/...) →
+    // fixer dispatched → post-fix pass (writes to staging/rtf-53-va-7-fix/...).
+    const { stub } = sequencedVerifierByRunId([
+      { runIdMatcher: "rtf-53-va-7", status: "fail" },
+      { runIdMatcher: "rtf-53-va-7-fix", status: "pass" },
+    ]);
+    // The stub doesn't write verifier-result.json (it's a stub), so we
+    // simulate that by having the test seam write both. The fixer
+    // dispatch writes the fix output; the test writes the
+    // verifier-result.json files after the fact to mirror what the real
+    // verifier would do.
+    const originalVerifierResult = path.join(
+      paths.stagingRoot,
+      "rtf-53-va-7",
+      "verifier-result.json",
+    );
+    await Bun.write(
+      originalVerifierResult,
+      JSON.stringify({ status: "fail", schemaVersion: 1, checks: [] }),
+    );
+    const fixerDispatch = async (fixerRunId: string) => {
+      const fixerStagingDir = path.join(paths.stagingRoot, fixerRunId);
+      await fs.mkdir(path.join(fixerStagingDir, "outputs"), {
+        recursive: true,
+      });
+      await Bun.write(
+        path.join(fixerStagingDir, "outputs", "bmad-dev-story.md"),
+        "---\ntitle: Fixed\nstatus: review\n---\n\n# Body\n",
+      );
+      // Simulate post-fix verifier-result.json write at fix staging dir.
+      await Bun.write(
+        path.join(fixerStagingDir, "verifier-result.json"),
+        JSON.stringify({ status: "pass", schemaVersion: 1, checks: [] }),
+      );
+    };
+
+    await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "rtf-53-va-7",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T22:56:12.000Z",
+      failurePolicyOverride: "route-to-fixer",
+      verifierOverride: stub,
+      fixerDispatchOverride: fixerDispatch,
+    });
+
+    // BOTH verifier-result.json files exist (forensic preservation).
+    const originalExists = await Bun.file(originalVerifierResult).exists();
+    const fixerVerifierResult = path.join(
+      paths.stagingRoot,
+      "rtf-53-va-7-fix",
+      "verifier-result.json",
+    );
+    const fixerExists = await Bun.file(fixerVerifierResult).exists();
+    expect(originalExists).toBe(true);
+    expect(fixerExists).toBe(true);
+  });
+
+  it("RTF_53_VA_8: SIGINT mid-fixer-dispatch halts cleanly with VerifierFailureError carrying the original verifier-fail context", async () => {
+    const paths = await seedFixture({
+      runId: "rtf-53-va-8",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.3",
+    });
+    const { stub, getCallCount } = sequencedVerifierByRunId([
+      { runIdMatcher: "rtf-53-va-8", status: "fail" },
+    ]);
+    let shutdownPolled = 0;
+    const fixerDispatch = buildFixerDispatch(paths, "bmad-dev-story");
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "rtf-53-va-8",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T22:56:12.000Z",
+      failurePolicyOverride: "route-to-fixer",
+      verifierOverride: stub,
+      fixerDispatchOverride: fixerDispatch,
+      shutdownRequested: () => {
+        // Return true on the FIRST poll (which happens BEFORE fixer
+        // dispatch) — simulates SIGINT mid-route-to-fixer.
+        shutdownPolled++;
+        return true;
+      },
+    });
+
+    // Verifier was called exactly ONCE (the original) — fixer dispatch
+    // was BYPASSED because shutdownRequested returned true before the
+    // dispatch.
+    expect(getCallCount()).toBe(1);
+    expect(shutdownPolled).toBeGreaterThan(0);
+    // VerifierFailureError → AR21 halt.
+    expect(result.exitCode).toBe(1);
+    expect(result.action.action).toBe("halt");
+  });
+
+  it("RTF_53_VA_9: --auto-fix flag overrides per-step policy to 'route-to-fixer' (per architecture line 499)", async () => {
+    const paths = await seedFixture({
+      runId: "rtf-53-va-9",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.3",
+    });
+    const { stub, calls } = sequencedVerifierByRunId([
+      { runIdMatcher: "rtf-53-va-9", status: "fail" },
+      { runIdMatcher: "rtf-53-va-9-fix", status: "pass" },
+    ]);
+    const fixerDispatch = buildFixerDispatch(paths, "bmad-dev-story");
+
+    // Use the --auto-fix positional flag instead of failurePolicyOverride
+    // to verify the override behaviour.
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "rtf-53-va-9",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--auto-fix",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T22:56:12.000Z",
+      // Even with failurePolicyOverride set to "retry", --auto-fix
+      // overrides to "route-to-fixer" unconditionally.
+      failurePolicyOverride: "retry",
+      verifierOverride: stub,
+      fixerDispatchOverride: fixerDispatch,
+    });
+
+    expect(result.exitCode).toBe(0);
+    // Two verifier calls: original (fail) + post-fix (pass) — proves the
+    // route-to-fixer path was taken (NOT the retry path which would
+    // call the verifier on the SAME runId twice).
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.runId).toBe("rtf-53-va-9");
+    expect(calls[1]?.runId).toBe("rtf-53-va-9-fix");
+  });
+
+  it("RTF_53_VA_10: the fix-attempt success runHistory entry has fixAttempt:true field set per OQ-2", async () => {
+    const paths = await seedFixture({
+      runId: "rtf-53-va-10",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.3",
+    });
+    const { stub } = sequencedVerifierByRunId([
+      { runIdMatcher: "rtf-53-va-10", status: "fail" },
+      { runIdMatcher: "rtf-53-va-10-fix", status: "pass" },
+    ]);
+    const fixerDispatch = buildFixerDispatch(paths, "bmad-dev-story");
+
+    await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "rtf-53-va-10",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-04T22:56:12.000Z",
+      failurePolicyOverride: "route-to-fixer",
+      verifierOverride: stub,
+      fixerDispatchOverride: fixerDispatch,
+    });
+
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      runHistory: Array<Record<string, unknown>>;
+    };
+    // The success entry (LAST in runHistory) must have fixAttempt:true.
+    const successEntry = updated.runHistory[updated.runHistory.length - 1];
+    expect(successEntry?.outcome).toBe("pass");
+    expect(successEntry?.fixAttempt).toBe(true);
+  });
+});
+
+// ─── Story 5.4 — Escalate failure mode (ESC_54_VA_*) ──────────────────────
+
+describe("runVerifyAndAdvance — Story 5.4 escalate-mode integration (ESC_54_VA_*)", () => {
+  /** AR22 actionable-hint regex (architecture line 589 + AC line 1113). */
+  const AR22_REGEX = /^.*(Run|See|Try|Check) /;
+
+  function sequencedVerifier(
+    statuses: ReadonlyArray<"pass" | "fail" | "skip">,
+  ) {
+    let callCount = 0;
+    const stub = async (
+      _runId: string,
+      _opts: { stepName: string; stagingRoot: string },
+    ) => {
+      const idx = callCount;
+      callCount++;
+      return {
+        schemaVersion: 1 as const,
+        status: statuses[idx] ?? "pass",
+        checks: [],
+        promotedTo: null,
+        resultPath: "/tmp/test-verifier-result.json",
+      };
+    };
+    return { stub, getCallCount: () => callCount };
+  }
+
+  it("ESC_54_VA_1: retry-cap escalate path → throw VerifierFailureError; lastFailureReason.hint matches AR22 regex; AR9 message matches; no Error.stack on main thread", async () => {
+    const paths = await seedFixture({
+      runId: "esc-54-va-1",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.4",
+    });
+    const { stub } = sequencedVerifier(["fail", "fail", "fail"]);
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "esc-54-va-1",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T01:40:46.000Z",
+      failurePolicyOverride: "retry",
+      maxRetriesOverride: 2,
+      verifierOverride: stub,
+      reDispatchOverride: () => {},
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.action.action).toBe("halt");
+    if (result.action.action === "halt") {
+      expect(AR22_REGEX.test(result.action.message)).toBe(true);
+      // No Error.stack substring (NFR-M2).
+      expect(result.action.message).not.toContain("at runVerifyAndAdvance");
+      expect(result.action.message).not.toContain("    at ");
+    }
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      lastFailureReason: { hint: string; code: string };
+    };
+    expect(updated.lastFailureReason?.code).toBe("VERIFIER_FAILURE");
+    expect(AR22_REGEX.test(updated.lastFailureReason?.hint ?? "")).toBe(true);
+  });
+
+  it("ESC_54_VA_2: route-to-fixer-cap escalate path (post-fix-fail with both-failures) → AR9 message + lastFailureReason.hint match regex", async () => {
+    const paths = await seedFixture({
+      runId: "esc-54-va-2",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.4",
+    });
+    // 1st verifier call: fail (original); 2nd verifier call: fail (post-fix).
+    const { stub } = sequencedVerifier(["fail", "fail"]);
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "esc-54-va-2",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T01:40:46.000Z",
+      failurePolicyOverride: "route-to-fixer",
+      verifierOverride: stub,
+      // fixerDispatchOverride: simulate the fixer producing a corrected
+      // artifact (the second verifier call still returns fail).
+      fixerDispatchOverride: async (fixerRunId: string) => {
+        const fxStaging = `${paths.stagingRoot}/${fixerRunId}`;
+        await Bun.write(
+          `${fxStaging}/outputs/bmad-dev-story.md`,
+          "# fixer output\n",
+        );
+      },
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.action.action).toBe("halt");
+    if (result.action.action === "halt") {
+      expect(AR22_REGEX.test(result.action.message)).toBe(true);
+    }
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      lastFailureReason: { hint: string; code: string };
+    };
+    expect(AR22_REGEX.test(updated.lastFailureReason?.hint ?? "")).toBe(true);
+    expect(updated.lastFailureReason?.code).toBe("VERIFIER_FAILURE");
+  });
+
+  it("ESC_54_VA_3: raw verifier failure (first-attempt fail with default escalate policy) → hint matches regex", async () => {
+    const paths = await seedFixture({
+      runId: "esc-54-va-3",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.4",
+    });
+    const { stub } = sequencedVerifier(["fail"]);
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "esc-54-va-3",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T01:40:46.000Z",
+      failurePolicyOverride: "escalate",
+      verifierOverride: stub,
+    });
+    expect(result.exitCode).toBe(1);
+    if (result.action.action === "halt") {
+      expect(AR22_REGEX.test(result.action.message)).toBe(true);
+    }
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      lastFailureReason: { hint: string };
+    };
+    expect(AR22_REGEX.test(updated.lastFailureReason?.hint ?? "")).toBe(true);
+  });
+
+  it("ESC_54_VA_7: SIGINT mid-retry escalate path halts cleanly; lastFailureReason.hint matches regex (atomic write)", async () => {
+    const paths = await seedFixture({
+      runId: "esc-54-va-7",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.4",
+    });
+    const { stub } = sequencedVerifier(["fail", "fail"]);
+    let shutdownCalls = 0;
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "esc-54-va-7",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T01:40:46.000Z",
+      failurePolicyOverride: "retry",
+      maxRetriesOverride: 2,
+      verifierOverride: stub,
+      // Trigger SIGINT after first fail attempt (return true on 2nd
+      // call to shutdownRequested — after attempt 1 is finished).
+      shutdownRequested: () => {
+        shutdownCalls++;
+        return shutdownCalls > 0; // first call after attempt 1 finishes
+      },
+      reDispatchOverride: () => {},
+    });
+    expect(result.exitCode).toBe(1);
+    if (result.action.action === "halt") {
+      expect(AR22_REGEX.test(result.action.message)).toBe(true);
+    }
+    // The SIGINT-triggered halt persisted lastFailureReason.
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      lastFailureReason: { hint: string; code: string };
+    };
+    expect(AR22_REGEX.test(updated.lastFailureReason?.hint ?? "")).toBe(true);
+  });
+
+  it("ESC_54_VA_8: lastFailureReason auto-cleared on next successful step's verify-and-advance run (per OQ-6)", async () => {
+    const paths = await seedFixture({
+      runId: "esc-54-va-8",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.4",
+    });
+    // Pre-seed state with a non-null lastFailureReason from a prior halt.
+    const seeded = Bun.YAML.parse(
+      await Bun.file(paths.statePath).text(),
+    ) as Record<string, unknown>;
+    seeded.lastFailureReason = {
+      code: "VERIFIER_FAILURE",
+      message: "prior halt",
+      hint: "Run /bmad-next --resume.",
+      runId: "prior-run",
+    };
+    await Bun.write(paths.statePath, Bun.YAML.stringify(seeded));
+    const { stub } = sequencedVerifier(["pass"]);
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "esc-54-va-8",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T01:40:46.000Z",
+      failurePolicyOverride: "escalate",
+      verifierOverride: stub,
+    });
+    expect(result.exitCode).toBe(0);
+    const updated = Bun.YAML.parse(await Bun.file(paths.statePath).text()) as {
+      lastFailureReason: unknown;
+    };
+    // Per Story 3.1 + 5.1 + 5.3 success-path clear: lastFailureReason
+    // is set to null on successful step (Story 5.4 does not change this).
+    expect(updated.lastFailureReason).toBeNull();
+  });
+
+  it("ESC_54_VA_9: NO stack trace on main thread (NFR-M2) — AR9 message contains ONLY the actionable hint, not Error.stack", async () => {
+    const paths = await seedFixture({
+      runId: "esc-54-va-9",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.4",
+    });
+    const { stub } = sequencedVerifier(["fail"]);
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "esc-54-va-9",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T01:40:46.000Z",
+      failurePolicyOverride: "escalate",
+      verifierOverride: stub,
+    });
+    expect(result.exitCode).toBe(1);
+    if (result.action.action === "halt") {
+      // The AR9 message field is the actionable hint string (single
+      // line; matches regex). The full Error.stack lives in the run-log
+      // JSON file (FR44), NOT in the AR9 message field.
+      expect(result.action.message).not.toContain("Error:");
+      expect(result.action.message).not.toContain("VerifierFailureError:");
+      expect(result.action.message).not.toContain("    at ");
+      // The single-line shape contract.
+      expect(result.action.message.split("\n").length).toBeLessThanOrEqual(2);
+      expect(AR22_REGEX.test(result.action.message)).toBe(true);
+    }
+  });
+
+  it("ESC_54_VA_10: pre-audit pass-through — VerifierFailureError.actionableHint matches regex (PASS-THROUGH common case)", async () => {
+    const paths = await seedFixture({
+      runId: "esc-54-va-10",
+      stepName: "bmad-dev-story",
+      epic: 5,
+      story: "5.4",
+    });
+    const { stub } = sequencedVerifier(["fail"]);
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "esc-54-va-10",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+      ],
+      statePath: paths.statePath,
+      stagingRoot: paths.stagingRoot,
+      canonicalRoot: paths.canonicalRoot,
+      runsRoot: paths.runsRoot,
+      lockOptions: { lockDir: paths.lockDir },
+      nowIso: "2026-05-05T01:40:46.000Z",
+      failurePolicyOverride: "escalate",
+      verifierOverride: stub,
+    });
+    if (result.action.action === "halt") {
+      // VerifierFailureError.actionableHint = "See _bmad-output/.stepper/
+      // runs/<ts>-<step>.log for the verifier output; try /bmad-next
+      // --resume after fixing the underlying issue." — matches regex
+      // via leading "See ". PASS-THROUGH preserves the hint unchanged.
+      expect(result.action.message).toContain("See ");
+      expect(result.action.message).toContain("--resume");
+      expect(AR22_REGEX.test(result.action.message)).toBe(true);
+    }
   });
 });

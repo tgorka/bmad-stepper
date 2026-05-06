@@ -41,6 +41,8 @@ describe("parseNextArgs — defaults", () => {
       phase: undefined,
       dryRun: false,
       resume: false,
+      // Story 5.2: --skip <step> defaults to undefined (no skip).
+      skip: undefined,
       includeOptional: false,
       noOptional: false,
       persona: undefined,
@@ -53,13 +55,17 @@ describe("parseNextArgs — defaults", () => {
       diffState: false,
       watch: false,
       forceUnlock: false,
+      // Story 5.3: --auto-fix defaults to false (no auto-fix).
+      autoFix: false,
     });
   });
 
-  it("NextArgsSchema enumerates exactly 18 keys (AC-1 inventory)", () => {
+  it("NextArgsSchema enumerates exactly 20 keys (Story 1.7 baseline 18 + Story 5.2 skip + Story 5.3 autoFix)", () => {
     const keys = Object.keys(NextArgsSchema.shape).sort();
     expect(keys).toEqual(
       [
+        // Story 5.3: --auto-fix 20th flag per FR29.
+        "autoFix",
         "diffState",
         "doctor",
         "dryRun",
@@ -74,13 +80,15 @@ describe("parseNextArgs — defaults", () => {
         "phase",
         "recomputeState",
         "resume",
+        // Story 5.2: --skip <step> 19th flag per FR28.
+        "skip",
         "step",
         "story",
         "upgrade",
         "watch",
       ].sort(),
     );
-    expect(keys.length).toBe(18);
+    expect(keys.length).toBe(20);
   });
 });
 
@@ -618,5 +626,166 @@ describe("parseVerifyAndAdvanceArgs — Story 3.1 --last-attempted-json", () => 
     expect(result.error.code).toBe("PARSE_ERROR");
     expect(result.error.message).toContain("schema validation");
     expect(result.error.hint.startsWith("Pass ")).toBe(true);
+  });
+});
+
+// ─── Story 5.2 — --skip <step> parsing (SK_52_ARGS_*) ─────────────────────
+
+describe("parseNextArgs — Story 5.2 --skip flag (SK_52_ARGS_*)", () => {
+  it("SK_52_ARGS_1: parseNextArgs(['--skip', 'dev-story']) returns {skip: 'dev-story'}", () => {
+    const result = parseNextArgs(["--skip", "dev-story"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.skip).toBe("dev-story");
+  });
+
+  it("SK_52_ARGS_2: parseNextArgs(['--skip', 'dev-story', '--resume']) returns {skip, resume: true}", () => {
+    const result = parseNextArgs(["--skip", "dev-story", "--resume"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.skip).toBe("dev-story");
+    expect(result.value.resume).toBe(true);
+  });
+
+  it("SK_52_ARGS_3: parseNextArgs(['--skip']) (without value) → ParseError (string-valued flag requires a value)", () => {
+    // Per the hand-rolled tokenizer: when a string-valued flag appears
+    // alone (no following non-flag token), it falls through the
+    // boolean-shorthand branch and is set to `true`. Zod's
+    // .string().optional() rejects boolean true → ParseError.
+    const result = parseNextArgs(["--skip"]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("PARSE_ERROR");
+  });
+
+  it("SK_52_ARGS_4: parseNextArgs(['--skip', '']) (empty value) accepted by parser; runner enforces non-empty (Story 1.7 intentional gap pattern)", () => {
+    // Empty-string is accepted by the parser per the existing Story 1.7
+    // line 70 forward-dep precedent (the runner consistently treats
+    // empty-string flag values as "no filter / no override").
+    const result = parseNextArgs(["--skip", ""]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.skip).toBe("");
+  });
+
+  it("SK_52_ARGS_5: parseNextArgs(['--skip=dev-story']) (= form) returns {skip: 'dev-story'}", () => {
+    const result = parseNextArgs(["--skip=dev-story"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.skip).toBe("dev-story");
+  });
+
+  it("SK_52_ARGS_6: unknown flag rejection (--skip-extra) → ParseError per .strict() mode", () => {
+    const result = parseNextArgs(["--skip-extra", "dev-story"]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("PARSE_ERROR");
+  });
+});
+
+// ─── Story 5.2 — --skip-step <step> parsing in parseVerifyAndAdvanceArgs ──
+
+describe("parseVerifyAndAdvanceArgs — Story 5.2 --skip-step (SK_52_ARGS_VA_*)", () => {
+  it("SK_52_ARGS_VA_1: parses --skip-step <step> and threads it via skipStep on the parsed args", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "skip-runid",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+      "--skip-step",
+      "bmad-dev-story",
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.skipStep).toBe("bmad-dev-story");
+  });
+
+  it("SK_52_ARGS_VA_2: --skip-step missing value → PARSE_ERROR with AR22 hint", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+      "--skip-step",
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("PARSE_ERROR");
+    expect(result.error.message).toContain("--skip-step");
+    expect(result.error.hint.startsWith("Pass ")).toBe(true);
+  });
+
+  it("SK_52_ARGS_VA_3: omitted --skip-step → skipStep is undefined (back-compat)", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "abc",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.skipStep).toBeUndefined();
+  });
+});
+
+// ─── Story 5.3 — --auto-fix flag (RTF_53_ARGS_*) ──────────────────────────
+
+describe("parseNextArgs — Story 5.3 --auto-fix flag (RTF_53_ARGS_*)", () => {
+  it("RTF_53_ARGS_1: parseNextArgs(['--auto-fix']) returns {autoFix: true}", () => {
+    const result = parseNextArgs(["--auto-fix"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.autoFix).toBe(true);
+  });
+
+  it("RTF_53_ARGS_2: parseNextArgs(['--auto-fix', '--resume']) returns both flags set", () => {
+    const result = parseNextArgs(["--auto-fix", "--resume"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.autoFix).toBe(true);
+    expect(result.value.resume).toBe(true);
+  });
+
+  it("RTF_53_ARGS_3: parseNextArgs(['--auto-fix=true']) (= form) returns {autoFix: true}", () => {
+    const result = parseNextArgs(["--auto-fix=true"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.autoFix).toBe(true);
+  });
+
+  it("RTF_53_ARGS_4: parseNextArgs(['--auto-fix=false']) returns {autoFix: false}", () => {
+    const result = parseNextArgs(["--auto-fix=false"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.autoFix).toBe(false);
+  });
+
+  it("RTF_53_ARGS_5: empty argv default test confirms autoFix: false", () => {
+    // Inventory + defaults are checked elsewhere; this asserts the
+    // specific autoFix default for explicit Story 5.3 documentation.
+    const result = parseNextArgs([]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.autoFix).toBe(false);
+  });
+
+  it("RTF_53_ARGS_6: inventory grew to 20 keys (Story 5.2 baseline 19 + Story 5.3 autoFix)", () => {
+    // Cross-references the 20-key inventory test in defaults block.
+    const keys = Object.keys(NextArgsSchema.shape);
+    expect(keys.length).toBe(20);
+    expect(keys).toContain("autoFix");
+  });
+
+  it("RTF_53_ARGS_7: unknown flag rejection (--auto-fix-extra) → ParseError per .strict() mode", () => {
+    const result = parseNextArgs(["--auto-fix-extra"]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("PARSE_ERROR");
   });
 });

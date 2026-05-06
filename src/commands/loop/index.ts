@@ -32,12 +32,16 @@ export {
   type PlannedStep,
 } from "./plan.ts";
 export {
+  formatExitReason,
+  formatLoopExitLines,
   type IterationRecord,
+  type LoopExitTranscriptInput,
   type LoopOpts,
   type LoopResult,
   type PlanResult,
   runLoop,
   type StopReason,
+  writeLoopExitTranscript,
 } from "./run.ts";
 export {
   compareStoryIds,

@@ -9,7 +9,9 @@
  * sole exception to AR33's throw-everywhere discipline.
  *
  * ── Public surface ─────────────────────────────────────────────────────────
- *   - NextArgsSchema   — Zod schema enumerating the 18 documented flags.
+ *   - NextArgsSchema   — Zod schema enumerating the 20 documented flags
+ *                        (Story 1.7 baseline 18 + Story 5.2 `--skip <step>`
+ *                        + Story 5.3 `--auto-fix`).
  *                        `.strict()` rejects unknown keys (AC-1 mechanism).
  *   - NextArgs         — `z.infer<typeof NextArgsSchema>` (the typed shape).
  *   - ParseError       — value-object error returned in `{ ok: false, error }`.
@@ -130,14 +132,28 @@ export type ParseError = {
 // ─── Zod schema (verbatim per architecture §G D12 + epics.md AC-1) ─────────
 
 /**
- * Zod schema for the parsed `/bmad-next` arguments. The 18 keys are
- * enumerated character-for-character per epics.md AC-1:
+ * Zod schema for the parsed `/bmad-next` arguments. The 20 keys are
+ * enumerated character-for-character per epics.md AC-1 + Story 5.2 §FR28
+ * + Story 5.3 §FR29:
  *
- *   - 4 optional strings: step, epic, story, persona.
+ *   - 5 optional strings: step, epic, story, persona, skip.
  *   - 1 optional enum:    phase (5 values per architecture line 611).
- *   - 13 booleans (default false): dryRun, resume, includeOptional,
+ *   - 14 booleans (default false): dryRun, resume, includeOptional,
  *     noOptional, explain, list, doctor, upgrade, recomputeState,
- *     exportState, diffState, watch, forceUnlock.
+ *     exportState, diffState, watch, forceUnlock, autoFix.
+ *
+ * Story 5.2 ADDS `skip: z.string().optional()` (the 19th key) per FR28
+ * + AC line 1076: `--skip <step> --resume` skips the matched step and
+ * advances state. The runner enforces co-required relationship with
+ * `--resume` (Story 1.7 cross-validation gap closure pattern at
+ * `src/commands/next/run.ts`).
+ *
+ * Story 5.3 ADDS `autoFix: z.boolean().default(false)` (the 20th key)
+ * per FR29 + AC line 1092: `--auto-fix` overrides per-step policy to
+ * `route-to-fixer` for one run (mirror /bmad-loop --auto-fix per
+ * architecture line 499). The runner threads the override unconditionally
+ * — when `args.autoFix === true` the per-step failure policy is forced to
+ * `"route-to-fixer"` regardless of any per-step config setting.
  *
  * `.strict()` rejects unknown keys. Zod 4.4.1's strict-mode response surfaces
  * an `unrecognized_keys` issue for any flag the schema does not enumerate.
@@ -153,6 +169,8 @@ export const NextArgsSchema = z
       .optional(),
     dryRun: z.boolean().default(false),
     resume: z.boolean().default(false),
+    // Story 5.2: --skip <step> co-required with --resume per FR28.
+    skip: z.string().optional(),
     includeOptional: z.boolean().default(false),
     noOptional: z.boolean().default(false),
     persona: z.string().optional(),
@@ -165,6 +183,8 @@ export const NextArgsSchema = z
     diffState: z.boolean().default(false),
     watch: z.boolean().default(false),
     forceUnlock: z.boolean().default(false),
+    // Story 5.3: --auto-fix overrides per-step policy to route-to-fixer.
+    autoFix: z.boolean().default(false),
   })
   .strict();
 
@@ -221,6 +241,8 @@ function tokenize(argv: readonly string[]): Record<string, string | boolean> {
     "diffState",
     "watch",
     "forceUnlock",
+    // Story 5.3: --auto-fix
+    "autoFix",
   ]);
 
   for (let i = 0; i < argv.length; i++) {
@@ -346,6 +368,29 @@ export const VerifyAndAdvanceArgsSchema = z
      * (graceful degradation).
      */
     lastAttempted: LastAttemptedSchema.optional(),
+    /**
+     * Story 5.2: optional `--skip-step <step>` positional flag forwarded by
+     * the runner-tier `src/commands/next/run.ts` when the user invokes
+     * `/bmad-next --skip <step> --resume`. When supplied, runVerifyAndAdvance
+     * enters the SKIP path (state-mutation only — no dispatch-spec read,
+     * no verifier invocation) per AC line 1075-1077. Mirrors the Story 3.1
+     * `--last-attempted-json` threading pattern (positional argv flag for
+     * the lock-held second-process invocation only — NOT carried in the
+     * JSON dispatch-spec).
+     */
+    skipStep: z.string().optional(),
+    /**
+     * Story 5.3: optional `--auto-fix` positional flag forwarded by the
+     * slash-command markdown when the user invokes `/bmad-next --auto-fix`
+     * (or `/bmad-loop --auto-fix`). When `true`, runVerifyAndAdvance forces
+     * the per-step failure policy to `"route-to-fixer"` (architecture line
+     * 499 — "Loop-level `--auto-fix` flag overrides per-step policy to
+     * `route-to-fixer` for one run"). Mirrors the Story 5.2 `--skip-step`
+     * positional-flag threading pattern (positional argv flag for the
+     * lock-held second-process invocation only — NOT carried in the JSON
+     * dispatch-spec).
+     */
+    autoFix: z.boolean().optional(),
   })
   .strict();
 
@@ -389,6 +434,14 @@ export function parseVerifyAndAdvanceArgs(
   let tokensIn: number | undefined;
   let tokensOut: number | undefined;
   let lastAttempted: LastAttempted | undefined;
+  // Story 5.2: optional --skip-step <step> threading from the runner-tier
+  // when the user invokes `/bmad-next --skip <step> --resume`.
+  let skipStep: string | undefined;
+  // Story 5.3: optional --auto-fix boolean shorthand threading from the
+  // slash-command markdown when the user invokes `/bmad-next --auto-fix`
+  // or `/bmad-loop --auto-fix`. Forces failurePolicyOverride =
+  // "route-to-fixer" per architecture line 499.
+  let autoFix: boolean | undefined;
 
   // Skip a leading `--` separator if present (may appear when Layer 1
   // passes the args through `bun run -- <argv>`). After Bun's own `--`
@@ -485,6 +538,43 @@ export function parseVerifyAndAdvanceArgs(
       }
       tokensOut = parsed;
       i++;
+      continue;
+    }
+
+    // Story 5.2: optional --skip-step <step> positional flag forwarded
+    // by the runner-tier (src/commands/next/run.ts) when the user
+    // invokes `/bmad-next --skip <step> --resume`. The value is
+    // threaded across the dispatch boundary to runVerifyAndAdvance,
+    // which detects args.skipStep !== undefined and enters the skip
+    // path. Empty-string is accepted at the parser tier (the runner
+    // has already enforced non-empty per the cross-validation gap
+    // intentional split — Story 1.7 line 65 + Story 5.2 OQ-1).
+    if (tok === "--skip-step") {
+      const value = argv[i + 1];
+      if (value === undefined) {
+        return {
+          ok: false,
+          error: {
+            code: "PARSE_ERROR",
+            message: "--skip-step missing value",
+            hint: "Pass --skip-step <step>; the value must follow the flag.",
+            issues: [],
+          },
+        };
+      }
+      skipStep = value;
+      i++;
+      continue;
+    }
+
+    // Story 5.3: optional --auto-fix boolean shorthand. The flag is a
+    // pure boolean (no value follows); it forces the per-step failure
+    // policy to "route-to-fixer" inside runVerifyAndAdvance (per
+    // architecture line 499). Mirrors the Story 5.2 --skip-step
+    // positional-flag pattern but with boolean shorthand semantics
+    // (no value to consume).
+    if (tok === "--auto-fix") {
+      autoFix = true;
       continue;
     }
 
@@ -586,6 +676,8 @@ export function parseVerifyAndAdvanceArgs(
     tokensIn,
     tokensOut,
     lastAttempted,
+    skipStep,
+    autoFix,
   });
   if (!parsed.success) {
     const firstIssue = parsed.error.issues[0];

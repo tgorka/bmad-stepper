@@ -78,6 +78,9 @@
  *   - epics.md §Story 2.6 lines 664-682 (AC verbatim source).
  */
 
+import { mkdir } from "node:fs/promises";
+import type { DagAdjacency } from "../../dag/index.ts";
+import type { Phase } from "../../dag/types.ts";
 import {
   cleanStagingOrphans,
   emitDispatchAction,
@@ -90,6 +93,14 @@ import {
   StepperError,
   VerifierFailureError,
 } from "../../errors.ts";
+import {
+  dispatchFailureUx,
+  escalateHandler,
+  type FailureContext,
+  type FailurePolicy,
+  resolveFailurePolicy,
+} from "../../failure-ux/index.ts";
+import { atomicWrite } from "../../io/atomic-write.ts";
 import { error, info, warn } from "../../io/log.ts";
 import { STAGING_PATH } from "../../io/paths.ts";
 import { acquire, type LockHandle, type LockOptions } from "../../lock/lock.ts";
@@ -99,7 +110,12 @@ import {
   type DispatchSpecV1,
   DispatchSpecV1Schema,
 } from "../../schemas/dispatch-spec.ts";
-import type { State } from "../../schemas/state.ts";
+import {
+  type CheckpointEntry,
+  CheckpointEntrySchema,
+  type State,
+} from "../../schemas/state.ts";
+import { detectSnapshot, type Snapshot } from "../../snapshot/detect.ts";
 import { loadStateUnlocked } from "../../state/load.ts";
 import { saveState } from "../../state/save.ts";
 import { type RunVerifierResult, runVerifier } from "../../verifiers/index.ts";
@@ -182,6 +198,144 @@ export interface RunVerifyAndAdvanceOptions {
   readonly nowIso?: string;
   /** Logger override; defaults to `{ info, warn, error }` from `src/io/log.ts`. */
   readonly logger?: LoggerFns;
+  /**
+   * Story 4.8 (`--checkpoint-each <step-type>`): when supplied, the
+   * post-step state save APPENDS a `state.checkpoints[]` entry IF the
+   * just-completed step's `phase` matches this value. The entry shape
+   * is `{ branch, sha, takenAt, stepType }` per AR13 Layer 1; the
+   * `branch` + `sha` come from `detectSnapshot()` (Story 1.8); the
+   * `takenAt` is the ISO timestamp at append; `stepType` echoes this
+   * value. FIFO-evicted at 50 entries (the `.max(50)` cap on
+   * `StateV1Schema.checkpoints[]`).
+   *
+   * The matcher (`matchCheckpointPhase`) looks up the just-completed
+   * step's `phase` via the optional `dag` injection seam below; when
+   * `dag === undefined`, the matcher falls back to the v0.1
+   * `derivePhaseFromStep` lookup table (planning/implementation only).
+   * For full 5-phase coverage, callers should inject the DAG.
+   */
+  readonly checkpointEach?: Phase;
+  /**
+   * Story 4.8: optional DAG-injection seam for the per-iteration
+   * `node.phase` lookup used by the checkpoint matcher. When
+   * `undefined`, the matcher falls back to `derivePhaseFromStep`
+   * (planning/implementation only — sufficient for v0.1 since the
+   * production checkpoint flow targets `--checkpoint-each
+   * implementation` per the AC's worked example).
+   */
+  readonly dag?: DagAdjacency;
+  /**
+   * Story 5.1: per-step failure policy override.
+   *
+   * **TEST-ONLY SEAM (per Story 5.6 OQ-5)** — production resolution
+   * flows through `resolveFailurePolicy(dispatchSpec.step, opts.config)`.
+   * Production callers do NOT pass this field; tests pass it for
+   * deterministic retry-loop coverage without writing a config file.
+   *
+   * When supplied AND the verifier fails, the retry loop consults this
+   * policy instead of resolving from config.
+   */
+  readonly failurePolicyOverride?: FailurePolicy;
+  /**
+   * Story 5.6 — optional parsed config object for per-step policy
+   * resolution (FR31 PRIMARY). Production callers receive this from the
+   * Story 6.1 file loader (when it lands); tests pass synthetic config
+   * objects directly. Until Story 6.1 lands, the resolver is invoked
+   * with `undefined` config in production → escalate-default for every
+   * step.
+   */
+  readonly config?: {
+    failurePolicies?: import("../../schemas/config.ts").FailurePolicies;
+  };
+  /**
+   * Story 5.1: max-retries override (test-injection seam; production
+   * defaults to 2 per architecture line 494 = 3 total attempts). The
+   * cap is RETRIES AFTER THE ORIGINAL — `maxRetries: 2` means the
+   * retry loop runs up to 3 attempts (1 original + 2 retries) before
+   * escalating per dispatchFailureUx.
+   */
+  readonly maxRetriesOverride?: number;
+  /**
+   * Story 5.1 test-injection seam: replaces the imported `runVerifier`
+   * with a stub. Tests pass an attempt-aware stub that returns pass/fail
+   * results in sequence to exercise the retry loop deterministically
+   * without needing real artifact files. Production callers pass
+   * nothing → the runner uses the real `runVerifier` from
+   * `src/verifiers/index.ts`.
+   *
+   * The stub's signature mirrors `runVerifier(runId, opts)` →
+   * `Promise<RunVerifierResult>`. The stub may inspect a per-attempt
+   * counter that is closure-captured to alternate outcomes.
+   */
+  readonly verifierOverride?: (
+    runId: string,
+    opts: { stepName: string; stagingRoot: string },
+  ) => Promise<RunVerifierResult> | RunVerifierResult;
+  /**
+   * Story 5.1 test-injection seam: invoked between retry attempts to
+   * simulate sub-agent re-dispatch (which v0.1 does NOT actually
+   * perform per OQ-8 — the same dispatch-spec is on disk, the test
+   * stub may overwrite the staged artifact between attempts to
+   * change the next verifier outcome). When undefined the retry loop
+   * just iterates without any "re-dispatch" side-effect; production
+   * path is identical (no recursive Task tool invocation in v0.1).
+   *
+   * @param attemptNumber - The attempt number that is about to start
+   *                        (2 for the first retry, 3 for the second).
+   */
+  readonly reDispatchOverride?: (attemptNumber: number) => Promise<void> | void;
+  /**
+   * Story 5.1 test-injection seam: when supplied, the retry loop polls
+   * this function BEFORE re-dispatching the next attempt. If it returns
+   * true, the retry loop halts cleanly with the LAST attempt's failure
+   * context (no escalate, no further attempts) — cooperation per Story
+   * 4.9 graceful-exit invariant. Production callers pass nothing → the
+   * retry loop never short-circuits.
+   */
+  readonly shutdownRequested?: () => boolean;
+  /**
+   * Story 5.3 test-injection seam: when supplied AND the per-step policy
+   * resolves to route-to-fixer, the verify-and-advance loop calls this
+   * function INSTEAD of returning the AR9 dispatch action for the fixer
+   * (production path is the slash-command markdown's second-AR9-cycle).
+   * The function should write a corrected artifact to
+   * `staging/<fixerRunId>/outputs/<artifact>` so the subsequent verifier
+   * re-run can succeed (or write an intentionally-failing artifact to
+   * test the escalate branch).
+   *
+   * The signature mirrors the test seam pattern from Story 5.1
+   * `reDispatchOverride`. Production callers pass nothing — the runner
+   * returns the AR9 dispatch action and the slash-command markdown
+   * dispatches the fixer via the Task tool.
+   */
+  readonly fixerDispatchOverride?: (fixerRunId: string) => Promise<void> | void;
+  /**
+   * Story 5.2 test-injection seam: when supplied (or when the argv
+   * carries `--skip-step <step>`), the runner enters the SKIP path
+   * BEFORE the dispatch-spec read + verifier invocation. The skip
+   * path mutates state with three simultaneous changes (atomic per
+   * the existing saveState contract): (a) appends a new runHistory[]
+   * entry with `skipped: true` for the matched step; (b) advances
+   * lastSuccessfulStep to the NEXT step in topological order via
+   * the DAG resolver; (c) clears lastAttempted to null per AC line
+   * 1077. Production callers thread via the `--skip-step <step>`
+   * positional flag; tests pass via this seam.
+   */
+  readonly skipStep?: string;
+  /**
+   * Story 5.2: optional DAG injection seam for the skip path's
+   * `pickNextStepAfterSkip` lookup. When undefined, the skip path
+   * falls back to a v0.1 conservative behavior: lastSuccessfulStep
+   * is cleared to null + lastAttempted is cleared (the user re-
+   * invokes /bmad-next without --skip to advance from
+   * lastSuccessfulStep). Production callers SHOULD inject the DAG
+   * for proper next-step resolution; tests may inject a synthetic
+   * DAG to exercise the resolver path.
+   *
+   * Note: the existing `dag` field above (Story 4.8) is reused here
+   * — the skip path consults the same DAG injection seam as the
+   * checkpoint matcher.
+   */
 }
 
 /**
@@ -228,6 +382,46 @@ export function derivePhaseFromStep(
   stepName: string,
 ): "planning" | "implementation" {
   return PLANNING_STEPS.has(stepName) ? "planning" : "implementation";
+}
+
+/**
+ * Story 4.8: pure-function lookup — would the just-completed step fire a
+ * checkpoint under `checkpointEach`? Returns the matched phase (echoes
+ * the input) or `null`. The AC-1 contract: the just-completed step's
+ * `phase` (looked up via the DAG when supplied; falls back to the v0.1
+ * `derivePhaseFromStep` lookup table when no DAG is available) must
+ * equal `checkpointEach` exactly.
+ *
+ * Inlined here per AR41 boundary — `next/verify-and-advance.ts`
+ * (mid-tier) cannot import the analogous `matchCheckpointType` helper
+ * from `loop/plan.ts` (top-tier). The duplication is ~6 lines and is
+ * deliberate per Story 4.8 OQ-4; a future Story 6.x may extract the
+ * matcher into a foundational `src/checkpoint/match.ts` module shared
+ * by both consumers.
+ *
+ * Pure function — no IO, no allocation beyond the lookup.
+ */
+export function matchCheckpointPhase(
+  stepName: string,
+  dag: DagAdjacency | undefined,
+  checkpointEach: Phase | undefined,
+): Phase | null {
+  if (checkpointEach === undefined) return null;
+  // DAG path: authoritative phase resolution (5-phase coverage).
+  if (dag !== undefined) {
+    const node = dag.nodes.get(stepName);
+    if (node === undefined) return null;
+    if (node.phase !== checkpointEach) return null;
+    return checkpointEach;
+  }
+  // Fallback: v0.1 `derivePhaseFromStep` lookup (planning/implementation
+  // coverage only). The production AC worked example targets
+  // `--checkpoint-each implementation` which is the conservative
+  // fallback's default; analysis/solutioning/retro phases require the
+  // DAG injection seam.
+  const derived = derivePhaseFromStep(stepName);
+  if (derived !== checkpointEach) return null;
+  return checkpointEach;
 }
 
 /**
@@ -361,23 +555,201 @@ export function compareStateHashes(
 }
 
 /**
+ * Story 5.3: write the fixer's dispatch-spec at
+ * `staging/<fixerRunId>/dispatch-spec.json` per AC line 1093 ("the
+ * failure context (verifier result + artifact excerpt) in its CONTEXT
+ * section"). The spec extends the original step's context with TWO new
+ * entries: the verifier-result.json + the original artifact (read-only
+ * inputs for the fixer's reasoning).
+ *
+ * The dispatch-spec mirrors the canonical DispatchSpecV1 shape (Story
+ * 1.5 schema) — same persona/context/task/outputFormat/successCriteria/
+ * constraints six-section AR7 contract — with the fixer-specific
+ * differences:
+ *   - persona: "bmad-step-fixer" (the fixer agent name).
+ *   - task:    BYTE-IDENTICAL to AC line 1091 substring "remediate a
+ *              BMAD step artifact based on a verifier failure".
+ *   - outputFormat.fileLocation: under the FIXER staging dir
+ *              (staging/<fixerRunId>/outputs/<artifact>) — note the
+ *              `-fix` suffix on the runId per AC line 1093.
+ *   - context: extended with verifier-result + original-artifact paths.
+ *
+ * Atomic via existing atomicWrite (NFR-S5 — `.tmp` → rename, `.bak`
+ * rotation on overwrite).
+ *
+ * Returns the absolute path to the written dispatch-spec.json.
+ */
+async function writeFixerDispatchSpec(input: {
+  fixerRunId: string;
+  originalRunId: string;
+  originalDispatchSpec: DispatchSpecV1;
+  verifierResultPath: string;
+  originalArtifactPath: string;
+  stagingRoot: string;
+}): Promise<string> {
+  const fixerStagingDir = `${input.stagingRoot}/${input.fixerRunId}`;
+  const fixerSpecPath = `${fixerStagingDir}/dispatch-spec.json`;
+  const fixerOutputArtifact = `staging/${input.fixerRunId}/outputs/${input.originalDispatchSpec.step}.md`;
+
+  // Compose the fixer's context[] — start with the original step's
+  // context entries (so the fixer has the same reference materials
+  // the original step had) and append the AC-mandated two extras
+  // (verifier-result + original artifact).
+  const originalContext = Array.isArray(
+    input.originalDispatchSpec.taskSpec.context,
+  )
+    ? (input.originalDispatchSpec.taskSpec.context as readonly unknown[])
+    : [];
+  const fixerContext = [
+    ...originalContext,
+    {
+      path: input.verifierResultPath,
+      label: "verifier-result.json (failure context per AC line 1093)",
+    },
+    {
+      path: input.originalArtifactPath,
+      label: "original artifact (excerpt per AC line 1093)",
+    },
+  ];
+
+  const fixerSpec: DispatchSpecV1 = {
+    schemaVersion: 1,
+    runId: input.fixerRunId,
+    step: input.originalDispatchSpec.step,
+    epic: input.originalDispatchSpec.epic,
+    story: input.originalDispatchSpec.story,
+    model: input.originalDispatchSpec.model,
+    budget: input.originalDispatchSpec.budget,
+    taskSpec: {
+      // Story 5.3 OQ-1: bmad-step-fixer persona key (mirrors the
+      // bmad-step-fixer.md frontmatter `name:` field).
+      persona: "bmad-step-fixer",
+      context: fixerContext,
+      // BYTE-IDENTICAL to AC line 1091 substring + agents/bmad-step-
+      // fixer.md frontmatter description per Task 2.5 verification.
+      task: "remediate a BMAD step artifact based on a verifier failure",
+      outputFormat: {
+        fileLocation: fixerOutputArtifact,
+        // The corrected artifact must honor the same required-sections
+        // and schema-ref constraints as the original step's output (the
+        // original verifier re-runs after the fix).
+        ...((input.originalDispatchSpec.taskSpec.outputFormat as Record<
+          string,
+          unknown
+        > | null) ?? {}),
+        // Override fileLocation to point at the FIXER staging dir.
+        // (Spread first, then override to ensure correctness.)
+      },
+      successCriteria: input.originalDispatchSpec.taskSpec.successCriteria,
+      constraints: {
+        // Inherit any original constraints (allowed-tools, etc.).
+        ...((input.originalDispatchSpec.taskSpec.constraints as Record<
+          string,
+          unknown
+        > | null) ?? {}),
+        // Tighten scope-limits to the FIXER staging dir per NFR-S4.
+        scopeLimits: `Only files inside \`staging/${input.fixerRunId}/\` may be written.`,
+      },
+    },
+  };
+
+  // Defence-in-depth Zod validate (caller-bug guard).
+  const validated = DispatchSpecV1Schema.parse(fixerSpec);
+
+  // mkdir -p the fix staging dir tree (mirrors generate-spec.ts pattern
+  // — atomicWrite does NOT mkdir, so the parent must exist before write).
+  await mkdir(`${fixerStagingDir}/inputs`, { recursive: true });
+  await mkdir(`${fixerStagingDir}/outputs`, { recursive: true });
+
+  // Atomic write via existing atomicWrite (NFR-S5 — `.tmp` → rename,
+  // `.bak` rotation; the assertWithinScope check passes for staging
+  // dir paths under STEPPER_INTERNAL_ROOT).
+  await atomicWrite(fixerSpecPath, JSON.stringify(validated, null, 2));
+  return fixerSpecPath;
+}
+
+/**
+ * Story 5.2: pick the next step in topological order AFTER the just-
+ * skipped step. Returns the first DAG node whose `after[]` includes the
+ * skipped step (mirrors the success-path advance — same DAG resolver,
+ * same tiebreak per OQ-3 decision). Returns `null` when:
+ *   - no DAG is injected (v0.1 graceful degradation — the caller falls
+ *     back to clearing lastSuccessfulStep);
+ *   - no successor exists (e.g., the skipped step is a terminal node).
+ *
+ * Pure function — no IO. The tiebreak is the existing pickNextStep
+ * tiebreak from Story 1.10 (Map insertion order); future Story 6.x may
+ * extend with phase-order + lexicographic tiebreaks per OQ-3 forward-
+ * tracker.
+ */
+function pickNextStepAfterSkip(
+  skippedStep: string,
+  dag: DagAdjacency | undefined,
+): { name: string } | null {
+  if (dag === undefined) return null;
+  for (const node of dag.nodes.values()) {
+    if (node.name === skippedStep) continue;
+    if (node.after.includes(skippedStep)) {
+      return node;
+    }
+  }
+  return null;
+}
+
+/**
+ * Story 5.1: FIFO-100 trim helper for the runHistory[] write site.
+ * Mirrors the FIFO-50 checkpoints[] trim precedent (Story 4.8). When
+ * the array exceeds the .max(100) cap on RunHistoryEntrySchema, the
+ * OLDEST entries are dropped before the schema-validate boundary in
+ * saveState would reject the write. Pure function — no IO.
+ */
+function trimRunHistory(entries: RunHistoryEntry[]): RunHistoryEntry[] {
+  if (entries.length <= 100) return entries;
+  return entries.slice(entries.length - 100);
+}
+
+/**
  * v0.1 RunHistoryEntry shape per Task 5.9 + epic AC line 677 ("tokens are
- * recorded into runHistory[]"). The Story 1.5 `StateV1Schema` declares
- * `runHistory: z.array(z.unknown())` — structurally loose, so the entry
- * is appended verbatim. A future Story 6.x schema bump may tighten the
- * shape; Story 2.6 v0.1 ships the structured literal.
+ * recorded into runHistory[]"). Story 5.1 (Epic 5 retry mode) TIGHTENED
+ * `StateV1Schema.runHistory[]` to `z.array(RunHistoryEntrySchema)` adding
+ * the load-bearing `attemptNumber`, `outcome`, `failureCode`, `completedAt`
+ * fields for the Epic 5 retry telemetry consumption (Story 6.6/6.7). The
+ * legacy fields `verifierStatus`, `promotedTo`, `durationMs`, `tokensIn`,
+ * `tokensOut`, `ts` are preserved as OPTIONAL on the schema (Story 5.1
+ * D1 deviation — allows the Story 4.5 token accumulation reader and the
+ * Story 4.x plan-walk completion check to keep working without changes).
  */
 interface RunHistoryEntry {
+  // Story 5.1: required typed fields per RunHistoryEntrySchema.
   runId: string;
   step: string;
   epic: number;
   story: string;
-  verifierStatus: "pass" | "fail" | "skip";
-  promotedTo: string | null;
-  durationMs: number;
-  tokensIn: number;
-  tokensOut: number;
-  ts: string;
+  attemptNumber: number;
+  outcome: "pass" | "fail";
+  failureCode: string | null;
+  completedAt: string;
+  // Legacy fields preserved for backwards compat (Story 5.1 D1).
+  // OPTIONAL on the schema; optional here so callers (tests) can omit them.
+  verifierStatus?: "pass" | "fail" | "skip";
+  promotedTo?: string | null;
+  durationMs?: number;
+  tokensIn?: number;
+  tokensOut?: number;
+  ts?: string;
+  // Story 5.2: skip-mode marker per AC line 1077. When `true`, the entry
+  // records a skip operation invoked via `/bmad-next --skip <step>
+  // --resume` (NOT a verifier-pass outcome). The `outcome` field stays
+  // "pass" per the success-path-shape contract; the `skipped: true`
+  // marker is the forensic record that the verifier was BYPASSED.
+  skipped?: boolean;
+  // Story 5.3: fix-attempt marker per AC line 1096. When `true`, the
+  // entry records a fix-attempt invoked via /bmad-next --auto-fix or
+  // per-step `route-to-fixer` policy. The `outcome` field is "pass"
+  // (post-fix verifier passed) or "fail" (post-fix verifier failed per
+  // AC line 1099 escalate path); the `fixAttempt: true` marker is the
+  // forensic record that the entry corresponds to a remediation attempt.
+  fixAttempt?: boolean;
 }
 
 // ─── Public function ──────────────────────────────────────────────────────
@@ -450,6 +822,22 @@ export async function runVerifyAndAdvance(
   let actionResult: DispatchActionV1 | undefined;
   let exitCode: 0 | 1 | 2 | 3 | 4 | 5 = 0;
   let transcriptPaths: { markdown: string; json: string } | undefined;
+  // Story 5.1: per-attempt failed-outcome runHistory entries accumulated
+  // during the retry loop. Persisted on BOTH the success path (Step 10
+  // saveState below; the trailing successful entry is appended after
+  // these) AND the halt path (the catch handler concatenates them onto
+  // stateOnHalt.runHistory before writing).
+  const accumulatedRunHistoryFromRetries: RunHistoryEntry[] = [];
+  // Story 5.4 — escalate handler enriched-hint closure (FR30+FR32+NFR-M2).
+  // Set at each of the 4 escalate throw sites BEFORE the throw via
+  // escalateHandler(failureContext, {}). The catch handler reads this
+  // (when defined) to OVERRIDE the default `err.actionableHint` in the
+  // lastFailureReason write + AR9 halt action message. Per OQ-2 audit,
+  // all 17 existing StepperError class hints already match the AR22
+  // regex (PASS-THROUGH common case); the override is a safety-net that
+  // also cements the integration-test contract — every escalate path's
+  // lastFailureReason.hint matches `/^.*(Run|See|Try|Check) /`.
+  let escalateEnrichedHint: string | undefined;
 
   try {
     // Step 2: acquire lock. The lock-acquired contract is positive (must
@@ -461,6 +849,145 @@ export async function runVerifyAndAdvance(
     // Step 3: read state via loadStateUnlocked (NOT loadState — that
     // would attempt to acquire a second lock and throw LockContentionError).
     stateBefore = await loadStateUnlocked({ statePath: opts?.statePath });
+
+    // Story 5.2 SKIP PATH: when args.skipStep is supplied (via the
+    // --skip-step <step> positional flag OR the test-injection seam),
+    // enter the skip branch BEFORE the heavyweight verifier+promote
+    // sequence. The dispatch-spec read AND the verifier invocation
+    // are SKIPPED on the skip path; the lock acquire happens normally
+    // per AR8 (Step 2 above), and the lock release in finally per
+    // AR25 + AR26.
+    //
+    // The skip branch:
+    //   (a) asserts state.lastAttempted is populated (OQ-4: throw on
+    //       null lastAttempted with hint pointing at /bmad-next first);
+    //   (b) asserts state.lastAttempted.step === skipStep (OQ-6: throw
+    //       on mismatch with hint surfacing the actual lastAttempted.step
+    //       value for correction);
+    //   (c) idempotency check (OQ-7): if the most-recent runHistory
+    //       entry for this step has skipped=true, throw — second --skip
+    //       on already-skipped step is rejected;
+    //   (d) computes the next step via pickNextStepAfterSkip (DAG
+    //       resolver from Story 1.10 + sibling-step lookup);
+    //   (e) constructs the new RunHistoryEntry with skipped=true (the
+    //       outcome field stays "pass" per the success-path-shape
+    //       contract; skipped:true is the FORENSIC marker that the
+    //       verifier was BYPASSED);
+    //   (f) constructs stateAfter with lastSuccessfulStep advanced to
+    //       the resolved next step + lastAttempted cleared + the new
+    //       runHistory entry appended;
+    //   (g) saves state via the existing saveState atomic-write path
+    //       (ONE write, atomic per AR13 Layer 2; SIGINT cooperation
+    //       per Story 4.9 §I-2 forward-tracker — the atomic tmp+rename
+    //       guarantees no partial writes per NFR-S5);
+    //   (h) emits the AR9 success line (single line, exitCode 0);
+    //   (i) returns BEFORE the success-path verifier+promote sequence.
+    //
+    // Per Story 4.8 §I-1 atomic-write contract: the skip-path saveState
+    // is the SOLE write site in this branch.
+    const skipStep = args.skipStep ?? opts?.skipStep;
+    if (skipStep !== undefined) {
+      // OQ-4: state.lastAttempted must be populated.
+      if (
+        stateBefore.lastAttempted === null ||
+        stateBefore.lastAttempted === undefined
+      ) {
+        throw new ConfigError(
+          `--skip ${skipStep} requires state.lastAttempted to be populated`,
+          JSON.stringify({ skipStep, lastAttempted: null }),
+          `Run /bmad-next without --skip first to populate state.lastAttempted, then retry --skip ${skipStep} --resume.`,
+        );
+      }
+      // OQ-6: --skip <step> mismatch with state.lastAttempted.step.
+      if (stateBefore.lastAttempted.step !== skipStep) {
+        const actualStep = stateBefore.lastAttempted.step;
+        throw new ConfigError(
+          `--skip ${skipStep} mismatched state.lastAttempted.step (${actualStep})`,
+          JSON.stringify({ skipStep, actualStep }),
+          `Check state.lastAttempted.step (${actualStep}) and re-invoke /bmad-next --skip ${actualStep} --resume.`,
+        );
+      }
+      // OQ-7: idempotent re-skip protection — reject if the most-recent
+      // runHistory entry for this step has skipped=true (the user has
+      // already invoked --skip on this step; second invocation is
+      // user-confusion, throw with hint).
+      const existingHistory = stateBefore.runHistory ?? [];
+      const lastEntry = existingHistory[existingHistory.length - 1];
+      if (lastEntry?.step === skipStep && lastEntry?.skipped === true) {
+        throw new ConfigError(
+          `step ${skipStep} is already skipped`,
+          JSON.stringify({ skipStep, lastEntry }),
+          `Check state.runHistory and run /bmad-next without --skip to continue.`,
+        );
+      }
+      // Compute the next step via the DAG resolver. When no DAG is
+      // injected (v0.1 graceful degradation), the resolver returns
+      // null and the runner falls back to clearing lastSuccessfulStep
+      // (the user re-invokes /bmad-next without --skip to resume from
+      // the prior state).
+      const nextNode = pickNextStepAfterSkip(skipStep, opts?.dag);
+      const nowIso = opts?.nowIso ?? new Date().toISOString();
+      // Construct the runHistory entry with the skipped: true marker.
+      // The runId on the skip entry is best-effort: prefer args.runId
+      // (the verify-and-advance.ts runId from Layer 1's flag thread);
+      // fall back to a synthetic skip-runId when args.runId is absent.
+      const skipEntry: RunHistoryEntry = {
+        runId: args.runId,
+        step: skipStep,
+        epic: stateBefore.lastAttempted.epic,
+        story: stateBefore.lastAttempted.story,
+        attemptNumber: 1,
+        // Per the success-path-shape contract: `outcome` stays "pass";
+        // the `skipped: true` marker is the explicit flag.
+        outcome: "pass",
+        failureCode: null,
+        completedAt: nowIso,
+        skipped: true,
+        // Legacy fields preserved for back-compat.
+        verifierStatus: "skip",
+        promotedTo: null,
+        durationMs: Math.round(performance.now() - startMs),
+        tokensIn: args.tokensIn,
+        tokensOut: args.tokensOut,
+        ts: nowIso,
+      };
+      const nextLastSuccessfulStep = nextNode
+        ? {
+            step: nextNode.name,
+            epic: stateBefore.lastAttempted.epic,
+            story: stateBefore.lastAttempted.story,
+            completedAt: nowIso,
+          }
+        : (stateBefore.lastSuccessfulStep ?? null);
+      stateAfter = {
+        ...stateBefore,
+        lastSuccessfulStep: nextLastSuccessfulStep,
+        lastAttempted: null,
+        // Per Story 3.1 success-path precedent: clear failure context.
+        lastFailureReason: null,
+        // Story 5.2: append the skip entry; FIFO-100 trim per the
+        // existing trimRunHistory helper.
+        runHistory: trimRunHistory([...existingHistory, skipEntry]),
+        // checkpoints UNCHANGED — skip does NOT trigger checkpoint
+        // append (the just-skipped step did not successfully complete;
+        // no Git snapshot is captured per Story 4.8 atomic-write
+        // contract — see SK_52_VA_10).
+      };
+      // Save state under held lock (atomic tmp+rename per AR13 Layer 2).
+      await saveState(stateAfter, handle, { statePath: opts?.statePath });
+      // Compose the AR9 success line. Single-line (per AR9), exitCode 0.
+      const nextStepLabel = nextNode?.name ?? "epic complete";
+      actionResult = {
+        action: "report",
+        message: `↷ ${skipStep} → SKIPPED (next: ${nextStepLabel})`,
+        exitCode: 0,
+      };
+      exitCode = 0;
+      // Return EARLY from runVerifyAndAdvance — the skip branch
+      // BYPASSES the dispatch-spec read + verifier invocation entirely.
+      // The lock release happens in the finally block per AR8 contract.
+      return { exitCode, action: actionResult, transcriptPaths, promotedTo };
+    }
 
     // Step 4: read dispatch-spec.
     dispatchSpec = await readDispatchSpec(stagingRoot, args.runId);
@@ -477,24 +1004,337 @@ export async function runVerifyAndAdvance(
       );
     }
 
-    // Step 6: run verifier (Story 2.1 PRIMARY CONSUMER carry-over).
-    verifierResult = await runVerifier(args.runId, {
-      stepName: dispatchSpec.step,
-      stagingRoot,
-    });
+    // Step 6 + 7: run verifier with Story 5.1 retry loop. Each attempt
+    // appends ONE runHistory[] entry with attemptNumber metadata; on
+    // verifier-fail the loop consults the per-step failure policy via
+    // dispatchFailureUx; on retry-outcome the loop iterates (with optional
+    // re-dispatch via reDispatchOverride for tests) up to maxRetries+1
+    // total attempts; on escalate-outcome the loop re-throws
+    // VerifierFailureError with the LAST attempt's failure context. The
+    // accumulated retry-attempt runHistory entries are persisted on BOTH
+    // the success path (Step 10 saveState below) AND the halt path (the
+    // catch handler reads `accumulatedRunHistoryFromRetries`).
+    const verifierFn = opts?.verifierOverride ?? runVerifier;
+    // Story 5.3: --auto-fix (positional argv flag OR test-injection seam)
+    // FORCES the per-step failure policy to "route-to-fixer" per
+    // architecture line 499 ("Loop-level `--auto-fix` flag overrides
+    // per-step policy to `route-to-fixer` for one run").
+    //
+    // Story 5.6 (FR31 PRIMARY): per-step config-driven resolution joins
+    // the priority chain. Priority order per OQ-5:
+    //   1. --auto-fix → "route-to-fixer" (one-run scope per AC line 1144)
+    //   2. opts.failurePolicyOverride (TEST-ONLY SEAM per OQ-5)
+    //   3. resolveFailurePolicy(dispatchSpec.step, opts.config) (production)
+    //   4. plugin default "escalate" (resolver fallback per architecture line 499)
+    // Until Story 6.1 wires the file loader, opts.config is undefined in
+    // production → resolver returns escalate-default for every step.
+    const policy: FailurePolicy =
+      args.autoFix === true
+        ? "route-to-fixer"
+        : (opts?.failurePolicyOverride ??
+          resolveFailurePolicy(dispatchSpec.step, opts?.config));
+    const maxRetries = opts?.maxRetriesOverride ?? 2;
+    // Story 5.3: track whether the success path was achieved via a fix
+    // attempt so the success-path runHistory entry below can be marked
+    // with `fixAttempt: true` per OQ-2; also track the runId to use for
+    // the promote() call (the FIXER's runId on fix-success per AC line
+    // 1095 "the corrected artifact is promoted").
+    let wasFixAttempt = false;
+    let finalRunIdForPromote: string = args.runId;
 
-    // Step 7: branch on verifier status.
-    if (verifierResult.status === "fail") {
+    let attemptNumber = 1;
+    while (true) {
+      verifierResult = await verifierFn(args.runId, {
+        stepName: dispatchSpec.step,
+        stagingRoot,
+      });
+
+      if (verifierResult.status !== "fail") {
+        // status === "pass" or "skip" → exit retry loop, proceed to
+        // promote + advance. The successful attempt's runHistory entry
+        // is built below (single canonical write site).
+        break;
+      }
+
+      // Verifier failed for this attempt — append a fail-outcome
+      // runHistory entry capturing the attempt's metadata. The entry
+      // rides the existing saveState() atomic-write path; on escalate
+      // the catch handler persists `accumulatedRunHistoryFromRetries`
+      // alongside lastFailureReason.
+      const completedAtIsoForFail = opts?.nowIso ?? new Date().toISOString();
+      const failEntry: RunHistoryEntry = {
+        runId: args.runId,
+        step: dispatchSpec.step,
+        epic: dispatchSpec.epic,
+        story: dispatchSpec.story,
+        attemptNumber,
+        outcome: "fail",
+        failureCode: "VERIFIER_FAILURE",
+        completedAt: completedAtIsoForFail,
+        verifierStatus: "fail",
+        promotedTo: null,
+        durationMs: Math.round(performance.now() - startMs),
+        tokensIn: args.tokensIn,
+        tokensOut: args.tokensOut,
+        ts: completedAtIsoForFail,
+      };
+      accumulatedRunHistoryFromRetries.push(failEntry);
+
+      // Resolve the failure-UX outcome via the per-policy dispatcher.
+      const failureContext: FailureContext = {
+        code: "VERIFIER_FAILURE",
+        message: `verify-and-advance: verifier reported fail for run ${args.runId} step ${dispatchSpec.step}`,
+        hint: "See _bmad-output/.stepper/runs/<ts>-<step>.log for the verifier output; try /bmad-next --resume after fixing the underlying issue.",
+        runId: args.runId,
+        step: dispatchSpec.step,
+        attemptNumber,
+      };
+      const outcome = dispatchFailureUx(failureContext, policy, {
+        maxRetries,
+      });
+
+      if (outcome.outcome === "escalate") {
+        // Escalate-after-cap (or escalate policy on attempt 1) — throw
+        // VerifierFailureError carrying the LAST attempt's context. The
+        // outer catch translates to AR9 halt action; the accumulated
+        // failed-attempt runHistory entries flow through the catch
+        // handler's stateOnHalt write below.
+        //
+        // Story 5.4: invoke the formal escalateHandler BEFORE the throw
+        // to enrich the actionable hint per the AR22 regex contract
+        // `/^.*(Run|See|Try|Check) /` (architecture line 589 + epics.md
+        // §Story 5.4 AC line 1113). The enriched hint flows to the
+        // catch handler via the `escalateEnrichedHint` closure variable
+        // declared above (overrides `err.actionableHint` in the
+        // lastFailureReason write + AR9 halt message). PASS-THROUGH
+        // common case: the FailureContext.hint above already matches
+        // the regex (via "See _bmad-output/.stepper/runs/<ts>-<step>
+        // .log" leading "See ").
+        const enriched = escalateHandler(failureContext, {});
+        if (enriched.outcome === "escalate") {
+          escalateEnrichedHint = enriched.reason.hint;
+        }
+        throw new VerifierFailureError(
+          `verify-and-advance: verifier reported fail for run ${args.runId} step ${dispatchSpec.step} after ${attemptNumber} attempt(s) (maxRetries: ${maxRetries})`,
+          JSON.stringify(verifierResult),
+        );
+      }
+      // outcome.outcome === "retry" — Story 4.9 SIGINT cooperation:
+      // check shutdownRequested BEFORE re-dispatching; on shutdown
+      // throw VerifierFailureError carrying the LAST attempt's context
+      // so the catch handler persists state cleanly. The loop runner's
+      // SIGINT handler (Story 4.9) will then surface manual-sigint.
+      if (opts?.shutdownRequested?.() === true) {
+        throw new VerifierFailureError(
+          `verify-and-advance: shutdown requested mid-retry for run ${args.runId} step ${dispatchSpec.step} after ${attemptNumber} attempt(s)`,
+          JSON.stringify(verifierResult),
+        );
+      }
+      // Re-dispatch the SAME dispatch-spec for the next attempt. v0.1
+      // production: the same staging/<runId>/dispatch-spec.json file
+      // is on disk; the sub-agent overwrites the prior attempt's output
+      // at staging/<runId>/outputs/<artifact>. Test path: the
+      // reDispatchOverride stub may overwrite the staged artifact to
+      // change the next verifier outcome.
+      if (outcome.outcome === "retry") {
+        attemptNumber = outcome.nextAttempt;
+        if (opts?.reDispatchOverride !== undefined) {
+          await opts.reDispatchOverride(attemptNumber);
+        }
+        // Continue the while-loop to invoke the verifier again on the
+        // (possibly-new) artifact.
+        continue;
+      }
+      // Story 5.3: route-to-fixer path. Generate the fixer's dispatch-
+      // spec at staging/<fixerRunId>/dispatch-spec.json with the AC-
+      // mandated CONTEXT entries (verifier-result + original artifact);
+      // dispatch the fixer (production: emit AR9 dispatch action for
+      // the slash-command markdown to dispatch via Task; test path:
+      // invoke the fixerDispatchOverride seam); re-run the original
+      // verifier on the fixer's output; on pass exit the loop with
+      // success (promote from FIXER staging dir on success path);
+      // on post-fix-fail append a SECOND runHistory entry with
+      // fixAttempt:true + escalate via VerifierFailureError throw
+      // (per AC line 1099 "with both failures recorded").
+      if (outcome.outcome === "route-to-fixer") {
+        const fixerRunId = outcome.fixerRunId;
+        // SIGINT cooperation per Story 4.9 §I-2 — poll
+        // shutdownRequested BEFORE invoking the fixer dispatch.
+        if (opts?.shutdownRequested?.() === true) {
+          // Story 5.4: invoke the formal escalateHandler BEFORE the throw
+          // to enrich the actionable hint per the AR22 regex contract.
+          const enrichedSigintFix = escalateHandler(failureContext, {});
+          if (enrichedSigintFix.outcome === "escalate") {
+            escalateEnrichedHint = enrichedSigintFix.reason.hint;
+          }
+          throw new VerifierFailureError(
+            `verify-and-advance: shutdown requested mid-route-to-fixer for run ${args.runId} step ${dispatchSpec.step}`,
+            JSON.stringify(verifierResult),
+          );
+        }
+        // Generate the fixer's dispatch-spec at
+        // staging/<fixerRunId>/dispatch-spec.json. The dispatch-spec
+        // extends the original step's context with the verifier-result
+        // + the original-artifact (per AC line 1093 "the failure
+        // context (verifier result + artifact excerpt) in its
+        // CONTEXT section"). Atomic write via the existing atomicWrite.
+        await writeFixerDispatchSpec({
+          fixerRunId,
+          originalRunId: args.runId,
+          originalDispatchSpec: dispatchSpec,
+          verifierResultPath: `${stagingRoot}/${args.runId}/verifier-result.json`,
+          originalArtifactPath: `${stagingRoot}/${args.runId}/outputs/${dispatchSpec.step}.md`,
+          stagingRoot,
+        });
+        // Test-path: invoke the fixerDispatchOverride seam (which
+        // simulates the sub-agent's write to the fix staging dir).
+        // Production-path: NO test seam supplied → return early with
+        // the AR9 dispatch action for the fixer; the slash-command
+        // markdown drives the second AR9 cycle (Bash → AR9 dispatch
+        // action for fixer → Task → Bash verify-and-advance for
+        // fixer's runId). The current verify-and-advance call returns
+        // with action: "dispatch" + runId=fixerRunId.
+        if (opts?.fixerDispatchOverride !== undefined) {
+          await opts.fixerDispatchOverride(fixerRunId);
+        } else {
+          // Production: return the fixer dispatch AR9 action; the
+          // slash-command markdown will re-invoke verify-and-advance
+          // with the fixer's runId. The accumulated retry-attempt
+          // runHistory entries (the original verifier-fail entry just
+          // appended above) flow through to the catch handler's
+          // stateOnHalt write only if we throw; here we return cleanly,
+          // so persist the original-fail entry on this return path
+          // before returning. The persistence rides the existing
+          // saveState contract (atomic-write under held lock).
+          if (handle !== undefined && stateBefore !== undefined) {
+            try {
+              const stateMidFix: State = {
+                ...stateBefore,
+                runHistory: trimRunHistory([
+                  ...(stateBefore.runHistory ?? []),
+                  ...accumulatedRunHistoryFromRetries,
+                ]),
+              };
+              await saveState(stateMidFix, handle, {
+                statePath: opts?.statePath,
+              });
+            } catch (saveErr) {
+              log.warn(
+                `verify-and-advance: failed to persist mid-fix runHistory (non-fatal): ${saveErr instanceof Error ? saveErr.message : String(saveErr)}`,
+              );
+            }
+          }
+          return {
+            exitCode: 0,
+            action: {
+              action: "dispatch",
+              runId: fixerRunId,
+              agent: "bmad-step-fixer",
+              lastAttempted: {
+                step: dispatchSpec.step,
+                epic: dispatchSpec.epic,
+                story: dispatchSpec.story,
+                attemptedAt: opts?.nowIso ?? new Date().toISOString(),
+              },
+              exitCode: 0,
+            },
+            transcriptPaths,
+            promotedTo: null,
+          };
+        }
+        // Re-invoke the verifier on the fixer's output (the verifier
+        // reads staging/<fixerRunId>/outputs/<artifact> per the
+        // dispatch-spec contract); the verifier-result is written to
+        // staging/<fixerRunId>/verifier-result.json (NOT overwriting
+        // the original verifier-result.json — preserves both failure
+        // contexts per AC line 1099).
+        const fixerVerifierResult = await verifierFn(fixerRunId, {
+          stepName: dispatchSpec.step,
+          stagingRoot,
+        });
+        if (fixerVerifierResult.status !== "fail") {
+          // Post-fix verifier PASSES — break out of the retry loop;
+          // success path will promote from staging/<fixerRunId>/.
+          // The success-path runHistory entry below is marked with
+          // fixAttempt: true (the wasFixAttempt flag tracks this).
+          verifierResult = fixerVerifierResult;
+          wasFixAttempt = true;
+          finalRunIdForPromote = fixerRunId;
+          break;
+        }
+        // Post-fix verifier FAILS — append a SECOND runHistory entry
+        // with fixAttempt: true + outcome: "fail" + failureCode:
+        // "VERIFIER_FAILURE" (per OQ-4 two-entry decision); throw
+        // VerifierFailureError carrying both failure contexts in the
+        // message (per AC line 1099 "with both failures recorded").
+        const completedAtIsoForFixFail =
+          opts?.nowIso ?? new Date().toISOString();
+        const fixFailEntry: RunHistoryEntry = {
+          runId: fixerRunId,
+          step: dispatchSpec.step,
+          epic: dispatchSpec.epic,
+          story: dispatchSpec.story,
+          // Same attemptNumber as the original verifier-fail attempt
+          // (the fix is INTRA-attempt; fixAttempt:true is the
+          // forensic distinction).
+          attemptNumber,
+          outcome: "fail",
+          failureCode: "VERIFIER_FAILURE",
+          completedAt: completedAtIsoForFixFail,
+          fixAttempt: true,
+          verifierStatus: "fail",
+          promotedTo: null,
+          durationMs: Math.round(performance.now() - startMs),
+          tokensIn: args.tokensIn,
+          tokensOut: args.tokensOut,
+          ts: completedAtIsoForFixFail,
+        };
+        accumulatedRunHistoryFromRetries.push(fixFailEntry);
+        // Story 5.4: invoke the formal escalateHandler BEFORE the throw
+        // to enrich the actionable hint per the AR22 regex contract.
+        // The post-fix-fail FailureContext reuses the original failure
+        // context with the fixer-aware message; the enriched hint flows
+        // to the catch handler via escalateEnrichedHint closure.
+        const enrichedFix = escalateHandler(failureContext, {});
+        if (enrichedFix.outcome === "escalate") {
+          escalateEnrichedHint = enrichedFix.reason.hint;
+        }
+        throw new VerifierFailureError(
+          `verify-and-advance: post-fix verifier reported fail for run ${args.runId} (fixer ${fixerRunId}) step ${dispatchSpec.step} after fix attempt; original VERIFIER_FAILURE + post-fix VERIFIER_FAILURE`,
+          JSON.stringify({
+            originalVerifierResult: verifierResult,
+            fixerVerifierResult,
+          }),
+        );
+      }
+      // Defensive: skip outcomes are state-mutation paths handled
+      // BEFORE the retry loop entry (verify-and-advance.ts skip path
+      // at lines 689-826). The skip outcome should never reach this
+      // branch; this branch is preserved for TypeScript exhaustiveness
+      // on the closed FailureUxOutcome union.
+      //
+      // Story 5.4: invoke the formal escalateHandler BEFORE the throw
+      // (defensive — even the unexpected-outcome path's hint must
+      // satisfy the AR22 regex contract).
+      const enrichedDefensive = escalateHandler(failureContext, {});
+      if (enrichedDefensive.outcome === "escalate") {
+        escalateEnrichedHint = enrichedDefensive.reason.hint;
+      }
       throw new VerifierFailureError(
-        `verify-and-advance: verifier reported fail for run ${args.runId} step ${dispatchSpec.step}`,
-        JSON.stringify(verifierResult),
+        `verify-and-advance: unexpected non-retry/non-escalate/non-route-to-fixer outcome from dispatchFailureUx for run ${args.runId} step ${dispatchSpec.step}`,
+        JSON.stringify({ outcome, verifierResult }),
       );
     }
-    // status === "pass" or "skip" → proceed to promote + advance.
 
     // Step 8: promote artifact (Story 2.6 NEW deliverable).
+    // Story 5.3: when wasFixAttempt === true, promote from the FIXER's
+    // staging dir (staging/<fixerRunId>/outputs/<artifact>) rather than
+    // the original failed artifact at staging/<originalRunId>/outputs/.
+    // The promote() function reads sourcePath = stagingRoot/<runId>/
+    // outputs/<artifact>, so passing finalRunIdForPromote selects the
+    // correct source.
     const promoteResult = await promote({
-      runId: args.runId,
+      runId: finalRunIdForPromote,
       stepName: dispatchSpec.step,
       phase: derivePhaseFromStep(dispatchSpec.step),
       stagingRoot,
@@ -503,22 +1343,95 @@ export async function runVerifyAndAdvance(
     });
     promotedTo = promoteResult.promotedTo;
 
-    // Step 9: advance state. Append runHistory entry, advance
+    // Step 9: advance state. Append runHistory entry for the SUCCESSFUL
+    // attempt (attemptNumber captures which attempt actually passed —
+    // 1 for first-try, 2 for first-retry-success, etc.), advance
     // lastSuccessfulStep, clear lastAttempted.
     const completedAtIso = opts?.nowIso ?? new Date().toISOString();
     const durationMs = Math.round(performance.now() - startMs);
     const runHistoryEntry: RunHistoryEntry = {
-      runId: args.runId,
+      // Story 5.1: required typed fields per RunHistoryEntrySchema.
+      // The retry loop above only breaks on non-fail (pass | skip), so
+      // the success-path entry's outcome is always "pass" per the schema
+      // (skip is a per-check status, not a per-entry outcome — collapsed
+      // to "pass" here for the entry-level outcome).
+      // Story 5.3: when wasFixAttempt === true, the runId points at the
+      // FIXER's runId (the fixer-success forensic record); the
+      // fixAttempt:true marker distinguishes a fix-attempt entry from
+      // a normal success or retry-after-success entry.
+      runId: wasFixAttempt ? finalRunIdForPromote : args.runId,
       step: dispatchSpec.step,
       epic: dispatchSpec.epic,
       story: dispatchSpec.story,
+      attemptNumber,
+      outcome: "pass",
+      failureCode: null,
+      completedAt: completedAtIso,
+      // Legacy fields (Story 2.6) — preserved for back-compat readers
+      // (Story 4.5 token accumulation; Story 4.x plan-walk completion).
       verifierStatus: verifierResult.status,
       promotedTo,
       durationMs,
       tokensIn: args.tokensIn,
       tokensOut: args.tokensOut,
       ts: completedAtIso,
+      // Story 5.3: fix-attempt marker per FR29 + AC line 1096. When
+      // wasFixAttempt === true, the success was achieved via the
+      // fixer's corrected output (the post-fix verifier passed). The
+      // marker is the FORENSIC RECORD that the entry corresponds to a
+      // remediation attempt distinct from a normal retry attempt.
+      ...(wasFixAttempt ? { fixAttempt: true } : {}),
     };
+
+    // Story 4.8: checkpoint append per --checkpoint-each <step-type>.
+    // The just-completed step's phase is looked up via the DAG (when
+    // injected) or falls back to derivePhaseFromStep; if the resolved
+    // phase matches opts.checkpointEach, capture a Git branch+sha
+    // snapshot via detectSnapshot() (Story 1.8) and append to
+    // state.checkpoints[] with FIFO-50 trim. The append is silent (no
+    // AR9 / no stderr); the user observes the checkpoint via state.yaml
+    // inspection or via the exit-reason resume hint (Story 4.10 forward
+    // dependency). The append rides on the existing saveState call below
+    // — ZERO new write sites; the .bak rotation per AR13 Layer 2 lives
+    // where it always has.
+    let nextCheckpoints: CheckpointEntry[] = [
+      ...((stateBefore.checkpoints ?? []) as CheckpointEntry[]),
+    ];
+    const matchedPhase = matchCheckpointPhase(
+      dispatchSpec.step,
+      opts?.dag,
+      opts?.checkpointEach,
+    );
+    if (matchedPhase !== null) {
+      let snapshot: Snapshot | null = null;
+      try {
+        snapshot = await detectSnapshot();
+      } catch {
+        // OQ-7: detectSnapshot throws inside a confirmed Git work-tree
+        // on empty-repo (no commits) or git-binary-missing. Story 4.8
+        // v0.1 graceful degradation: skip the checkpoint append (do
+        // NOT halt the loop). Forward-tracker for Story 4.10 to surface
+        // this via the exit-reason resume hint.
+        snapshot = null;
+      }
+      if (snapshot !== null) {
+        const entry: CheckpointEntry = CheckpointEntrySchema.parse({
+          branch: snapshot.branch,
+          sha: snapshot.sha,
+          takenAt: snapshot.takenAt,
+          stepType: matchedPhase,
+        });
+        // FIFO-50 trim: when at-or-over cap (50 entries), drop the
+        // OLDEST entry before appending. The .max(50) cap on
+        // StateV1Schema.checkpoints[] would otherwise reject a 51st
+        // entry on saveState.
+        nextCheckpoints.push(entry);
+        if (nextCheckpoints.length > 50) {
+          nextCheckpoints = nextCheckpoints.slice(nextCheckpoints.length - 50);
+        }
+      }
+    }
+
     stateAfter = {
       ...stateBefore,
       lastSuccessfulStep: {
@@ -533,11 +1446,30 @@ export async function runVerifyAndAdvance(
       // clears"). Story 2.6 left this untouched; Story 3.1 closes the gap so
       // a successful step erases prior failure forensics.
       lastFailureReason: null,
-      runHistory: [...(stateBefore.runHistory ?? []), runHistoryEntry],
+      // Story 5.1: prepend any accumulated retry-attempt fail entries
+      // before the trailing success entry. Order: existing history first,
+      // then per-attempt fails (in attempt order), then the final
+      // success entry. The .max(100) cap on RunHistoryEntrySchema FIFO-
+      // trims at the schema-validate boundary in saveState; if the
+      // resulting array exceeds 100, the schema-parse will reject —
+      // mitigated by the trimming below to keep the LATEST 100 entries.
+      runHistory: trimRunHistory([
+        ...(stateBefore.runHistory ?? []),
+        ...accumulatedRunHistoryFromRetries,
+        runHistoryEntry,
+      ]),
+      // Story 4.8: persist the (possibly mutated) checkpoints[] array.
+      // When opts.checkpointEach is undefined OR the just-completed
+      // step's phase mismatched, nextCheckpoints is the unchanged
+      // stateBefore.checkpoints array (no-op write).
+      checkpoints: nextCheckpoints,
     };
 
     // Step 10: save state under held lock (NFR-S5 — atomic write +
-    // .bak rotation via saveState → atomicWrite).
+    // .bak rotation via saveState → atomicWrite). The Story 4.8
+    // checkpoint append rides on this existing write — ZERO new write
+    // sites; the .bak rotation per AR13 Layer 2 lives where it always
+    // has.
     await saveState(stateAfter, handle, { statePath: opts?.statePath });
 
     // Step 11: compose AR9 success line per FR18.
@@ -574,6 +1506,18 @@ export async function runVerifyAndAdvance(
       //     (code, message, actionableHint, runId) tuple. The hint reuses
       //     `err.actionableHint` — same source-of-truth as the AR9 halt
       //     action's `message` field.
+      //
+      // Story 5.4 — escalate handler enrichment override: when one of the
+      // 4 escalate throw sites set `escalateEnrichedHint` (via the formal
+      // escalateHandler from src/failure-ux/escalate.ts), the enriched
+      // hint REPLACES `err.actionableHint` in BOTH the lastFailureReason
+      // write AND the AR9 halt action's message field below. PASS-THROUGH
+      // common case (per OQ-2 audit): the enriched hint equals
+      // `err.actionableHint` because all 17 existing StepperError class
+      // hints already match the AR22 regex `/^.*(Run|See|Try|Check) /`.
+      // The override is the safety-net for FUTURE error classes / per-
+      // instance hintOverrides whose hint does NOT match the regex.
+      const haltHint = escalateEnrichedHint ?? err.actionableHint;
       if (handle !== undefined && stateBefore !== undefined) {
         try {
           const stateOnHalt: State = {
@@ -582,9 +1526,22 @@ export async function runVerifyAndAdvance(
             lastFailureReason: {
               code: err.code,
               message: err.message,
-              hint: err.actionableHint,
+              hint: haltHint,
               runId: args.runId,
             },
+            // Story 5.1: persist any per-attempt failed runHistory[]
+            // entries accumulated during the retry loop. On escalate-
+            // after-cap (or on first-attempt fail with policy=escalate),
+            // these entries provide forensic visibility for
+            // "this halt was caused by retry exhaustion (vs first-
+            // attempt failure)" via the attemptNumber metadata.
+            runHistory:
+              accumulatedRunHistoryFromRetries.length > 0
+                ? trimRunHistory([
+                    ...(stateBefore.runHistory ?? []),
+                    ...accumulatedRunHistoryFromRetries,
+                  ])
+                : (stateBefore.runHistory ?? []),
           };
           await saveState(stateOnHalt, handle, {
             statePath: opts?.statePath,
@@ -606,7 +1563,10 @@ export async function runVerifyAndAdvance(
       exitCode = validExit;
       actionResult = {
         action: "halt",
-        message: err.actionableHint,
+        // Story 5.4 — escalate-enriched hint override (PASS-THROUGH for
+        // all 17 existing classes per OQ-2 audit; safety-net for FUTURE
+        // non-matching hints).
+        message: haltHint,
         exitCode: haltExit,
       };
     } else {

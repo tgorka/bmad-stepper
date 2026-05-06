@@ -1,6 +1,6 @@
 ---
 description: Compute and execute the next BMAD step (zero-config orchestrator).
-argumentHint: "[--doctor | --upgrade | --resume | --dry-run | ...]"
+argumentHint: "[--doctor | --upgrade | --resume | --dry-run | --skip <step> | --auto-fix | ...]"
 allowedTools: ["Bash", "Task", "Read"]
 ---
 
@@ -19,6 +19,8 @@ Compute and execute the next BMAD step. Layer 1 orchestrator: Bash → AR9 JSON 
 /bmad-next --list
 /bmad-next --diff-state
 /bmad-next --export-state
+/bmad-next --skip <step> --resume
+/bmad-next --auto-fix
 ```
 
 The `$ARGUMENTS` token below expands to the user's text after `/bmad-next` per
@@ -215,6 +217,283 @@ After Step 6, `/bmad-next` returns control to the user. The transcript pair
 for `/bmad-next --watch` (Story 3.9), `/bmad-next --diff-state` (Story 3.8),
 and `/bmad-next --export-state` (Story 3.10) to consume.
 
+### Per-step failure-UX policy (Story 5.1 — Epic 5 retry mode)
+
+When the verifier reports `fail` on the sub-agent's output, `verify-and-advance.ts`
+now consults the per-step failure-UX policy via `dispatchFailureUx` (mid-tier
+`src/failure-ux/index.ts` — Story 5.1). The four supported policies are
+`retry`, `skip`, `route-to-fixer`, and `escalate` (architecture lines
+494-499). For v0.1 the default is `escalate` (backwards-compatible with
+the current behaviour — verifier-failure halts the step immediately).
+
+When the resolved policy is `retry`, the same `staging/<run-id>/dispatch-spec.json`
+is re-run by the sub-agent up to `maxRetries` times (default `2` →
+3 total attempts: 1 original + 2 retries). Each per-attempt outcome
+appends a `runHistory[]` entry with `attemptNumber` metadata. After the
+cap is reached without a passing verifier, the policy escalates and
+`verify-and-advance.ts` re-throws `VerifierFailureError` with the LAST
+attempt's failure context (carried by `state.lastFailureReason`).
+
+See `/bmad-loop` documentation for the canonical retry-mode reference,
+including the SAME-dispatch-spec contract, runHistory[] entry shape,
+SIGINT cooperation, and forward-trackers for backoff (Story 6.x) and
+verifier-vs-dispatch error distinction (Story 6.x). Auto-fix /
+interactive policies arrive in Stories 5.3 / 5.5; the
+`failurePolicies:` config block lands in Story 5.6.
+
+### `--skip` flag (Story 5.2 — Epic 5 skip mode)
+
+When a step persistently fails and the user wants to advance past it
+(rather than continue retrying or routing to a fixer), `/bmad-next
+--skip <step> --resume` marks the failing step as `skipped` and
+advances state to the next step in topological order. Per FR28 + AC
+line 1075-1077.
+
+The `--skip <step>` flag is **co-required with `--resume`** — supplying
+`--skip` ALONE exits with code 2 and the BYTE-IDENTICAL hint
+`--skip requires --resume to advance state. Run /bmad-next --skip <step> --resume.`
+(Story 5.2 SkipRequiresResumeError; registry 17). The cross-validation
+lives in `src/commands/next/run.ts` — the parser is lenient (Story 1.7
+intentional gap), the runner enforces.
+
+Preconditions per OQ-4 + OQ-6:
+
+- `state.lastAttempted` MUST be populated (use `/bmad-next` first to
+  trigger a halt that populates lastAttempted; THEN skip).
+- `args.skip` MUST equal `state.lastAttempted.step` (typos are caught
+  at the verify-and-advance.ts mismatch check; the hint surfaces the
+  actual lastAttempted.step value for correction).
+
+State mutation per AC line 1077 (atomic per AR13 Layer 2 + the existing
+saveState contract):
+
+- `runHistory[]` is appended with a new entry carrying `skipped: true`
+  for the matched step (the `outcome` field stays `"pass"` per the
+  success-path-shape contract; the `skipped: true` marker is the
+  FORENSIC RECORD that the verifier was BYPASSED).
+- `lastSuccessfulStep` advances to the next step in topological order
+  via the DAG resolver (Story 1.10 + sibling-step lookup).
+- `lastAttempted` clears to `null`.
+- `lastFailureReason` clears to `null` (per the success-path
+  precedent).
+- `checkpoints[]` is UNCHANGED — the just-skipped step did NOT
+  successfully complete; no Git snapshot is captured per Story 4.8.
+
+The skip path is **state-mutation-only** — there is NO sub-agent
+dispatch, NO verifier invocation, NO artifact promotion. The lock
+acquisition + saveState atomic-write is the SAME pattern as the
+success path (per AR8 + AR13 Layer 2).
+
+SIGINT cooperation per Story 4.9 §I-2: the skip-path saveState rides
+the existing atomic tmp+rename contract (Story 1.3); SIGINT mid-write
+either lets the rename complete OR aborts cleanly before the rename.
+NO partial writes are possible per NFR-S5. The `shutdownRequested`
+poll pattern (Story 4.9 + Story 5.1 retry mode) is NOT applicable to
+the skip path (no multi-attempt loop to short-circuit).
+
+Idempotent re-skip per OQ-7: invoking `/bmad-next --skip <step>
+--resume` AGAIN on a step that has ALREADY been skipped (the most-
+recent runHistory entry for that step has `skipped: true`) throws
+`ConfigError` with the hint `Check state.runHistory and run /bmad-next
+without --skip to continue.`
+
+Telemetry forward-tracker per Epic 6: the `runHistory[]` entries with
+`skipped: true` are the future telemetry source — when Story 6.6 wires
+telemetry collection, it iterates `state.runHistory[]` filtered by
+`skipped === true` and emits per-step skip-event counts (Story 6.7
+aggregation report).
+
+`--skip` is a `/bmad-next`-only flag — `/bmad-loop` has NO `--skip`
+flag (skip is a per-step state mutation, NOT a loop stop condition).
+Story 5.6 will wire per-step skip policy auto-resolution at the loop
+runner-tier via the `failurePolicies: { <step>: skip }` config block.
+
+When Layer 1 detects `--skip <step>` in `$ARGUMENTS` AND `--resume` in
+`$ARGUMENTS`, it threads `--skip-step <step>` to verify-and-advance.ts
+in Step 5 above (positional argv flag, mirroring the Story 3.1
+`--last-attempted-json` threading pattern).
+
+### `--auto-fix` flag (Story 5.3 — Epic 5 route-to-fixer mode)
+
+When a step's verifier fails and the user wants Stepper to attempt an
+automatic fix BEFORE escalating, `/bmad-next --auto-fix` overrides the
+per-step failure policy to `route-to-fixer` for one run per architecture
+line 499 + FR29. The override is unconditional — when `--auto-fix` is
+supplied, the verifier failure on this run triggers a fixer dispatch
+(NOT retry, NOT skip, NOT escalate, regardless of any per-step config
+setting).
+
+Per AC line 1091-1099, the route-to-fixer semantics are:
+
+1. **Verifier fails** on the original sub-agent's output at
+   `staging/<run-id>/outputs/<artifact>`; one `runHistory[]` entry is
+   appended with `outcome: "fail"` + `failureCode: "VERIFIER_FAILURE"`
+   (the original verifier-fail forensic record).
+2. **Fixer is dispatched** as a SECOND AR9 cycle — Layer 1 reads the
+   AR9 dispatch action with `agent: "bmad-step-fixer"` + `runId:
+   <original-runId>-fix`; the slash-command markdown invokes the fixer
+   sub-agent via the `Task` tool. The fixer reads its dispatch-spec at
+   `staging/<run-id>-fix/dispatch-spec.json` (which carries the
+   verifier-result + the original artifact in its CONTEXT section per AC
+   line 1093) and writes a CORRECTED artifact to
+   `staging/<run-id>-fix/outputs/<artifact>`.
+3. **Original verifier re-runs** on the fixer's output (NOT on the
+   original failed output); the post-fix verifier-result is written to
+   `staging/<run-id>-fix/verifier-result.json` (the original
+   verifier-result.json is PRESERVED at
+   `staging/<run-id>/verifier-result.json` for forensic record).
+4. **On post-fix pass**: the fixer's corrected artifact is promoted to
+   the canonical location (NOT the original failed artifact);
+   `runHistory[]` is appended with a SUCCESS entry carrying
+   `fixAttempt: true` (the FORENSIC RECORD that the success was via a
+   fix attempt, distinct from a normal retry-success).
+5. **On post-fix fail**: a SECOND `runHistory[]` entry is appended with
+   `outcome: "fail"` + `failureCode: "VERIFIER_FAILURE"` +
+   `fixAttempt: true` (the post-fix verifier-fail forensic record); the
+   policy escalates to `escalate` via the existing VerifierFailureError
+   throw with BOTH failure contexts surfaced in the error message per
+   AC line 1099 ("with both failures recorded").
+
+The fixer sub-agent (`agents/bmad-step-fixer.md`) is a Layer 3 worker
+per architecture line 1070; its description is BYTE-IDENTICAL to AC line
+1091 substring `remediate a BMAD step artifact based on a verifier
+failure`. The fixer is file-in / file-out only — it DOES NOT engage the
+user, DOES NOT validate its own output, DOES NOT escalate, DOES NOT
+retry (the route-to-fixer policy mandates ONE fix attempt per logical
+step; on post-fix-fail Layer 2 escalates immediately per AC line 1099).
+
+Staging dir layout per architecture line 549 + AC line 1093:
+
+- `staging/<run-id>/` — the ORIGINAL step's staging dir (the failed
+  artifact + the original verifier-result.json; PRESERVED for forensic
+  record).
+- `staging/<run-id>-fix/` — the FIXER's staging dir (the corrected
+  artifact + the post-fix verifier-result.json; PRESERVED for forensic
+  record).
+
+SIGINT cooperation per Story 4.9 §I-2: the `shutdownRequested` poll
+inside `verify-and-advance.ts` is checked BEFORE invoking the fixer
+dispatch; on SIGINT the iteration halts cleanly with the original
+verifier-fail context (no fix attempt is started). The atomic-write
+contract (Story 1.3) protects all `saveState()` calls so partial-write
+recovery is automatic.
+
+Telemetry forward-tracker per Epic 6: the `runHistory[]` entries with
+`fixAttempt: true` are the future telemetry source — when Story 6.6
+wires telemetry collection, it iterates `state.runHistory[]` filtered by
+`fixAttempt === true` and emits per-step fix-event counts (Story 6.7
+aggregation report; independent from retry-event counts via
+`attemptNumber > 1` filter).
+
+`--auto-fix` is also a `/bmad-loop` flag (per architecture line 499 —
+"Loop-level `--auto-fix` flag overrides per-step policy to
+`route-to-fixer` for one run"); the loop runner threads the override
+across ALL iterations of the loop run via
+`RunNextOptions.failurePolicyOverride`.
+
+When Layer 1 detects `--auto-fix` in `$ARGUMENTS`, it threads
+`--auto-fix` to verify-and-advance.ts in Step 5 above (positional argv
+flag, mirroring the Story 5.2 `--skip-step` threading pattern).
+
+### failurePolicies: config block (Story 5.6 — per-step policy)
+
+The per-step `failurePolicies:` config block in `bmad-stepper.config.yaml`
+applies to `/bmad-next` invocations the same way it applies to
+`/bmad-loop` iterations. The four valid policies (retry / skip /
+route-to-fixer / escalate) and the resolver semantics (priority order,
+absent-step fallback, case-sensitive lookup, invalid-value handling)
+are CANONICAL in `commands/bmad-loop.md` (single source of truth per
+OQ-8 — mirrors the Story 5.3 `--auto-fix` docs pattern).
+
+See `commands/bmad-loop.md` § `failurePolicies: config block (Story 5.6
+— per-step policy)` for the full reference: schema shape, valid values
+(retry / skip / route-to-fixer / escalate), absent-step fallback
+(escalate plugin default), `--auto-fix` priority override, example
+config block, BMAD step-id format, invalid-value handling (ConfigError
+on Zod parse failure), and Story 6.1 cross-story coordination (file
+loader work).
+
+This section confirms `/bmad-next` is COVERED by the same config block
+— there is NO separate `/bmad-next`-only failurePolicies surface. The
+resolver (`src/failure-ux/resolve-policy.ts`) is invoked by
+`src/commands/next/run.ts` (for the `resolvedFailurePolicy` field on
+`NextResult`) AND by `src/commands/next/verify-and-advance.ts` (for
+the per-step policy at the verifier-failure dispatch site). Both
+consume the same `failurePolicies:` block.
+
+### Failure modes — escalate (Story 5.4 — Epic 5 default policy)
+
+`escalate` is the **default** per-step failure-UX policy per architecture
+line 499 ("escalate is the safest fallback when no per-step policy is
+set"). Story 5.4 lands the formal `escalateHandler` at
+`src/failure-ux/escalate.ts` — a pure-function handler that ENRICHES the
+in-flight failure context's actionable hint to satisfy the AR22 regex
+contract `/^.*(Run|See|Try|Check) /` (architecture line 589 + epics.md
+§Story 5.4 AC line 1113). Story 5.4 COMPLETES the four-handler module
+group (`retry` + `skip` + `route-to-fixer` + `escalate`) with ZERO stub
+fallthrough; the v0.1 stub at `src/failure-ux/index.ts:102-105` is
+REMOVED entirely.
+
+**The four existing escalate sites** at `verify-and-advance.ts` are:
+
+1. **Retry-cap** (line ~1071): all retries failed; throw
+   `VerifierFailureError` with the LAST attempt's failure context.
+2. **Route-to-fixer-cap** (line ~1241): post-fix verifier still fails;
+   throw `VerifierFailureError` with both failures recorded.
+3. **Raw verifier failure** (default escalate policy on attempt 1):
+   throw `VerifierFailureError` immediately.
+4. **Unexpected outcome** (TypeScript exhaustiveness defensive throw):
+   throw `VerifierFailureError`.
+
+Each site invokes `escalateHandler(failureContext, {})` BEFORE the throw
+to enrich the actionable hint per the AR22 regex contract. The catch
+handler reads the enriched hint via the `escalateEnrichedHint` closure
+variable and uses it for BOTH the `lastFailureReason.hint` write AND the
+AR9 halt action's `message` field.
+
+**The actionable-hint regex contract** is codified as the constant
+`ACTIONABLE_HINT_REGEX = /^.*(Run|See|Try|Check) /` exported from
+`src/failure-ux/escalate.ts`. The handler enriches in TWO modes:
+
+- **PASS-THROUGH** (common case per OQ-2 audit): if the input hint
+  already matches the regex, return the context unchanged. All 17
+  existing `StepperError` class `actionableHint` strings already match
+  the regex (verified by the integration test at
+  `src/integration/escalate-actionable-hint.test.ts`).
+- **SHAPE default** (safety-net for FUTURE non-matching hints): if the
+  input hint does NOT match, shape a default hint of the form `"Run
+  /bmad-next --resume to retry; see _bmad-output/.stepper/runs/<runId>/log.md
+  for the failure detail."` (matches the regex via the leading "Run "
+  verb; references the run-log path + `--resume` invocation per AC
+  line 1111).
+
+**NO stack trace on main thread (NFR-M2)**: per PRD line 801 + AC line
+1112, the AR9 dispatch action's `message` field carries ONLY the
+single-line actionable hint; the warn/error stderr captures from
+`src/io/log.ts` carry ONLY the hint; the FULL `Error.stack` lives ONLY
+in the run-log JSON file at `_bmad-output/.stepper/runs/<runId>/log.json`
+per FR44. The integration test asserts NO `Error.stack` substring
+appears in the AR9 message OR the warn/error stderr captures.
+
+**`lastFailureReason` is auto-cleared on the next successful step** per
+OQ-6 (preserves Story 3.1 + 5.1 + 5.3 success-path clear at
+`verify-and-advance.ts:935-942`). The halt is forensic until recovered;
+the next `/bmad-next` that succeeds clears the field.
+
+**Failure modes table**:
+
+| Mode             | Story | Default? | State mutation                                                                     | Halt? | Recovery hint              |
+| ---------------- | ----- | -------- | ---------------------------------------------------------------------------------- | ----- | -------------------------- |
+| `retry`          | 5.1   | NO       | `runHistory[]` per-attempt entries; `lastFailureReason` on retry-cap escalate     | After cap | `Run /bmad-next --resume` |
+| `skip`           | 5.2   | NO       | `runHistory[].skipped: true` + `lastSuccessfulStep` advance + `lastAttempted` clear | NO    | `Run /bmad-next --skip <step> --resume` |
+| `route-to-fixer` | 5.3   | NO       | `runHistory[].fixAttempt: true` (success) OR two fail entries on post-fix-fail   | On post-fix-fail | `Run /bmad-next --resume` |
+| `escalate`       | 5.4   | **YES**  | `lastFailureReason: {code, message, hint, runId}` (atomic per Story 1.3)         | YES   | `Run /bmad-next --resume`  |
+
+The escalate path's `lastFailureReason` write rides the existing atomic
+tmp+rename contract per NFR-S5; SIGINT mid-escalate-path halts cleanly
+with the partial state recorded atomically (Story 4.9 §I-2 cooperation
+via the `shutdownRequested` poll).
+
 ## Tool restrictions
 
 - **Bash** is restricted to `bun run <plugin-root>/...` invocations only. The
@@ -281,7 +560,8 @@ model — main thread, Bun core, sub-agents), §A.D2 (sub-agent dispatch via
 Task tool), §P6 (slash-command markdown patterns — frontmatter shape + body
 pattern + tool restrictions), §line 1443-1485 (Layer 1↔2↔3 sequence
 diagram), §line 1660 (AR9 protocol), §line 1677 (token-count positional
-flag threading), and PRD FR1, FR16, FR17, FR18, FR32, FR46, FR53, FR54.
+flag threading), and PRD FR1, FR16, FR17, FR18, FR28, FR29, FR30, FR32, FR46, FR53, FR54
++ NFR-M2 (Story 5.4 — every error has actionable hint; no stack trace on main thread).
 
 For the lock-free pre-dispatch composer, see `src/commands/next/run.ts`
 (Story 2.4). For the lock-acquiring post-dispatch runner, see

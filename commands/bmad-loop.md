@@ -1,6 +1,6 @@
 ---
 description: Run /bmad-next in a bounded loop with stop conditions
-argumentHint: "[--max-iters N] [--until-epic-end] [--until-story X.Y] [--next-story] [--phase-end] [--time-budget MS] [--token-budget N] [--stop-on-error|--continue-on-error] [--plan-first] [--checkpoint-each story|epic|phase] [--interactive] [--auto-fix]"
+argumentHint: "[--max-iters N] [--until-epic-end] [--until-story X.Y] [--next-story] [--phase-end] [--time-budget MS] [--token-budget N] [--stop-on-error|--continue-on-error] [--plan-first] [--checkpoint-each analysis|planning|solutioning|implementation|retro] [--interactive] [--auto-fix]"
 allowedTools: ["Bash", "Task", "Read"]
 ---
 
@@ -15,9 +15,13 @@ Stories 4.2 + 4.3 wired the four condition flags `--until-epic-end`,
 `--until-story X.Y`, `--next-story`, `--phase-end`. Story 4.5 wired the
 two budget flags (`--time-budget MS`, `--token-budget N`); Story 4.6
 wired the failure-policy flags (`--stop-on-error`, `--continue-on-error`);
-Story 4.7 wired `--plan-first` (dry-run preview); Stories 4.8+ will
-wire the remaining flags (`--checkpoint-each <type>`, SIGINT, exit-
-reason format).
+Story 4.7 wired `--plan-first` (dry-run preview); Story 4.8 wired
+`--checkpoint-each <step-type>` (per-iteration checkpoint snapshot per
+AR13 Layer 1); Story 4.9 wired SIGINT graceful exit (FR24, NFR-R5 — Ctrl-C
+halts cleanly within 30 seconds); Story 4.10 wired the unified loop-exit-
+reason emission format (FR26 — every loop exit emits a human-readable
+reason + state-snapshot pointer + `/bmad-next --resume` hint, plus a
+structured JSON transcript under `runs/`).
 
 ## Usage examples
 
@@ -30,9 +34,9 @@ reason format).
 /bmad-loop --phase-end               # Story 4.3 — runtime-wired
 /bmad-loop --time-budget 7200000 --token-budget 200000  # Story 4.5
 /bmad-loop --plan-first              # Story 4.7 — RUNTIME-WIRED in 4.7
-/bmad-loop --checkpoint-each story   # Story 4.8 — per-iteration snapshot
+/bmad-loop --checkpoint-each implementation  # Story 4.8 — RUNTIME-WIRED in 4.8
 /bmad-loop --interactive             # Story 5.5 — pause-between-steps
-/bmad-loop --auto-fix                # Story 5.3 — route-to-fixer
+/bmad-loop --auto-fix                # Story 5.3 — RUNTIME-WIRED in 5.3 (route-to-fixer)
 ```
 
 The `$ARGUMENTS` token below expands to the user's text after `/bmad-loop`
@@ -86,6 +90,23 @@ iteration loop. Each iteration:
    (`{ iterCount, runId, action, exitCode, durationMs, startedAt }`).
 5. On `runNext` halt (non-zero exitCode OR `action === "halt"`),
    short-circuits with `halt-on-error`.
+5.5. When `--checkpoint-each <step-type>` is supplied (Story 4.8), the
+   per-iteration `verify-and-advance.ts` post-step state save APPENDS a
+   `state.checkpoints[]` entry IF the just-completed step's phase
+   matches the supplied step-type. The append is silent (no AR9 / no
+   stderr emission); the user observes the checkpoint via `state.yaml`
+   inspection or via the exit-reason resume hint (Story 4.10 forward
+   dependency).
+6. SIGINT (Ctrl-C, Story 4.9) on a running loop sets a `shutdownRequested`
+   flag; the in-flight sub-agent finishes its current write; the loop halts
+   BEFORE the next iteration's stop-condition check. Total SIGINT-to-clean-
+   exit time is under 30 seconds (NFR-R5). Exit message: composed by Story
+   4.10 unified `formatLoopExitLines`: `Loop exited: manual (SIGINT) —
+   partial work committed; --resume available.\nSnapshot: <sha>. Resume:
+   /bmad-next --resume.`. Exit code: `0` (clean exit per FR53; the user
+   requested the halt). The Story 4.9 AC-3 substrings (`manual (SIGINT)`,
+   `partial work committed`, `--resume available`) are preserved by the
+   Story 4.10 unified format.
 
 After the loop exits, the runner emits a SINGLE AR9 JSON line of the
 form:
@@ -196,8 +217,9 @@ drive runtime branching:
 | `--stop-on-error`      | 4.6      | RUNTIME-WIRED in 4.6                |
 | `--continue-on-error`  | 4.6      | RUNTIME-WIRED in 4.6                |
 | `--plan-first`         | 4.7      | RUNTIME-WIRED in 4.7                |
-| `--checkpoint-each X`  | 4.8      | parsed only                         |
-| `--interactive`        | 5.5      | parsed only                         |
+| `--checkpoint-each X`  | 4.8      | RUNTIME-WIRED in 4.8                |
+| `(SIGINT)`             | 4.9      | RUNTIME-WIRED in 4.9 (OS signal — no CLI flag) |
+| `--interactive`        | 5.5      | RUNTIME-WIRED in 5.5                |
 | `--auto-fix`           | 5.3      | parsed only                         |
 
 ### `--max-iters N` (Story 4.1, default-cap in 4.4)
@@ -488,6 +510,280 @@ fails, plan-mode emits a single-line `Plan unavailable — <reason>. Run
 /bmad-loop --doctor to diagnose.` message and exits 0. The fallback
 preserves AC-1's "exits 0 without dispatching anything" wording.
 
+### `--checkpoint-each <step-type>` (Story 4.8)
+
+Force a Git branch+sha snapshot + state.yaml `.bak` rotation after every
+iteration whose just-completed step's `phase` matches `<step-type>`. Per
+AR13 Layer 1, the loop appends a `state.yaml.checkpoints[]` entry of
+shape `{ branch, sha, takenAt, stepType }` after each matching iteration.
+The entries are FIFO-evicted at 50 (architecture line 405 + line 769).
+
+```
+/bmad-loop --checkpoint-each implementation       # most common
+/bmad-loop --checkpoint-each analysis --max-iters 10
+/bmad-loop --checkpoint-each implementation --until-epic-end
+```
+
+**Legal step-type values (AC-3)**: `analysis`, `planning`, `solutioning`,
+`implementation`, `retro` — the 5 `Phase` literal-union values from
+`src/dag/types.ts:30-35`. Any other value is rejected at argv parse time
+with PARSE_ERROR (FR53 exit code 2).
+
+**Runtime semantics**: the checkpoint write happens INSIDE
+`src/commands/next/verify-and-advance.ts` (lock-held mid-tier) — NOT
+inside `runLoop` (lock-free top-tier per AR8). The runner threads
+`args.checkpointEach` through `RunNextOptions.checkpointEach` so the
+per-iteration `verify-and-advance.ts` can match the just-completed
+step's phase against the supplied step-type. The append is silent
+(no AR9 / no stderr); the user observes the checkpoint via
+`state.yaml` inspection or via the exit-reason resume hint
+(Story 4.10 forward dependency).
+
+**AR13 Layer 1 reference** (architecture lines 389-407): Git branch+sha
+captured via `detectSnapshot()` (Story 1.8); ISO-8601 takenAt; FIFO-
+evicted at 50 entries. The literal string `"HEAD"` is recorded for
+detached-HEAD repos.
+
+**AR13 Layer 2 reference**: the `.bak` rotation rides on the existing
+`saveState`/`atomicWrite` path (Story 1.6) — ZERO new write sites.
+
+**Non-Git fallback** (Story 4.8 OQ-7): when `detectSnapshot()` returns
+null (non-Git work-tree) OR throws (empty repo / git binary missing),
+the checkpoint append is SKIPPED gracefully — the iteration completes
+successfully and the loop continues. The Story 1.8 stderr warning
+("snapshot: not a git repository, lastSnapshot=null") fires once,
+providing diagnostic feedback.
+
+**Default-cap interaction** (Story 4.8 OQ-1): `--checkpoint-each` is NOT
+a stop-condition. Supplying `--checkpoint-each` ALONE without any stop-
+condition flag triggers the default 50-iter cap (the user wants
+checkpoints WITH a bounded loop). This contrasts with the 9 stop-
+condition flags (which suppress the default-cap when supplied alone).
+
+**Exit code mapping**: unchanged from FR53. Snapshot capture failures
+during a successful step do NOT halt the loop (graceful degradation per
+OQ-7).
+
+### SIGINT (Ctrl-C) — graceful exit (Story 4.9)
+
+Press Ctrl-C on a running `/bmad-loop` to halt cleanly within 30 seconds (NFR-R5).
+The runner installs a `process.on('SIGINT', handler)` listener at `runLoop` entry that
+sets a `shutdownRequested` flag; the in-flight sub-agent dispatch is ALLOWED to finish
+its current write (no cancellation, no partial-write risk per NFR-R1); upon the in-flight
+Task's natural return, the loop halts BEFORE the next iteration's stop-condition check.
+
+**Behaviour timeline** (typical iteration-body SIGINT):
+
+1. User presses Ctrl-C.
+2. Signal handler sets `shutdownRequested = true` (idempotent — second SIGINT is a no-op in v0.1).
+3. The in-flight `await runNextFn(...)` continues; the sub-agent finishes its current write.
+4. Promise resolves; runner records the just-completed `IterationRecord` for forensic visibility.
+5. Runner detects `shutdownRequested === true` at the iteration boundary; constructs a
+   `manual-sigint` StopReason; breaks out of the iteration loop.
+6. Loop-final AR9 line emits `{ "action": "report", "message": "manual (SIGINT) — partial
+   work committed; --resume available", "exitCode": 0 }`.
+
+**Setup-phase SIGINT** (Ctrl-C before any iteration starts):
+
+Clean exit happens IMMEDIATELY. The runner installs the handler BEFORE args resolution
+so SIGINT during the args parse / plan-mode read / loop-entry baseline capture also halts
+cleanly. The SIGINT-to-halt latency in setup-phase is bounded by the time of a single
+`await` call — typically under 100 ms.
+
+**Exit message** (AC-3 verbatim): `manual (SIGINT) — partial work committed; --resume
+available`. The em-dash is U+2014 (consistent with other AR-2 messages from Story 4.6).
+
+**Exit code**: `0` (per FR53 — clean exit; the user requested the halt deliberately).
+NOT `1` — SIGINT is NOT a halt-with-actionable-error.
+
+**Lock release**: OWNED by the existing `verify-and-advance.ts` try/finally pattern
+(Story 1.4 lock contract). The `runLoop` does NOT acquire the lock and does NOT add
+lock-release code (per AR8 lock-free top-tier).
+
+**Multiple SIGINT presses**: idempotent in v0.1 — second SIGINT is a no-op (the flag is
+already set). Future Story 6.x may make the SECOND SIGINT a force-quit (OQ-6 tracker).
+
+**30-second NFR-R5 bound**: best-effort. The runner halts PROMPTLY after the in-flight
+Task returns; the bound is upper-bounded by the typical sub-agent stream-active completion
+time. If the Task hangs longer than 30 seconds, press Ctrl-C a second time (no-op in v0.1)
+and rely on OS SIGKILL (Ctrl-\) — future Story 6.x may add SIGINT-to-SIGKILL escalation.
+
+**No CLI flag for SIGINT**: SIGINT is OS-level — there is no `--sigint` or `--no-sigint`
+flag. The signal handler is always-on for `/bmad-loop` invocations.
+
+**`/bmad-next` SIGINT**: out of scope for v0.1. SIGINT on a non-loop dispatch invocation
+falls back to OS default (immediate `process.exit`); per FR24 the SIGINT graceful behaviour
+is bound to "running loop" only.
+
+### Loop exit-reason + `--resume` hint format (Story 4.10)
+
+Every loop exit (any of the 8 stop conditions OR `manual (SIGINT)`) emits a
+unified two-line message in the AR9 final-emission `message` field per FR26
++ the AC-mandated text:
+
+```
+Loop exited: <reason>.
+Snapshot: <state.yaml.lastSnapshot.sha>. Resume: /bmad-next --resume.
+```
+
+Where `<reason>` is the per-variant first-line text composed by
+`formatExitReason(stopReason)` (e.g., `max-iters (5) reached`,
+`next-story boundary reached (4.5 → 4.6)`, `manual (SIGINT) — partial
+work committed; --resume available`).
+
+**Snapshot-null fallback**: when the project is non-Git (Story 1.8 AC-3)
+OR the state load fails OR `state.lastSnapshot.sha` is empty, the second
+line is OMITTED. The message field is the FIRST LINE ONLY:
+
+```
+Loop exited: <reason>.
+```
+
+**Final transcript log entry under `runs/`**: the exit reason + snapshot +
+iteration count + duration are ALSO written to a structured JSON file at:
+
+```
+_bmad-output/.stepper/runs/<loopStartedAtTs>-loop-exit.json
+```
+
+The JSON shape (schemaVersion 1, kind "loop-exit"):
+
+```json
+{
+  "schemaVersion": 1,
+  "kind": "loop-exit",
+  "loopStartedAt": "2026-05-04T08:51:46Z",
+  "loopCompletedAt": "2026-05-04T09:12:00Z",
+  "stopReason": { "code": "max-iters-reached", "maxIters": 5, "iterCount": 5 },
+  "exitCode": 0,
+  "iterationCount": 5,
+  "durationMs": 1214000,
+  "snapshot": { "sha": "abc123...", "branch": "main", "takenAt": "..." },
+  "message": "Loop exited: max-iters (5) reached.\nSnapshot: abc123.... Resume: /bmad-next --resume."
+}
+```
+
+The transcript writer is BEST-EFFORT: failure to write does NOT mask the
+AR9 exit emission. The user always gets the canonical AR9 line + the
+canonical exit code; the JSON file is forensic / telemetry-bound (Story
+6.x telemetry aggregator may consume).
+
+**`--resume` hint references `/bmad-next --resume`** — NOT `/bmad-loop
+--resume`. The `--resume` flag is wired on `/bmad-next` per Epic 3 Story
+3.2 (resume the in-flight halted run). For loop re-entry, the user can
+run either `/bmad-next --resume` (single step) OR re-invoke `/bmad-loop`
+with the same flags as before (the loop will pick up from the current
+state automatically).
+
+**Format byte-identity**: the exit-line format is byte-identical across
+all 10 StopReason variants × {snapshot-null, snapshot-present} = 20
+combinations, verified by SWEEP_410 in `src/commands/loop/run.test.ts`.
+
+### Failure-UX modes — retry (Story 5.1)
+
+Story 5.1 lands the FIRST of four per-step failure-UX policies (FR31).
+When a step's resolved policy is `retry` AND the verifier fails, the
+SAME dispatch spec is re-run up to `maxRetries` times (default `2` →
+3 total attempts: 1 original + 2 retries) before escalating per the
+escalate policy (Story 5.4). Stories 5.2 / 5.3 / 5.5 land the other
+three policies (skip / route-to-fixer / interactive) + their
+corresponding CLI flags (`--skip`, `--auto-fix`, `--interactive`).
+Story 5.6 wires the `failurePolicies:` config block (per-step opt-in).
+
+**v0.1 default**: `escalate` per architecture line 499 — when no
+per-step policy is set in config, the verifier-failure halts the
+iteration immediately (the existing Story 4.6 halt-on-error
+short-circuit behaviour). Story 5.1 introduces the policy-resolver
+skeleton (`src/failure-ux/index.ts`) but does NOT change the default
+behaviour for production callers.
+
+**Retry semantics** (when policy resolves to `retry`):
+
+- The SAME `staging/<run-id>/dispatch-spec.json` is re-read by the
+  sub-agent on each attempt (byte-identical input). The sub-agent has
+  NO awareness of attempt number; it is dispatched fresh and reads the
+  same spec.
+- The sub-agent overwrites the prior attempt's output at
+  `staging/<run-id>/outputs/<artifact>` on each attempt. The variation
+  in outcome comes from LLM sampling non-determinism — attempt N+1
+  may succeed where attempt N failed.
+- The verifier is invoked anew on the new output. Each attempt = one
+  verifier invocation = one `runHistory[]` entry with `attemptNumber`
+  metadata (1 = original, 2 = first retry, 3 = second retry).
+- After `maxRetries + 1` attempts without a passing verifier, the
+  policy ESCALATES — `verify-and-advance.ts` re-throws
+  `VerifierFailureError` with the LAST attempt's failure context.
+  Story 4.6 halt-on-error short-circuit catches this at the iteration
+  boundary, producing the existing `error-stop` StopReason variant
+  (no NEW StopReason variant per Story 5.1 OQ-1). The
+  `formatLoopExitLines` (Story 4.10) emits the canonical two-line
+  exit message.
+
+**runHistory[] attempt metadata**: each per-attempt entry carries
+`{ runId, step, epic, story, attemptNumber, outcome, failureCode,
+completedAt }` per the new `RunHistoryEntrySchema` (Story 5.1
+schema-tightening — `state.runHistory[]` is now typed). The
+`attemptNumber` field is the load-bearing addition for Epic 6
+telemetry consumption (Story 6.6/6.7 will aggregate retry counts per
+step from this field). The legacy fields (`tokensIn`, `tokensOut`,
+`durationMs`, `verifierStatus`, `promotedTo`, `ts`) are preserved as
+OPTIONAL on the schema for backwards compat with the Story 4.5 token
+accumulator + Story 4.x plan-walk completion check.
+
+**SIGINT cooperation** (Story 4.9 §I-2 forward-tracker honoured):
+when SIGINT arrives mid-retry, the retry loop checks
+`shutdownRequested` BEFORE re-dispatching the next attempt; on
+shutdown the loop halts cleanly with the LAST attempt's failure
+context. The loop runner's signal handler then emits `manual-sigint`
+StopReason (NOT a partial retry-exhausted state). Tests RT_51_VA_8 +
+RT_51_LOOP_5 verify this.
+
+**No CLI flag for retry mode**: Story 5.1 has no new CLI flag — the
+per-step opt-in is via the `failurePolicies:` config block (wired in
+Story 5.6). The retry policy is read from a `LoopOpts.failurePolicyOverride`
+test-injection seam OR (in production v0.1) defaults to `escalate`
+per architecture line 499. Skip / auto-fix / interactive flags arrive
+in Stories 5.2 / 5.3 / 5.5 respectively.
+
+**Forward-trackers**: backoff between retries (OQ-6 — none in v0.1;
+Story 6.x backoff strategy); verifier-vs-dispatch error distinction
+(OQ-7 — verifier-only in v0.1); recursive Task dispatch protocol
+(OQ-8 — v0.1 relies on test-injection seams, production retry path
+requires Layer 1 protocol coordination per Story 6.x).
+
+### Failure-UX modes — escalate (Story 5.4 — Epic 5 default policy)
+
+Story 5.4 lands the FORMAL `escalateHandler` at
+`src/failure-ux/escalate.ts` — completing the four-handler module group
+(`retry` + `skip` + `route-to-fixer` + `escalate`) with ZERO stub
+fallthrough. `escalate` is the **DEFAULT** per-step failure-UX policy
+per architecture line 499 — when no per-step `failurePolicies:` config
+entry is set (Story 5.6 forward dependency), the verifier-failure halts
+the iteration immediately via the existing Story 4.6 halt-on-error
+short-circuit. NO new CLI flag is needed; `escalate` fires automatically.
+
+**The actionable-hint regex contract** is the load-bearing AC line 1113
+contract: every escalate path's `actionableHint` MUST match
+`/^.*(Run|See|Try|Check) /`. The `escalateHandler` enriches the in-flight
+`FailureContext.hint` to satisfy this regex via either PASS-THROUGH
+(common case — all 17 existing `StepperError` class hints already match)
+OR a SHAPE default safety-net for FUTURE non-matching hints. The
+canonical loop-runner cooperation per Story 4.6 short-circuit + Story
+4.10 unified format: the actionable hint shaped by the escalate handler
+flows through `formatLoopExitLines` and surfaces in the two-line exit
+emission. SIGINT cooperation per Story 4.9 §I-2 is preserved — the
+escalate path's `lastFailureReason` write rides the existing atomic
+tmp+rename contract per NFR-S5; SIGINT mid-escalate halts cleanly with
+the partial state recorded.
+
+For the full escalate-mode reference (regex contract, four throw sites,
+PASS-THROUGH vs SHAPE enrichment, NFR-M2 enforcement), see
+`commands/bmad-next.md` § "Failure modes — escalate (Story 5.4 — Epic 5
+default policy)". Story 5.6 will wire the `failurePolicies:` config block
+which may include explicit `escalate` policy declarations alongside
+`retry` / `skip` / `route-to-fixer` (no behaviour change — explicit
+`escalate` matches the v0.1 default).
+
 ## Tool restrictions
 
 - **Bash** is restricted to `bun run <plugin-root>/...` invocations only.
@@ -535,6 +831,278 @@ DO:
 - Surface the FR53 exit-code mapping to the user IF they ask "what does
   exit code N mean".
 
+### --auto-fix flag (Story 5.3 — Epic 5 route-to-fixer mode)
+
+`/bmad-loop --auto-fix` overrides the per-step failure policy for ALL
+iterations of the loop run to `route-to-fixer` per architecture line 499
+("Loop-level `--auto-fix` flag overrides per-step policy to `route-to-fixer`
+for one run") + FR29. The override is unconditional — when `--auto-fix` is
+supplied, every iteration's verifier failure triggers the route-to-fixer
+path (NOT retry, NOT skip, NOT escalate, regardless of any per-step
+config).
+
+The per-iteration semantics mirror `/bmad-next --auto-fix`: on verifier
+failure inside a loop iteration, the runner dispatches the
+`bmad-step-fixer` sub-agent (via the AR34 four-step pattern) with the
+verifier-result + the original artifact in the CONTEXT section; the
+sub-agent writes a corrected artifact to a fresh
+`staging/<run-id>-fix/outputs/<artifact>`; the original verifier re-runs
+on the fixer's output. On post-fix pass the iteration succeeds (the
+corrected artifact is promoted to canonical location with `runHistory[]
+.fixAttempt: true` marker). On post-fix fail the iteration HALTS with
+`VerifierFailureError` carrying both failure codes, which Story 4.6
+`halt-on-error` short-circuit catches at the iteration boundary; the
+loop exits with the standard `halt-on-error` StopReason emission via
+`formatLoopExitLines` (Story 4.10).
+
+SIGINT cooperation: the per-iteration `shutdownRequested` poll inside
+`verify-and-advance.ts` is checked BEFORE invoking the fixer dispatch;
+on SIGINT the iteration halts cleanly with the original verifier-fail
+context (no fix attempt is started). The loop runner's SIGINT handler
+(Story 4.9) then surfaces `manual-sigint` as the loop exit reason.
+
+Forensic record per AC line 1099: BOTH `staging/<run-id>/` (original)
+AND `staging/<run-id>-fix/` (fixer attempt) staging dirs are
+preserved on disk; both `verifier-result.json` files are preserved (the
+original at `staging/<run-id>/verifier-result.json`, the post-fix at
+`staging/<run-id>-fix/verifier-result.json`). On escalate, two
+`runHistory[]` entries are appended (one for the original verifier-fail,
+one for the post-fix verifier-fail with `fixAttempt: true` marker).
+
+See `commands/bmad-next.md` §`--auto-fix` flag (Story 5.3 — Epic 5
+route-to-fixer mode) for the full per-step reference: dispatch contract
+(fixer's dispatch-spec at `staging/<run-id>-fix/dispatch-spec.json` with
+verifier-result + original-artifact in CONTEXT), the
+`bmad-step-fixer` sub-agent contract (file-in / file-out only), and the
+`runHistory[].fixAttempt: true` forensic marker.
+
+### failurePolicies: config block (Story 5.6 — per-step policy)
+
+`bmad-stepper.config.yaml` may declare a `failurePolicies:` block that
+maps each BMAD step ID to one of the four per-step failure-UX policies
+per FR31. The block is consumed by every `/bmad-loop` iteration and
+every `/bmad-next` invocation; the resolved policy controls the post-
+verifier-failure path for that step (NFR-M2 errors-as-primary-UX).
+
+**Schema shape** (canonical reference at `src/schemas/config.ts`
+`FailurePoliciesSchema`):
+
+```yaml
+failurePolicies:
+  bmad-dev-story: retry
+  bmad-code-review: route-to-fixer
+  bmad-create-story: skip
+  bmad-retrospective: escalate
+```
+
+**The four valid policy values**:
+
+| Value             | Semantics                                                                                  | Story  |
+| ----------------- | ------------------------------------------------------------------------------------------ | ------ |
+| `retry`           | Retry up to 2 additional attempts (3 total) before escalating.                              | 5.1    |
+| `skip`            | Skip the failed step and advance to the next-eligible step.                                 | 5.2    |
+| `route-to-fixer`  | Dispatch the `bmad-step-fixer` sub-agent to repair the artifact, then re-run the verifier.  | 5.3    |
+| `escalate`        | Halt the iteration with an actionable error (the **plugin default** — Story 5.4).           | 5.4    |
+
+**Absent-step fallback**: when a step is NOT listed in
+`failurePolicies:`, the resolver falls back to the plugin default
+`escalate` per architecture line 499 ("escalate is the safest fallback
+when no per-step policy is set"). This is the conservative behaviour —
+the user opts in to the non-default modes per step.
+
+**Priority order at the dispatch site** (codified in
+`src/commands/loop/run.ts`, `src/commands/next/run.ts`, and
+`src/commands/next/verify-and-advance.ts` per OQ-5):
+
+1. `--auto-fix` flag → `route-to-fixer` (overrides everything; one-run scope per AC line 1144 verbatim).
+2. `config.failurePolicies[step]` (the `failurePolicies:` block lookup; this section's responsibility).
+3. plugin default `escalate` (resolver fallback when no entry is set).
+
+The `--auto-fix` priority is unconditional — when the user supplies
+`/bmad-loop --auto-fix`, every iteration's verifier failure routes to
+the fixer regardless of any per-step `failurePolicies:` entry.
+Subsequent invocations without `--auto-fix` revert to the per-step
+config (the override is NEVER persisted to `state.yaml` per AR8 + AR13).
+
+**Per-step ID format**: BMAD step IDs verbatim (e.g.,
+`bmad-create-story`, `bmad-dev-story`, `bmad-code-review`,
+`bmad-retrospective`); case-sensitive lookup per OQ-4. The user is
+responsible for matching the exact step ID per the BMAD method
+documentation. A typo in the step ID falls through silently to the
+escalate plugin default (no warning — the resolver assumes the user
+intends "no opt-in" for keys that do not match a real step).
+
+**Invalid policy values handling** (per OQ-10): when the user authors
+an invalid policy string (e.g., `failurePolicies: { dev-story: nonsense-policy }`),
+the Zod parse REJECTS the config with a structured `ConfigError`:
+
+> See bmad-stepper.config.yaml; run /bmad-next --doctor to validate the file against the schema.
+
+The user-facing failure mode: edit `bmad-stepper.config.yaml` with a
+typo → `/bmad-next` or `/bmad-loop` EXIT IMMEDIATELY with the
+ConfigError → user fixes the typo → loop resumes. Explicit failure
+mode > silent fallback (typos surface immediately, not at the next
+verifier failure).
+
+**Example config block**:
+
+```yaml
+# bmad-stepper.config.yaml
+schemaVersion: 1
+paths:
+  state: _bmad-output/.stepper/state.yaml
+  runs: _bmad-output/.stepper/runs
+  staging: _bmad-output/.stepper/staging
+  telemetry: _bmad-output/.stepper/telemetry
+telemetry:
+  enabled: false
+failurePolicies:
+  bmad-dev-story: retry          # implementation: retry up to 3 attempts
+  bmad-code-review: route-to-fixer  # critique: dispatch fixer on failure
+  bmad-test-design: skip         # tolerate: skip if verifier fails
+  # All other steps fall through to the escalate plugin default.
+```
+
+**Story 6.1 cross-story coordination**: the `failurePolicies:` config
+block is RESOLVED by `src/failure-ux/resolve-policy.ts` (Story 5.6
+SCHEMA + RESOLVER). The FILE LOADER that reads
+`bmad-stepper.config.yaml` from disk lands in Story 6.1 (the FIRST
+story of Epic 6). Until Story 6.1 lands, production callers invoke
+the resolver with `undefined` config → escalate-default for every step.
+Tests pass synthetic config objects directly via the
+`LoopOpts.config` / `RunNextOptions.config` /
+`RunVerifyAndAdvanceOptions.config` test seams.
+
+**Cross-references**: FR31 (per-step failure policy) + FR32
+(actionable-error contract) + FR46 (single-line main-thread output) +
+NFR-M2 (errors-as-primary-UX). See `src/failure-ux/index.ts` for the
+`FailurePolicy` closed union; `src/schemas/config.ts` for
+`FailurePolicySchema` + `FailurePoliciesSchema`; `src/failure-ux/resolve-policy.ts`
+for the resolver's pure-function semantics.
+
+### --interactive flag (Story 5.5 — per-step pause)
+
+`/bmad-loop --interactive` enables a per-step supervisory pause. The
+user approves EACH iteration before dispatch — the supervisor confirms
+that the planned step should run, then types `y` to proceed (anything
+else halts). The flag is `/bmad-loop`-ONLY per AC line 1123 verbatim
+(epics.md); `/bmad-next` does NOT accept `--interactive` (the per-
+iteration `runNext` invocations inside the loop do NOT receive the
+flag; the slash-command `/bmad-next` argv parser is unchanged).
+
+**Prompt-emit + read mechanism**: BEFORE each iteration's dispatch (and
+AFTER the SIGINT top-of-while check + the shouldStop call so stop
+conditions like `--max-iters` take priority), the runner emits a single
+AR9 `"report"` JSON line to stdout:
+
+```
+{"action":"report","message":"Continue? [y/N]","exitCode":0}
+```
+
+Then reads ONE LINE from stdin via `Bun.stdin` (Bun-native async iterator;
+interruptible by SIGINT per OQ-1 + OQ-3). Tests inject the response via
+the `interactiveStdinOverride` LoopOpts seam (mirrors Story 4.9
+`signalOverride` pattern).
+
+**Response parsing** (per OQ-4 case-insensitive strict-`y`):
+- `y`, `Y`, ` y `, ` Y ` (with optional surrounding whitespace) → continue
+  to runNextFn dispatch.
+- ANYTHING ELSE — `n`, `N`, empty (just Enter), blank/whitespace,
+  multi-character like `yes`, garbage like `hello` — halts with the new
+  `manual-interactive-halt` StopReason. The recorded `response` field
+  preserves the user's literal input (pre-trim) for forensic visibility.
+
+**Exit message** (per AC-3 + Story 4.10 unified two-line format):
+
+```
+Loop exited: manual (interactive halt) — --resume available.
+Snapshot: <sha>. Resume: /bmad-next --resume.
+```
+
+The em-dash in `manual (interactive halt) — --resume available` is
+U+2014 (consistent with Story 4.6 `error-stop` and Story 4.9
+`manual-sigint` precedents). When the project has no snapshot
+(`state.lastSnapshot === null` — non-Git per Story 1.8), only the
+first line is emitted (snapshot-null fallback per Story 4.10).
+
+**Exit code**: `0` (clean exit per FR53 — the user requested the halt
+deliberately; this is NOT a failure path).
+
+**SIGINT cooperation per AC-4** (per OQ-3 decision):
+- SIGINT BEFORE prompt → top-of-while SIGINT check at run.ts:1089
+  catches; surfaces `manual-sigint`.
+- SIGINT DURING prompt → Bun.stdin async iterator interrupts; the
+  runner's post-stdin SIGINT re-check catches and surfaces
+  `manual-sigint` (NOT `manual-interactive-halt`).
+- SIGINT AFTER `y` response → existing iteration-body SIGINT short-
+  circuit fires.
+- SIGINT AFTER N response → loop has already broken via
+  `manual-interactive-halt`; further SIGINT is moot.
+
+**Interaction with other flags**:
+- `--auto-fix` (Story 5.3): does NOT re-prompt for fixer dispatches in
+  v0.1 (the fixer is part of the same iteration; the user is prompted
+  ONCE per main-step). Forward-tracker for Story 6.x: optional
+  `--interactive=fixer` to also gate fixer dispatches.
+- `--plan-first` (Story 4.7): short-circuits BEFORE the iteration body;
+  `--interactive` is a no-op in plan-mode (no iterations dispatch).
+- `--max-iters` / `--time-budget` / `--token-budget` / `--until-*` /
+  `--next-story` / `--phase-end` / `--epic-end` (Stories 4.1-4.10):
+  these stop conditions take PRIORITY over the interactive prompt
+  (the prompt fires AFTER shouldStop so a max-iters cap fires natively
+  without prompting one extra time). When the user keeps responding
+  `y`, the loop exits via the natural stop condition.
+- `--continue-on-error` (Story 4.6): the prompt fires BEFORE dispatch,
+  so the failure-policy override (continue vs stop) is orthogonal.
+
+**Claude Code chat adaptation** (per OQ-2 decision; Story 6.x
+forward-tracker): v0.1 implements the SINGLE-PROCESS-LOOP variant where
+the runner internally awaits stdin via `Bun.stdin`. This works
+correctly in true terminal contexts (CI runners, shell scripts that
+pipe input via `echo "y" | /bmad-loop --interactive`). The Claude Code
+chat-adaptation pattern — where the slash-command markdown surfaces the
+prompt + accepts the user's chat response + re-invokes the runner with
+the response — requires additional state-stash + resume-from-prompt
+machinery (where do we persist the in-flight loop state across Bash
+invocations?) and is DEFERRED to Story 6.x for design alongside
+telemetry + config consolidation. v0.1 Claude Code users see the prompt
+JSON-line emit on stdout but the slash-command's markdown does not (in
+v0.1) capture the user's chat response and pipe it back. Use
+`/bmad-loop --interactive` from a true terminal context for v0.1.
+
+Cross-references: FR30 (`--interactive` per-step pause/control),
+NFR-R5 (graceful exit on user input), AR9 (single AR9 stdout JSON line
+per command invocation), AR34 (slash-command markdown protocol
+extended). For the new `manual-interactive-halt` StopReason variant,
+see `src/commands/loop/run.ts` (Story 5.5). For the
+`interactiveStdinOverride` test seam, see the LoopOpts interface.
+
+### Skip failure mode (`--skip` is `/bmad-next`-only — Story 5.2)
+
+`/bmad-loop` does NOT accept the `--skip <step>` flag. Skip is a
+`/bmad-next`-only flag for advancing past a persistently-failing step
+when the user wants to give up on it (per FR28 + epic AC line 1075-
+1077). The user invokes:
+
+```
+/bmad-next --skip <step> --resume
+```
+
+`/bmad-loop` continues to halt on verifier failure per the existing
+failure-policy resolution (default `escalate` until Story 5.6 wires
+the per-step `failurePolicies:` config block). When Story 5.6 lands,
+configuring `failurePolicies: { <step>: skip }` in
+`bmad-stepper.config.yaml` will trigger automatic skip behaviour for
+the matched step inside the `/bmad-loop` runner — but for v0.1 the
+loop runner has no skip logic.
+
+See `commands/bmad-next.md` §`--skip` flag (Story 5.2 — Epic 5 skip
+mode) for the full skip-mode reference: cross-validation contract
+(`--skip` requires `--resume`), state mutation semantic
+(`runHistory[].skipped: true` + lastSuccessfulStep advance +
+lastAttempted clear), SIGINT cooperation, and idempotent re-skip
+protection per OQ-7.
+
 The transcript pair is STILL written on every per-iteration halt path
 (Story 2.6 finally block via `verify-and-advance.ts`). Users can run
 `/bmad-next --watch` (Story 3.9) or inspect
@@ -554,8 +1122,12 @@ execution model — main thread, Bun core, sub-agents), §P6 (slash-command
 markdown patterns — frontmatter shape + body pattern + tool
 restrictions), §AR34 (Bash → JSON line read → Task → Bash
 verify-and-advance pattern, EXTENDED for the loop wrapper per AC-3 of
-Story 4.1), §line 1660 (AR9 protocol), and PRD FR1, FR8, FR9, FR19,
-FR53, FR54, NFR-P1, NFR-S2, NFR-S5, NFR-R1, NFR-R4.
+Story 4.1), §line 1660 (AR9 protocol), and PRD FR1, FR8, FR9, FR19, FR24,
+FR26, FR28, FR29, FR30, FR31, FR32, FR53, FR54, NFR-M2 (Story 5.4 —
+actionable hint, no stack trace on main thread), NFR-P1, NFR-S2, NFR-S5,
+NFR-R1, NFR-R2, NFR-R4, NFR-R5 (Story 5.5 — `--interactive` graceful
+exit on user input), NFR-R8 (Story 5.4 completes 4-of-4 failure-UX
+modes integration test coverage).
 
 For the lock-free pre-dispatch composer used per iteration, see
 `src/commands/next/run.ts` (Story 2.4). For the lock-acquiring

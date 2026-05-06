@@ -36,7 +36,7 @@
  * | interactive     | boolean().optional()        | 5.5      |
  * | autoFix         | boolean().optional()        | 5.3      |
  * | planFirst       | boolean().optional()        | 4.7      |
- * | checkpointEach  | enum(story|epic|phase)      | 4.8      |
+ * | checkpointEach  | enum(<5 phase values>)      | 4.8      | ← wired in 4.8
  *
  * Architecture cross-references:
  * - architecture.md §G CLI Surface & Errors (lines 553–629).
@@ -78,8 +78,9 @@ export type { ParseError, Result } from "../next/args.ts";
  * `untilStory` regex `/^\d+\.\d+$/` matches `3.2`, `10.5`, `1.10`, etc.;
  * rejects `3` (no minor), `3.2.1` (three parts), `a.b` (non-numeric).
  *
- * `checkpointEach` enum allows `"story"` | `"epic"` | `"phase"` per
- * Story 4.8 contract.
+ * `checkpointEach` enum allows `"analysis"` | `"planning"` |
+ * `"solutioning"` | `"implementation"` | `"retro"` per Story 4.8 contract
+ * — the 5 `Phase` values from `src/dag/types.ts:30-35`.
  */
 export const LoopArgsSchema = z
   .object({
@@ -101,7 +102,9 @@ export const LoopArgsSchema = z
     interactive: z.boolean().optional(),
     autoFix: z.boolean().optional(),
     planFirst: z.boolean().optional(),
-    checkpointEach: z.enum(["story", "epic", "phase"]).optional(),
+    checkpointEach: z
+      .enum(["analysis", "planning", "solutioning", "implementation", "retro"])
+      .optional(),
   })
   .strict();
 

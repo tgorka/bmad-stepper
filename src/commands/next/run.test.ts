@@ -29,6 +29,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { DispatchActionV1Schema } from "../../schemas/dispatch-protocol.ts";
+import { parseNextArgs } from "./args.ts";
 import { runNext } from "./run.ts";
 
 let tmp = "";
@@ -3911,5 +3912,248 @@ describe("runNext — Story 3.10 read-only flags map to action=report", () => {
     // The sentinel marker is present (machine-recognisable; never refers
     // to a real path).
     expect(lockSource).toContain("<no-op:skipAcquire>");
+  });
+});
+
+// ─── Story 5.2 — --skip <step> flag handling (SK_52_RUN_*) ────────────────
+
+describe("runNext — Story 5.2 --skip flag (SK_52_RUN_*)", () => {
+  /**
+   * Helper: seed state with a halted lastAttempted so --skip + --resume
+   * has a target to skip. Mirrors the writeResumeState helper from the
+   * Story 3.2 --resume tests.
+   */
+  async function writeSkipState(opts: {
+    skippedStep: string;
+    epic: number;
+    story: string;
+  }): Promise<string> {
+    const stateObj: Record<string, unknown> = {
+      schemaVersion: 1,
+      project: { name: "stepper-test", bmadVersion: "6.5.0" },
+      lastSuccessfulStep: {
+        step: "bmad-create-prd",
+        epic: 1,
+        story: "1.0",
+        completedAt: "2026-04-28T10:00:00Z",
+      },
+      lastAttempted: {
+        step: opts.skippedStep,
+        epic: opts.epic,
+        story: opts.story,
+        attemptedAt: "2026-04-29T11:00:00Z",
+      },
+      lastFailureReason: {
+        code: "VERIFIER_FAILURE",
+        message: "verifier failed; user is giving up via --skip",
+        hint: "Run /bmad-next --resume after fixing the underlying issue.",
+        runId: "abc123",
+      },
+      runHistory: [],
+      checkpoints: [],
+    };
+    return writeMinimalState(Bun.YAML.stringify(stateObj));
+  }
+
+  it("SK_52_RUN_1: --skip alone (no --resume) → SkipRequiresResumeError → exit 2 + AC-verbatim hint", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--skip", "bmad-dev-story"],
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.action.action).toBe("halt");
+    if (result.action.action !== "halt") return;
+    // BYTE-IDENTICAL hint per AC line 1080.
+    expect(result.action.message).toBe(
+      "--skip requires --resume to advance state. Run /bmad-next --skip <step> --resume.",
+    );
+  });
+
+  it("SK_52_RUN_2: --skip <step> --resume routes through dispatch (action=dispatch, exit 0)", async () => {
+    const statePath = await writeSkipState({
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--skip", "bmad-dev-story", "--resume"],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    // The dispatch carries the lastAttempted payload that Layer 1
+    // forwards to verify-and-advance.ts; the user-supplied --skip
+    // value is the same step, so the step name on the dispatch matches.
+    expect(result.action.lastAttempted?.step).toBe("bmad-dev-story");
+  });
+
+  it('SK_52_RUN_3: --skip "" (empty value) + --resume routes through (parser accepts; runner-tier defers to verify-and-advance.ts mismatch check)', async () => {
+    // Per Story 1.7 line 70 forward-dep precedent, empty-string values
+    // are accepted by the parser; the runner enforces the cross-
+    // validation (--skip alone must throw); the actual mismatch with
+    // state.lastAttempted.step lands at verify-and-advance.ts (OQ-6).
+    // With --resume present, --skip "" passes the cross-validation;
+    // the dispatch goes through the resume path.
+    const statePath = await writeSkipState({
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--skip", "", "--resume"],
+    });
+    // With --resume, the dispatch happens; the empty-string skip value
+    // would be caught at the Layer 2 mismatch check in
+    // verify-and-advance.ts (covered by SK_52_VA_2).
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+  });
+
+  it("SK_52_RUN_4: SK_52_RUN_2 result.exitCode === 0 + result.action.action === 'dispatch' on the routing path", async () => {
+    const statePath = await writeSkipState({
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--skip", "bmad-dev-story", "--resume"],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+  });
+
+  it("SK_52_RUN_5: the exit-2 hint matches the AR22 regex /^.*(Run|See|Try|Check) /", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--skip", "bmad-dev-story"],
+    });
+    expect(result.action.action).toBe("halt");
+    if (result.action.action !== "halt") return;
+    expect(result.action.message).toMatch(/^.*(Run|See|Try|Check) /);
+  });
+
+  it("SK_52_RUN_6: --skip + --resume + --dry-run combination (forward-tracker per OQ-9 — v0.1 routes through dispatch flow)", async () => {
+    // Per OQ-9 v0.1 conservative: --skip + --dry-run goes through the
+    // dry-run preview path (the runner emits action: report with the
+    // planned skip preview). Story 5.x or 6.x may extend the preview
+    // with skip-specific framing; v0.1 ships the existing dry-run
+    // output augmented by the resume-target step (which == args.skip).
+    const statePath = await writeSkipState({
+      skippedStep: "bmad-dev-story",
+      epic: 5,
+      story: "5.2",
+    });
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--skip", "bmad-dev-story", "--resume", "--dry-run"],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("report");
+  });
+});
+
+// ─── Story 5.3 — --auto-fix flag handling (RTF_53_RUN_*) ──────────────────
+
+describe("runNext — Story 5.3 --auto-fix flag (RTF_53_RUN_*)", () => {
+  it("RTF_53_RUN_1: --auto-fix routes through dispatch + sets resolvedFailurePolicy='route-to-fixer'", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming", "--auto-fix"],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+    // Story 5.3: --auto-fix overrides per-step policy to "route-to-fixer"
+    // for one run (architecture line 499).
+    expect(result.resolvedFailurePolicy).toBe("route-to-fixer");
+  });
+
+  it("RTF_53_RUN_2: --auto-fix + --resume accepted at the parser tier (combination not rejected by Zod or cross-validation)", async () => {
+    // The combination --auto-fix + --resume is parser-accepted (both
+    // flags are independent — no enforceMutuallyExclusiveFlags rule
+    // forbids it). Validated via parseNextArgs directly to isolate the
+    // parser tier from runtime concerns (state coherence, lock acquire,
+    // etc. are tested separately via the verify-and-advance.ts seam).
+    const result = parseNextArgs(["--auto-fix", "--resume"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.autoFix).toBe(true);
+    expect(result.value.resume).toBe(true);
+  });
+
+  it("RTF_53_RUN_3: --auto-fix overrides any incoming failurePolicyOverride from RunNextOptions (per architecture line 499)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming", "--auto-fix"],
+      // Even when test-injection seam supplies "retry", --auto-fix
+      // overrides to "route-to-fixer" unconditionally.
+      failurePolicyOverride: "retry",
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+    expect(result.resolvedFailurePolicy).toBe("route-to-fixer");
+  });
+
+  it("RTF_53_RUN_4: --auto-fix + --dry-run produces report-mode output (forward-tracker per OQ-6 dry-run preview)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming", "--auto-fix", "--dry-run"],
+    });
+    expect(result.exitCode).toBe(0);
+    // Per the existing dry-run path (Story 1.7 / 3.3), --dry-run
+    // produces a report-mode output describing the planned dispatch.
+    // Story 5.3 v0.1 conservative: the dry-run preview shows the
+    // dispatch with --auto-fix planned; full report-mode preview with
+    // planned-fix-attempt enumeration is forward-tracker for Story 6.x.
+    expect(result.action.action).toBe("report");
+  });
+
+  it("RTF_53_RUN_5: result.exitCode === 0 + result.action.action === 'dispatch' on the routing path", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming", "--auto-fix"],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+  });
+
+  it("RTF_53_RUN_6: --auto-fix=false → autoFix === false → resolvedFailurePolicy preserves opts.failurePolicyOverride (no override)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming", "--auto-fix=false"],
+      failurePolicyOverride: "retry",
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+    // With --auto-fix=false the override is NOT applied; the
+    // RunNextOptions.failurePolicyOverride passes through untouched.
+    expect(result.resolvedFailurePolicy).toBe("retry");
+  });
+
+  it("RTF_53_RUN_7: omitted --auto-fix → resolvedFailurePolicy is 'escalate' (Story 5.6 — resolver fallback when no per-step config)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-brainstorming"],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+    // Story 5.6 (FR31): no --auto-fix + no failurePolicyOverride + no
+    // opts.config → resolveFailurePolicy(step, undefined) returns the
+    // plugin default "escalate" per architecture line 499 ("escalate is
+    // the safest fallback when no per-step policy is set"). Pre-Story-5.6
+    // this returned undefined; Story 5.6 wires the production resolver
+    // path so the field is now ALWAYS populated when the runner reaches
+    // the dispatch composition (NextResult.resolvedFailurePolicy).
+    expect(result.resolvedFailurePolicy).toBe("escalate");
   });
 });

@@ -81,7 +81,7 @@ describe("LoopArgsSchema — schema inventory + defaults", () => {
       interactive: true,
       autoFix: false,
       planFirst: true,
-      checkpointEach: "story" as const,
+      checkpointEach: "implementation" as const,
     };
     const result = LoopArgsSchema.safeParse(populated);
     expect(result.success).toBe(true);
@@ -204,7 +204,7 @@ describe("parseLoopArgs — happy path", () => {
       "--auto-fix",
       "--plan-first",
       "--checkpoint-each",
-      "story",
+      "implementation",
     ]);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -221,7 +221,7 @@ describe("parseLoopArgs — happy path", () => {
       interactive: true,
       autoFix: true,
       planFirst: true,
-      checkpointEach: "story",
+      checkpointEach: "implementation",
     });
   });
 
@@ -232,8 +232,14 @@ describe("parseLoopArgs — happy path", () => {
     expect(result.value.autoFix).toBe(true);
   });
 
-  it("--checkpoint-each accepts story|epic|phase", () => {
-    for (const value of ["story", "epic", "phase"] as const) {
+  it("--checkpoint-each accepts each of the 5 Phase values (Story 4.8)", () => {
+    for (const value of [
+      "analysis",
+      "planning",
+      "solutioning",
+      "implementation",
+      "retro",
+    ] as const) {
       const result = parseLoopArgs(["--checkpoint-each", value]);
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -244,6 +250,13 @@ describe("parseLoopArgs — happy path", () => {
   it("--checkpoint-each rejects invalid enum values", () => {
     const result = parseLoopArgs(["--checkpoint-each", "invalid"]);
     expect(result.ok).toBe(false);
+  });
+
+  it("--checkpoint-each rejects legacy 3-value enum (story|epic|phase) per Story 4.8", () => {
+    for (const value of ["story", "epic", "phase"] as const) {
+      const result = parseLoopArgs(["--checkpoint-each", value]);
+      expect(result.ok).toBe(false);
+    }
   });
 
   it("preserves order-independence between flags", () => {
@@ -306,5 +319,38 @@ describe("parseLoopArgs — error paths", () => {
   it("rejects --until-story with no value (next is another flag)", () => {
     const result = parseLoopArgs(["--until-story", "--max-iters", "1"]);
     expect(result.ok).toBe(false);
+  });
+});
+
+// ─── Story 5.5 — IA_55_PARSE_*: --interactive flag parsing (defence-in-depth) ─
+
+describe("parseLoopArgs — IA_55_PARSE_* (Story 5.5: --interactive flag parsing)", () => {
+  it("IA_55_PARSE_1: --interactive parses to interactive: true", () => {
+    const result = parseLoopArgs(["--interactive"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.interactive).toBe(true);
+  });
+
+  it("IA_55_PARSE_2: --interactive combined with --max-iters parses both", () => {
+    const result = parseLoopArgs(["--interactive", "--max-iters", "5"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.interactive).toBe(true);
+    expect(result.value.maxIters).toBe(5);
+  });
+
+  it("IA_55_PARSE_3: --interactive true (defence-in-depth boolean shorthand) parses to true", () => {
+    const result = parseLoopArgs(["--interactive", "true"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.interactive).toBe(true);
+  });
+
+  it("IA_55_PARSE_4: --interactive false parses to false", () => {
+    const result = parseLoopArgs(["--interactive", "false"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.interactive).toBe(false);
   });
 });
