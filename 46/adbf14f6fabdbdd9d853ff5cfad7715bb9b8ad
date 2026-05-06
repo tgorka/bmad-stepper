@@ -1,0 +1,19 @@
+src/io/no-write-outside-scope.test.ts
+  s_cc5492ea889231::t_c5aa05c6dd8e46 72-80,82,88-92,97-101,106-114,121,123,127-130,133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "46adbf14f6fabdbdd9d853ff5cfad7715bb9b8ad",
+  "prompts": {},
+  "sessions": {
+    "s_cc5492ea889231": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63f3df9b-5bf5-43d5-a7df-99dd07c71b81",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
