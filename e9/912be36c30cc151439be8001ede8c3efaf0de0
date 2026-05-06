@@ -1,0 +1,85 @@
+_bmad-output/implementation-artifacts/6-10-repo-files-v0-1-0-marketplace-release.md
+  e696f458742e2450 1-1933
+CODE_OF_CONDUCT.md
+  e696f458742e2450 1-26
+.github/workflows/release.yml
+  e696f458742e2450 1-44
+.github/workflows/bmad-compat.yml
+  e696f458742e2450 1-57
+docs/examples/cold-start-return.md
+  e696f458742e2450 1-25
+docs/examples/single-step.md
+  e696f458742e2450 1-32
+CHANGELOG.md
+  e696f458742e2450 1-29
+docs/examples/skip-on-failure.md
+  e696f458742e2450 1-31
+docs/examples/state-export-for-ci.md
+  e696f458742e2450 1-51
+examples/bmad-6.4-overrides.yaml
+  e696f458742e2450 1-30
+AGENTS.md
+  e696f458742e2450 1-95
+docs/examples/overnight-loop.md
+  e696f458742e2450 1-36
+.github/ISSUE_TEMPLATE/feature.md
+  e696f458742e2450 1-28
+docs/examples/halt-recovery.md
+  e696f458742e2450 1-35
+_bmad-output/implementation-artifacts/sprint-status.yaml
+  e696f458742e2450 2-5,41,105,115-116
+examples/bmad-stepper.config.yaml
+  e696f458742e2450 1-72
+.github/workflows/ci.yml
+  e696f458742e2450 23-24
+LICENSE
+  e696f458742e2450 1-21
+.github/ISSUE_TEMPLATE/bug.md
+  e696f458742e2450 1-37
+SECURITY.md
+  e696f458742e2450 1-44
+.github/ISSUE_TEMPLATE/bmad-compat.md
+  e696f458742e2450 1-34
+package.json
+  e696f458742e2450 3
+.changeset/v0-1-0-marketplace-release.md
+  e696f458742e2450 1-11
+.claude-plugin/plugin.json
+  e696f458742e2450 3
+examples/scripting/nightly-loop.sh
+  e696f458742e2450 1-27
+examples/scripting/ci-state-check.sh
+  e696f458742e2450 1-49
+_bmad-output/implementation-artifacts/epic-6-retrospective.md
+  e696f458742e2450 1-628
+docs/examples/doctor-diagnostic.md
+  e696f458742e2450 1-37
+README.md
+  e696f458742e2450 63-69,71,91,94,98-101
+CONTRIBUTING.md
+  e696f458742e2450 1-120
+.github/PULL_REQUEST_TEMPLATE.md
+  e696f458742e2450 1-36
+.github/dependabot.yml
+  e696f458742e2450 1-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "e9912be36c30cc151439be8001ede8c3efaf0de0",
+  "prompts": {
+    "e696f458742e2450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f5c15713-e553-4ddf-ad49-69a9d3bdef53",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka",
+      "messages": [],
+      "total_additions": 3633,
+      "total_deletions": 236,
+      "accepted_lines": 3619,
+      "overriden_lines": 0
+    }
+  }
+}
