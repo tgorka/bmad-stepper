@@ -1,0 +1,23 @@
+src/integration/no-network-on-main.test.ts
+  s_cc5492ea889231::t_97ac1e226e50d5 37,131-145,149-151
+src/commands/loop/run.test.ts
+  s_cc5492ea889231::t_57b1e69a83b374 52
+  s_cc5492ea889231::t_c5e14cdc30e55b 4036,4054
+  s_cc5492ea889231::t_81619bbf1ba82e 4040,4043-4045,4058,4060-4061,4063
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "97961022551e4e98a320ceffa9a2dd4037afe223",
+  "prompts": {},
+  "sessions": {
+    "s_cc5492ea889231": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "63f3df9b-5bf5-43d5-a7df-99dd07c71b81",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
