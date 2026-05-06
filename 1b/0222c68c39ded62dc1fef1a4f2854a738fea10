@@ -1,0 +1,33 @@
+src/commands/doctor/checks.ts
+  s_ed4623cbe2b9f9::t_66e3be7d2d8565 477
+  s_ed4623cbe2b9f9::t_f59790ca98ad03 57,60
+  s_ed4623cbe2b9f9::t_11c6d3cbb7af53 465-476,478-484
+src/commands/next/run.ts
+  s_ed4623cbe2b9f9::t_37c14076919002 100
+  s_ed4623cbe2b9f9::t_d10bceb2d3eff0 1759-1760
+  s_ed4623cbe2b9f9::t_703ce3c3c43578 2181,2189-2193
+  s_ed4623cbe2b9f9::t_6639d38818b347 1992
+  s_ed4623cbe2b9f9::t_c33a28614a48df 1823-1824
+  s_ed4623cbe2b9f9::t_1dc80b87711bcb 2135-2136,2141-2145
+  s_ed4623cbe2b9f9::t_91ae3db0480e99 1922-1923
+src/dag/build.ts
+  s_ed4623cbe2b9f9::t_c9a5edfcf5f46c 946-972
+src/config/index.ts
+  s_ed4623cbe2b9f9::t_4b57ae905581cc 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "1b0222c68c39ded62dc1fef1a4f2854a738fea10",
+  "prompts": {},
+  "sessions": {
+    "s_ed4623cbe2b9f9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75233bb3-83f9-4b23-b3d5-95c1d753b767",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
