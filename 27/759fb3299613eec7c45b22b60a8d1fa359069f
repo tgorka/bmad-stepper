@@ -1,0 +1,23 @@
+src/commands/loop/run.ts
+  s_ed4623cbe2b9f9::t_8d3fe5377be987 59,559-600,1492-1507,1510-1514
+src/commands/loop/run.test.ts
+  s_ed4623cbe2b9f9::t_d7793479698d89 54,60,4000-4051,4055-4063,4068-4102
+  s_ed4623cbe2b9f9::t_4e174f2d9cb729 4052-4054,4064-4067
+  s_ed4623cbe2b9f9::t_060eb9e3b4a28a 4103-4105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "27759fb3299613eec7c45b22b60a8d1fa359069f",
+  "prompts": {},
+  "sessions": {
+    "s_ed4623cbe2b9f9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75233bb3-83f9-4b23-b3d5-95c1d753b767",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
