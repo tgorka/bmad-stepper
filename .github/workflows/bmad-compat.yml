@@ -43,7 +43,7 @@ jobs:
 
       - name: Open issue on incompatibility
         if: failure() || steps.doctor.outputs.DOCTOR_EXIT != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const title = `[BMAD-COMPAT] BMAD upstream changed; weekly compat check failed`;
