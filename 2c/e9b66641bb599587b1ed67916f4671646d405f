@@ -1,0 +1,14 @@
+docs/architecture.md
+  ai_agent 1-399
+README.md
+  e696f458742e2450 63-69,71,91,94,98-101
+  ai_agent 92-93
+docs/bmad-compatibility.md
+  ai_agent 1-194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "2ce9b66641bb599587b1ed67916f4671646d405f",
+  "prompts": {}
+}
