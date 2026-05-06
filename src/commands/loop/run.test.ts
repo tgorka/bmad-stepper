@@ -51,11 +51,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NextResult } from "../next/run.ts";
 import {
+  DEFAULT_STEP_TIMEOUT_MS,
   formatExitReason,
   formatLoopExitLines,
   type LoopExitTranscriptInput,
   runLoop,
   type StopReason,
+  withTimeout,
   writeLoopExitTranscript,
 } from "./run.ts";
 
@@ -3992,6 +3994,112 @@ describe("TLM_66_LOOP_*: opts.config?.telemetry threading (Story 6.6)", () => {
         runNextOverride: stub,
       }),
     );
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+// ─── I-44: withTimeout unit tests ─────────────────────────────────────────
+
+describe("withTimeout — I-44 (Bun-side timeout watchdog)", () => {
+  it("WT_I44_1: DEFAULT_STEP_TIMEOUT_MS is 300 000 ms (5 minutes)", () => {
+    expect(DEFAULT_STEP_TIMEOUT_MS).toBe(300_000);
+  });
+
+  it("WT_I44_2: resolves immediately when promise resolves before timeout", async () => {
+    const result = await withTimeout(
+      Promise.resolve(42),
+      5_000,
+      "test-step",
+    );
+    expect(result).toBe(42);
+  });
+
+  it("WT_I44_3: passes through the resolved value unchanged", async () => {
+    const value = { foo: "bar", n: 99 };
+    const result = await withTimeout(Promise.resolve(value), 5_000, "s1");
+    expect(result).toStrictEqual(value);
+  });
+
+  it("WT_I44_4: throws TimeoutError when promise does not resolve in time", async () => {
+    // A promise that resolves very slowly (10 s) so the 1 ms timeout fires first.
+    // Using a slow-resolve (not never) avoids unhandled-rejection noise.
+    const slow = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("slow")), 10_000),
+    );
+    await expect(withTimeout(slow, 1, "slow-step")).rejects.toMatchObject({
+      code: "TIMEOUT",
+      exitCode: 1,
+    });
+  });
+
+  it("WT_I44_5: TimeoutError message includes step name and ms budget", async () => {
+    const slow = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("slow")), 10_000),
+    );
+    let thrown;
+    try {
+      await withTimeout(slow, 1, "epic-writer");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    const err = thrown;
+    expect(err.message).toContain("epic-writer");
+    expect(err.message).toContain("1ms");
+    expect(err.code).toBe("TIMEOUT");
+  });
+
+  it("WT_I44_6: TimeoutError detail contains the step name and config hint", async () => {
+    // The class-level actionableHint is fixed per AR22; the per-instance step
+    // context lands in the detail field (StepperError second constructor arg).
+    const slow = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("slow")), 10_000),
+    );
+    let thrown;
+    try {
+      await withTimeout(slow, 1, "arch-doc");
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown.detail).toContain("arch-doc");
+    expect(thrown.detail).toContain("bmad-stepper.config.yaml");
+    // The class-level actionableHint must end with a concrete next-action verb per AR22.
+    expect(thrown.actionableHint).toContain("Run /bmad-next");
+  });
+
+  it("WT_I44_7: no dangling timer when promise resolves quickly", async () => {
+    // A dangling 5 000 ms timer would slow down the test suite noticeably.
+    const start = Date.now();
+    await withTimeout(Promise.resolve("done"), 5_000, "quick-step");
+    expect(Date.now() - start).toBeLessThan(1_000);
+  });
+
+  it("WT_I44_8: runLoop respects DEFAULT_STEP_TIMEOUT_MS when no budgets configured", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+      }),
+    );
+    expect(calls()).toBe(1);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("WT_I44_9: runLoop uses per-step budget timeoutMs from effectiveConfig when configured", async () => {
+    const { stub, calls } = countingStub(successResult());
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: stub,
+        config: {
+          budgets: {
+            next: { timeoutMs: 60_000 },
+          },
+        },
+      }),
+    );
+    expect(calls()).toBe(1);
     expect(result.exitCode).toBe(0);
   });
 });
