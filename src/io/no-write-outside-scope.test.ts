@@ -95,10 +95,7 @@ describe("no-write-outside-scope — forbidden roots", () => {
 
   it("rejects writes under ~/.claude/plugins/ (tilde literal, no expansion)", async () => {
     await expect(
-      atomicWrite(
-        path.join(originalCwd, "~/.claude/plugins/x.json"),
-        "evil",
-      ),
+      atomicWrite(path.join(originalCwd, "~/.claude/plugins/x.json"), "evil"),
     ).rejects.toBeInstanceOf(ScopeViolationError);
   });
 
