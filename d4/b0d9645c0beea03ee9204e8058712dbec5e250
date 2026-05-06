@@ -1,0 +1,24 @@
+src/telemetry/rotate.ts
+  053a814827ec1703 1-38,45-66,68,73-118,126-200
+  s_ed4623cbe2b9f9::t_fb1532a7a475ea 39-44
+  s_ed4623cbe2b9f9::t_f43fcaecd4e4aa 67,69-72
+  s_ed4623cbe2b9f9::t_eec14d7e9e8ec1 119-125
+src/schemas/dispatch-spec.ts
+  s_ed4623cbe2b9f9::t_7ae7171b45c389 16-17,26-39,47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "d4b0d9645c0beea03ee9204e8058712dbec5e250",
+  "prompts": {},
+  "sessions": {
+    "s_ed4623cbe2b9f9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75233bb3-83f9-4b23-b3d5-95c1d753b767",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
