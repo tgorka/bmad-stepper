@@ -97,6 +97,7 @@
  */
 
 import * as path from "node:path";
+import { getStepConfig } from "../../config/step-config.ts";
 import { build, type DagAdjacency, type DagNode } from "../../dag/index.ts";
 import type { Phase } from "../../dag/types.ts";
 import {
@@ -1755,7 +1756,8 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         ...(opts?.overridesPath !== undefined
           ? { overridesPath: opts.overridesPath }
           : {}),
-        ...(effectiveConfig?.overrides !== undefined
+        ...(effectiveConfig?.overrides !== undefined &&
+        args.noOverrides !== true
           ? { overrides: effectiveConfig.overrides }
           : {}),
       });
@@ -1818,7 +1820,8 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         projectRoot: opts?.projectRoot,
         pluginDir: opts?.pluginDir,
         overridesPath: opts?.overridesPath,
-        ...(effectiveConfig?.overrides !== undefined
+        ...(effectiveConfig?.overrides !== undefined &&
+        args.noOverrides !== true
           ? { overrides: effectiveConfig.overrides }
           : {}),
       });
@@ -1916,7 +1919,8 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         projectRoot: opts?.projectRoot,
         pluginDir: opts?.pluginDir,
         overridesPath: opts?.overridesPath,
-        ...(effectiveConfig?.overrides !== undefined
+        ...(effectiveConfig?.overrides !== undefined &&
+        args.noOverrides !== true
           ? { overrides: effectiveConfig.overrides }
           : {}),
       });
@@ -1985,7 +1989,7 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       projectRoot: opts?.projectRoot,
       pluginDir: opts?.pluginDir,
       overridesPath: opts?.overridesPath,
-      ...(effectiveConfig?.overrides !== undefined
+      ...(effectiveConfig?.overrides !== undefined && args.noOverrides !== true
         ? { overrides: effectiveConfig.overrides }
         : {}),
     });
@@ -2128,12 +2132,17 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       // Story 6.3 — resolve the model from opts.config.models (Story 6.1
       // typed `Config.models` field) for the dry-run preview, falling
       // back to "sonnet" when the per-step config is absent.
-      const resolvedModel = opts?.config?.models?.[nextStep.name] ?? "sonnet";
+      const resolvedModel =
+        getStepConfig(opts?.config, "models", nextStep.name) ?? "sonnet";
       // Story 6.4 — resolve the budget from opts.config.budgets (Story 6.1
       // typed `Config.budgets` field) for the dry-run preview, falling
       // back to defaults (60_000 ctx / 300_000ms = 60k / 5min) when the
       // per-step config is absent. Partial overrides supported per AC-1.
-      const resolvedBudget = opts?.config?.budgets?.[nextStep.name];
+      const resolvedBudget = getStepConfig(
+        opts?.config,
+        "budgets",
+        nextStep.name,
+      );
       const contextTokensK = Math.round(
         (resolvedBudget?.contextTokens ?? 60_000) / 1000,
       );
@@ -2169,7 +2178,7 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
     // typed `Config.models` field). When undefined (no per-step config),
     // omit the field so generate-spec.ts:196 falls through to the
     // canonical "sonnet" default. Story 6.1 SDR I-24 PRIMARY HONOURED.
-    const configuredModel = opts?.config?.models?.[nextStep.name];
+    const configuredModel = getStepConfig(opts?.config, "models", nextStep.name);
     // Story 6.4 — `budgets:` per-step config consumer wiring. Read the
     // resolved budget from `opts.config?.budgets?.[stepName]` (Story 6.1
     // typed `Config.budgets` field). When undefined (no per-step config),
@@ -2177,7 +2186,11 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
     // canonical defaults (60_000 / 300_000). Story 6.1 SDR I-25 PRIMARY
     // HONOURED. Partial overrides supported (e.g., `{ contextTokens: 80000 }`
     // overrides only contextTokens; timeoutMs falls through to default).
-    const configuredBudget = opts?.config?.budgets?.[nextStep.name];
+    const configuredBudget = getStepConfig(
+      opts?.config,
+      "budgets",
+      nextStep.name,
+    );
     const result = await buildDispatchSpec({
       stepName: nextStep.name,
       state,

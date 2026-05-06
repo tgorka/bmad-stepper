@@ -56,7 +56,7 @@ import * as fs from "node:fs/promises";
 import { build as buildDag } from "../../dag/build.ts";
 import type { DagAdjacency, Phase } from "../../dag/index.ts";
 import { emitDispatchAction } from "../../dispatch/index.ts";
-import { ConfigError, StepperError } from "../../errors.ts";
+import { ConfigError, StepperError, TimeoutError } from "../../errors.ts";
 import { atomicWrite } from "../../io/atomic-write.ts";
 import { error, warn } from "../../io/log.ts";
 import type { DispatchActionV1 } from "../../schemas/dispatch-protocol.ts";
@@ -555,6 +555,48 @@ export interface LoopOpts {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
+
+
+/**
+ * I-44: default per-step timeout when no explicit `timeoutMs` budget is
+ * configured. 300 000 ms = 5 minutes — mirrors the Claude Code Task tool
+ * default and provides a hard safety ceiling so a hung sub-agent cannot
+ * block the loop indefinitely.
+ */
+export const DEFAULT_STEP_TIMEOUT_MS = 300_000;
+
+/**
+ * Race `promise` against a timeout. Throws `TimeoutError` if `ms` elapses
+ * before the promise resolves. Uses `clearTimeout` for clean teardown (no
+ * dangling timers).
+ * Closes forward-tracker I-44.
+ *
+ * @param promise  — the async operation to guard.
+ * @param ms       — timeout in milliseconds; must be a positive integer.
+ * @param stepName — step identifier surfaced in the error message + hint.
+ */
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  stepName: string,
+): Promise<T> {
+  let timerId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timerId = setTimeout(() => {
+      reject(
+        new TimeoutError(
+          `step ${stepName} exceeded timeoutMs budget of ${ms}ms`,
+          `Step ${stepName} timed out after ${ms}ms. Increase budgets.${stepName}.timeoutMs in bmad-stepper.config.yaml or run /bmad-next --doctor to inspect the current budget.`,
+        ),
+      );
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timerId);
+  }
+}
 
 /**
  * Stop-condition gate. Returns the StopReason if the loop should halt;
@@ -1447,9 +1489,29 @@ export async function runLoop(
       // captured in the NextResult; we do NOT emit it to stdout (Story
       // 4.1 final-emission strategy — the loop's OWN AR9 line is emitted
       // by import.meta.main).
+      //
+      // I-44: Bun-side timeout watchdog. The step name at dispatch time is
+      // not yet known (runNext identifies the next step internally), so we
+      // derive a best-effort label from state: use state.lastAttempted.step
+      // when present (retry/failure context), otherwise fall back to the
+      // string "next" as the pending-step placeholder. The timeoutMs comes
+      // from effectiveConfig.budgets[stepLabel].timeoutMs when configured,
+      // falling back to DEFAULT_STEP_TIMEOUT_MS (300 000 ms = 5 minutes).
+      // A "*" key in the budgets record acts as a global override for all
+      // steps when a step-specific key is absent.
+      const pendingStepLabel: string =
+        state?.lastAttempted?.step ?? "next";
+      const iterTimeoutMs: number =
+        effectiveConfig?.budgets?.[pendingStepLabel]?.timeoutMs ??
+        effectiveConfig?.budgets?.["*"]?.timeoutMs ??
+        DEFAULT_STEP_TIMEOUT_MS;
       const iterStartedAt = new Date().toISOString();
       const iterStartNs: number = Bun.nanoseconds();
-      const nextResult = await runNextFn();
+      const nextResult = await withTimeout(
+        runNextFn(),
+        iterTimeoutMs,
+        pendingStepLabel,
+      );
       const iterDurationMs = (Bun.nanoseconds() - iterStartNs) / 1_000_000;
 
       const record: IterationRecord = {

@@ -14,3 +14,4 @@
 export type { Config } from "../schemas/config.ts";
 export { DEFAULT_CONFIG } from "./defaults.ts";
 export { type LoadConfigOptions, loadConfig } from "./load.ts";
+export { getStepConfig } from "./step-config.ts";

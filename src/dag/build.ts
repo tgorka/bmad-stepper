@@ -943,3 +943,30 @@ export async function build(input: BuildInput): Promise<DagAdjacency> {
     edgesIn,
   };
 }
+
+/**
+ * I-37: validate that every key in a parsed overrides block is a known
+ * BMAD skill ID. Throws `ConfigError` (exit 2) when any key is absent
+ * from `allKnownSkills`, so the user gets an actionable hint pointing at
+ * the `overrides:` block before the DAG is built.
+ *
+ * Called by `checkStepRegistry` in `src/commands/doctor/checks.ts` after
+ * `OverridesSchema.safeParse()` succeeds.
+ *
+ * @param overrides        — the Zod-validated override map.
+ * @param allKnownSkills   — the skill names returned by `detectBmadSkills`.
+ */
+export function validateOverrides(
+  overrides: Record<string, unknown>,
+  allKnownSkills: readonly string[],
+): void {
+  const knownSet = new Set(allKnownSkills);
+  const unknown = Object.keys(overrides).filter((k) => !knownSet.has(k));
+  if (unknown.length > 0) {
+    throw new ConfigError(
+      `config.overrides contains unknown skill IDs: ${unknown.join(", ")}`,
+      `Unknown IDs: ${unknown.join(", ")}`,
+      `Run /bmad-next --doctor to see the list of known BMAD skills, or check the overrides: block in bmad-stepper.config.yaml.`,
+    );
+  }
+}
