@@ -54,8 +54,10 @@ import {
   detectBmadSkills,
   detectBmadVersion,
 } from "../../bmad-detect/index.ts";
+import { validateOverrides } from "../../dag/build.ts";
 import { build } from "../../dag/index.ts";
 import { CorruptStateError, type StepperError } from "../../errors.ts";
+import { OverridesSchema } from "../../schemas/config.ts";
 import { loadStateUnlocked } from "../../state/load.ts";
 
 /**
@@ -460,6 +462,26 @@ export async function checkStepRegistry(
   const overridesPath = resolveOverridesPath(ctx);
 
   const overrideCount = await countProjectOverrides(overridesPath);
+
+  // I-37: validate that override keys are known BMAD skill IDs.
+  const overridesFile = Bun.file(overridesPath);
+  if (await overridesFile.exists()) {
+    let rawOverridesBlock: unknown = undefined;
+    try {
+      const text = await overridesFile.text();
+      const raw = Bun.YAML.parse(text) as Record<string, unknown>;
+      rawOverridesBlock = (raw as { overrides?: unknown }).overrides;
+    } catch {
+      // Malformed YAML: swallow; the DAG builder will surface the error.
+    }
+    if (rawOverridesBlock !== null && rawOverridesBlock !== undefined && bmad.skillNames.length > 0) {
+      const parsed = OverridesSchema.safeParse(rawOverridesBlock);
+      if (parsed.success) {
+        validateOverrides(parsed.data, bmad.skillNames);
+      }
+    }
+  }
+
   // Resolve plugin dir for Tier 3 frontmatter parse (build() may need
   // it). Reconstruct using the same algorithm bmad-detect uses.
   const pluginDir = await resolvePluginDir(bmad);
