@@ -49,6 +49,7 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { TimeoutError } from "../../errors.ts";
 import type { NextResult } from "../next/run.ts";
 import {
   DEFAULT_STEP_TIMEOUT_MS,
@@ -4032,17 +4033,16 @@ describe("withTimeout — I-44 (Bun-side timeout watchdog)", () => {
     const slow = new Promise((_, reject) =>
       setTimeout(() => reject(new Error("slow")), 10_000),
     );
-    let thrown: any;
+    let thrown: TimeoutError | undefined;
     try {
       await withTimeout(slow, 1, "epic-writer");
     } catch (e) {
-      thrown = e;
+      thrown = e as TimeoutError;
     }
     expect(thrown).toBeInstanceOf(Error);
-    const err = thrown;
-    expect(err.message).toContain("epic-writer");
-    expect(err.message).toContain("1ms");
-    expect(err.code).toBe("TIMEOUT");
+    expect(thrown?.message).toContain("epic-writer");
+    expect(thrown?.message).toContain("1ms");
+    expect(thrown?.code).toBe("TIMEOUT");
   });
 
   it("WT_I44_6: TimeoutError detail contains the step name and config hint", async () => {
@@ -4051,16 +4051,16 @@ describe("withTimeout — I-44 (Bun-side timeout watchdog)", () => {
     const slow = new Promise((_, reject) =>
       setTimeout(() => reject(new Error("slow")), 10_000),
     );
-    let thrown: any;
+    let thrown: TimeoutError | undefined;
     try {
       await withTimeout(slow, 1, "arch-doc");
     } catch (e) {
-      thrown = e;
+      thrown = e as TimeoutError;
     }
-    expect(thrown.detail).toContain("arch-doc");
-    expect(thrown.detail).toContain("bmad-stepper.config.yaml");
+    expect(thrown?.detail).toContain("arch-doc");
+    expect(thrown?.detail).toContain("bmad-stepper.config.yaml");
     // The class-level actionableHint must end with a concrete next-action verb per AR22.
-    expect(thrown.actionableHint).toContain("Run /bmad-next");
+    expect(thrown?.actionableHint).toContain("Run /bmad-next");
   });
 
   it("WT_I44_7: no dangling timer when promise resolves quickly", async () => {
