@@ -69,42 +69,68 @@ describe("no-write-outside-scope — allowed roots", () => {
 });
 
 describe("no-write-outside-scope — forbidden roots", () => {
+  // Forbidden-path tests must use absolute paths that resolve OUTSIDE all
+  // allowed roots (stepper internal, _bmad-output, os.tmpdir()). Using
+  // relative paths here would resolve against process.cwd() — and on
+  // Linux runners process.cwd() is the fauxProjectRoot which lives inside
+  // os.tmpdir() (an allowed root), so the assertion would silently
+  // succeed on macOS (where mkdtemp returns /private/var/folders/... but
+  // os.tmpdir() returns /var/folders/...) yet fail on Linux (where both
+  // collapse to /tmp). Using `originalCwd` (the actual repo root) anchors
+  // the test paths outside tmpdir on every platform.
   it("rejects writes outside the project root and outside os.tmpdir()", async () => {
-    expect(
+    await expect(
       atomicWrite("/etc/no-such-stepper-attempt-must-fail", "evil-contents"),
     ).rejects.toBeInstanceOf(ScopeViolationError);
   });
 
   it("rejects writes under _bmad/ (read-only installed-files dir per AR42)", async () => {
-    expect(
-      atomicWrite("_bmad/config.yaml", "evil override"),
+    await expect(
+      atomicWrite(
+        path.join(originalCwd, "_bmad", "config.yaml"),
+        "evil override",
+      ),
     ).rejects.toBeInstanceOf(ScopeViolationError);
   });
 
   it("rejects writes under ~/.claude/plugins/ (tilde literal, no expansion)", async () => {
-    expect(
-      atomicWrite("~/.claude/plugins/x.json", "evil"),
+    await expect(
+      atomicWrite(
+        path.join(originalCwd, "~/.claude/plugins/x.json"),
+        "evil",
+      ),
     ).rejects.toBeInstanceOf(ScopeViolationError);
   });
 
   it("rejects ../-traversal escapes after path.resolve()", async () => {
-    expect(
-      atomicWrite("_bmad-output/../../etc/passwd", "evil"),
+    // Construct an absolute path that, after `..` traversal, escapes
+    // outside every allowed root. `originalCwd` (repo root) is not
+    // inside tmpdir on any platform, so the resolved target lands in
+    // a non-allowed location.
+    await expect(
+      atomicWrite(
+        path.join(originalCwd, "_bmad-output", "..", "..", "etc", "passwd"),
+        "evil",
+      ),
     ).rejects.toBeInstanceOf(ScopeViolationError);
   });
 });
 
 describe("no-write-outside-scope — post-condition: nothing leaked outside scope", () => {
   it("after a forbidden write attempt, no file appears at the forbidden path", async () => {
+    const forbiddenPath = path.join(originalCwd, "_bmad", "config.yaml");
     try {
-      await atomicWrite("_bmad/config.yaml", "evil");
+      await atomicWrite(forbiddenPath, "evil");
     } catch {
       // expected
     }
-    // Project root has no _bmad/ directory at all (faux project root is empty).
+    // The forbidden write must NOT have created a `.tmp` sidecar at the
+    // attempted path. (We do not assert the canonical path is missing —
+    // `_bmad/` exists in the repo as the read-only installed-files dir
+    // per AR42 and may already contain `config.yaml` for other reasons.)
     expect(
       await fs
-        .access(path.join(fauxProjectRoot, "_bmad", "config.yaml"))
+        .access(`${forbiddenPath}.tmp`)
         .then(() => true)
         .catch(() => false),
     ).toBe(false);
