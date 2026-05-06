@@ -13,6 +13,8 @@
  * dispatch contract narrows.
  *
  * Public surface:
+ *   - BudgetV1Schema           — Zod schema for the budget sub-object (I-45).
+ *   - BudgetV1                 — `z.infer<typeof BudgetV1Schema>`.
  *   - DispatchSpecV1Schema     — Zod schema for v1.
  *   - DispatchSpecV1           — `z.infer<typeof DispatchSpecV1Schema>`.
  *   - DispatchSpec             — application-code alias.
@@ -21,6 +23,20 @@
 
 import { z } from "zod";
 
+/**
+ * Strict budget sub-schema for dispatch specs v1 (closes forward-tracker
+ * I-45). Uses `.strict()` to reject unknown fields and `.int().positive()`
+ * to ensure both `contextTokens` and `timeoutMs` are positive integers.
+ */
+export const BudgetV1Schema = z
+  .object({
+    contextTokens: z.number().int().positive(),
+    timeoutMs: z.number().int().positive(),
+  })
+  .strict();
+
+export type BudgetV1 = z.infer<typeof BudgetV1Schema>;
+
 export const DispatchSpecV1Schema = z.object({
   schemaVersion: z.literal(1),
   runId: z.string(),
@@ -28,10 +44,7 @@ export const DispatchSpecV1Schema = z.object({
   epic: z.number(),
   story: z.string(),
   model: z.string(),
-  budget: z.object({
-    contextTokens: z.number(),
-    timeoutMs: z.number(),
-  }),
+  budget: BudgetV1Schema,
   taskSpec: z.object({
     persona: z.string(),
     context: z.array(z.unknown()),
