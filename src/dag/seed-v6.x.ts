@@ -1,6 +1,11 @@
 /**
- * src/dag/seed-v6.x.ts — Tier 1 hand-curated seed for BMAD v6.5 skills
+ * src/dag/seed-v6.x.ts — Tier 1 hand-curated seed for BMAD v6.5–v6.6 skills
  * (FR1, FR2, FR8, FR9, FR35, AR33, AR41).
+ *
+ * v0.2.0 verified: the BMAD 6.5.0.1 and 6.6.0.0 skill catalogs are byte-
+ * identical (102 skills each, same names) — the seed below covers both
+ * upstream releases without modification. Future BMAD upstream changes
+ * surface via the weekly `bmad-compat.yml` CI job.
  *
  * Architecture §D5 lines 411-443 mandates a three-tier discovery cascade
  * for the step DAG:
@@ -43,7 +48,7 @@ import type { SeedEntry } from "./types.ts";
  * BMAD plugin compatibility version this seed targets. Bumped in lock-step
  * with upstream BMAD releases (architecture line 443).
  */
-export const SEED_BMAD_VERSION = "6.5";
+export const SEED_BMAD_VERSION = "6.6";
 
 /**
  * Hand-curated seed array. Each entry is a `SeedEntry` — `DagNode` minus

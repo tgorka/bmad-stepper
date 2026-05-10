@@ -1,7 +1,6 @@
 ---
-description: Run /bmad-next in a bounded loop with stop conditions
-argumentHint: "[--max-iters N] [--until-epic-end] [--until-story X.Y] [--next-story] [--phase-end] [--time-budget MS] [--token-budget N] [--stop-on-error|--continue-on-error] [--plan-first] [--checkpoint-each analysis|planning|solutioning|implementation|retro] [--interactive] [--auto-fix]"
-allowedTools: ["Bash", "Task", "Read"]
+name: bmad-loop
+description: 'Run /bmad-next in a bounded loop with stop conditions. Invoke when user types /bmad-loop with optional flags like --max-iters N, --until-epic-end, --until-story X.Y, --next-story, --phase-end, --time-budget MS, --token-budget N, --stop-on-error, --continue-on-error, --plan-first, --checkpoint-each <analysis|planning|solutioning|implementation|retro>, --interactive, --auto-fix.'
 ---
 
 # /bmad-loop
@@ -39,15 +38,16 @@ structured JSON transcript under `runs/`).
 /bmad-loop --auto-fix                # Story 5.3 — RUNTIME-WIRED in 5.3 (route-to-fixer)
 ```
 
-The `$ARGUMENTS` token below expands to the user's text after `/bmad-loop`
-per Claude Code's standard slash-command tail-string expansion. Flags are
-forwarded verbatim to `src/commands/loop/run.ts`'s argv (Story 4.1
-`parseLoopArgs` consumes them).
+Capture the flag string the user typed after `/bmad-loop` (verbatim) and
+forward it as `<captured-flags>` to the Bash invocations below. Claude Code
+no longer performs `$ARGUMENTS` substitution for skills (v0.1 slash-command
+era only); the skill body owns the forwarding. Flags reach
+`src/commands/loop/run.ts`'s argv (Story 4.1 `parseLoopArgs` consumes them).
 
 ## Behavior
 
 `/bmad-loop` runs in one of two modes, selected by the presence of
-`--plan-first` in `$ARGUMENTS`:
+`--plan-first` in the captured flags:
 
 - **Default mode (Layer-1 driver loop)** — repeats the `/bmad-next`
   Bash + Task + Bash + summary cycle up to `--max-iters` times, with
@@ -69,14 +69,14 @@ forwarded verbatim to `src/commands/loop/run.ts`'s argv (Story 4.1
 
 ### 0. Mode selection.
 
-If `$ARGUMENTS` contains `--plan-first`, jump to the **plan-first
+If the captured flags contain `--plan-first`, jump to the **plan-first
 delegation** subsection (Step 4 below — the original single-Bash-
 invocation flow). Otherwise, run the **Layer-1 driver loop** described
 in Steps 1-3.
 
 ### 1. Setup — parse `--max-iters` and initialise iteration state.
 
-Parse `--max-iters N` from `$ARGUMENTS`. When absent, default to `50`
+Parse `--max-iters N` from the captured flags. When absent, default to `50`
 (per FR25 — prevents accidental infinite loops on a fresh project).
 Initialise:
 
@@ -85,9 +85,9 @@ iter_count   = 0
 max_iters    = <parsed N or 50>
 ```
 
-Forward the rest of `$ARGUMENTS` (everything except `--max-iters` and
+Forward the rest of the captured flags (everything except `--max-iters` and
 its value) verbatim to each per-iteration `bun run
-src/commands/next/run.ts` call as `$NEXT_ARGS` (so e.g. `--resume`,
+src/commands/next/run.ts` call as `<next-flags>` (so e.g. `--resume`,
 `--skip`, `--auto-fix`, `--explain`, etc., still flow through to
 `/bmad-next`'s parser).
 
@@ -100,11 +100,11 @@ or `halt` action (sub-steps 2d / 2e):
 #### 2a. Bash — invoke the lock-free pre-dispatch composer.
 
 ```bash
-bun run src/commands/next/run.ts -- $NEXT_ARGS
+bun run src/commands/next/run.ts -- <next-flags>
 ```
 
 This is the SAME entry-point the standalone `/bmad-next` slash command
-uses (`commands/bmad-next.md` Step 1). It reads `state.yaml` (lock-
+uses (`skills/bmad-next/SKILL.md` Step 1). It reads `state.yaml` (lock-
 free), computes the next step, builds `staging/<runId>/dispatch-spec.json`,
 and emits exactly ONE AR9 JSON line on stdout.
 
@@ -112,12 +112,12 @@ and emits exactly ONE AR9 JSON line on stdout.
 
 Per `src/schemas/dispatch-protocol.ts` (`DispatchActionV1Schema`), the
 shape is one of three discriminated variants — `dispatch`, `report`,
-or `halt`. See `commands/bmad-next.md` Step 2 for the full schema
+or `halt`. See `skills/bmad-next/SKILL.md` Step 2 for the full schema
 reference. Increment `iter_count`.
 
 #### 2c. `jsonLine.action == "dispatch"` — execute the step end-to-end.
 
-Mirrors `commands/bmad-next.md` Steps 3-6 verbatim:
+Mirrors `skills/bmad-next/SKILL.md` Steps 3-6 verbatim:
 
 1. **Task** — invoke the sub-agent with the dispatch spec and the
    configured per-step model:
@@ -182,15 +182,15 @@ the user-supplied cap was respected).
 
 ### 4. Plan-first delegation (`--plan-first` only).
 
-When `$ARGUMENTS` contains `--plan-first`, the Layer-1 driver loop
+When the captured flags contain `--plan-first`, the Layer-1 driver loop
 above is BYPASSED and Layer 1 invokes the read-only TypeScript loop
 runner unchanged:
 
 ```bash
-bun run src/commands/loop/run.ts -- $ARGUMENTS
+bun run src/commands/loop/run.ts -- <captured-flags>
 ```
 
-The runner parses `$ARGUMENTS` via `parseLoopArgs` (Story 4.1), validates
+The runner parses the captured flags via `parseLoopArgs` (Story 4.1), validates
 the 13-field surface via `LoopArgsSchema.strict()`, and enters the
 iteration loop. Each iteration:
 
@@ -354,7 +354,7 @@ prescribes:
    default behaviour. Stepper records the configured model in the
    dispatch-spec.json + transcript markdown + JSON run log for audit
    purposes (the configured model is the user's INTENT; runtime
-   acceptance is best-effort). See `commands/bmad-next.md` for the
+   acceptance is best-effort). See `skills/bmad-next/SKILL.md` for the
    canonical Task-with-model invocation shape and `docs/configuration.md`
    `models:` section for configuration syntax.
 
@@ -965,7 +965,7 @@ the partial state recorded.
 
 For the full escalate-mode reference (regex contract, four throw sites,
 PASS-THROUGH vs SHAPE enrichment, NFR-M2 enforcement), see
-`commands/bmad-next.md` § "Failure modes — escalate (Story 5.4 — Epic 5
+`skills/bmad-next/SKILL.md` § "Failure modes — escalate (Story 5.4 — Epic 5
 default policy)". Story 5.6 will wire the `failurePolicies:` config block
 which may include explicit `escalate` policy declarations alongside
 `retry` / `skip` / `route-to-fixer` (no behaviour change — explicit
@@ -1056,7 +1056,7 @@ original at `staging/<run-id>/verifier-result.json`, the post-fix at
 `runHistory[]` entries are appended (one for the original verifier-fail,
 one for the post-fix verifier-fail with `fixAttempt: true` marker).
 
-See `commands/bmad-next.md` §`--auto-fix` flag (Story 5.3 — Epic 5
+See `skills/bmad-next/SKILL.md` §`--auto-fix` flag (Story 5.3 — Epic 5
 route-to-fixer mode) for the full per-step reference: dispatch contract
 (fixer's dispatch-spec at `staging/<run-id>-fix/dispatch-spec.json` with
 verifier-result + original-artifact in CONTEXT), the
@@ -1298,7 +1298,7 @@ configuring `failurePolicies: { <step>: skip }` in
 the matched step inside the `/bmad-loop` runner — but for v0.1 the
 loop runner has no skip logic.
 
-See `commands/bmad-next.md` §`--skip` flag (Story 5.2 — Epic 5 skip
+See `skills/bmad-next/SKILL.md` §`--skip` flag (Story 5.2 — Epic 5 skip
 mode) for the full skip-mode reference: cross-validation contract
 (`--skip` requires `--resume`), state mutation semantic
 (`runHistory[].skipped: true` + lastSuccessfulStep advance +

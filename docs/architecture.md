@@ -14,9 +14,11 @@ advances the project state — one verifiable step at a time.
 
 The orchestration is split across three layers:
 
-- **Layer 1 — Claude Code main thread** (`commands/*.md`): slash-command markdown
-  files. Calls into Layer 2 via `Bash`, dispatches into Layer 3 via the `Task` tool.
-  Never does direct file I/O.
+- **Layer 1 — Claude Code main thread** (`skills/<name>/SKILL.md`): skill markdown
+  files (the v0.1.0 layout was `commands/*.md` slash-command markdown — migrated to
+  `skills/` in v0.2.0 so the slash-command picker shows bare `/bmad-loop` instead
+  of `/bmad-stepper:bmad-loop`, matching the bmad plugin's UX). Calls into Layer 2
+  via `Bash`, dispatches into Layer 3 via the `Task` tool. Never does direct file I/O.
 - **Layer 2 — Bun TypeScript core** (`src/**/*.ts`): the step-runner logic,
   state machine, DAG builder, verifiers, config loader, and everything that touches
   the filesystem. Never calls `Task` or orchestrates sub-agents.
@@ -111,7 +113,7 @@ this document.
 bmad-stepper/
 ├── .claude-plugin/
 │   ├── marketplace.json         Marketplace manifest — lists the bmad-stepper plugin
-│   └── plugin.json              Plugin manifest — version, slash commands
+│   └── plugin.json              Plugin manifest — version, "skills": "./skills/"
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml               Matrix CI (Linux + macOS, bun test + biome)
@@ -121,10 +123,10 @@ bmad-stepper/
 ├── agents/
 │   ├── bmad-step-runner.md      Layer 3 sub-agent — executes a BMAD skill
 │   └── bmad-step-fixer.md       Layer 3 sub-agent — repairs a failed artifact
-├── commands/
-│   ├── bmad-next.md             Layer 1 slash command — single-step advance
-│   ├── bmad-loop.md             Layer 1 slash command — bounded loop
-│   └── bmad-doctor.md           Layer 1 slash command — diagnostic alias
+├── skills/
+│   ├── bmad-next/SKILL.md       Layer 1 skill — single-step advance
+│   ├── bmad-loop/SKILL.md       Layer 1 skill — bounded loop
+│   └── bmad-doctor/SKILL.md     Layer 1 skill — diagnostic alias
 ├── docs/
 │   ├── getting-started.md       Onboarding + prerequisites + troubleshooting
 │   ├── exit-codes.md            FR53 exit-code catalog with verbatim hints
@@ -200,7 +202,7 @@ Layer 1 reads the single JSON line via:
 bun run src/commands/next/run.ts -- $ARGUMENTS
 ```
 
-then parses the `action` field and branches accordingly (per `commands/bmad-next.md`
+then parses the `action` field and branches accordingly (per `skills/bmad-next/SKILL.md`
 §AR34 slash-command markdown protocol).
 
 ## State machine

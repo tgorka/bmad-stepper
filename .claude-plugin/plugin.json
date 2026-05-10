@@ -8,6 +8,7 @@
   "homepage": "https://github.com/tgorka/bmad-stepper",
   "repository": "https://github.com/tgorka/bmad-stepper",
   "license": "MIT",
+  "skills": "./skills/",
   "keywords": [
     "claude-code",
     "claude-code-plugin",

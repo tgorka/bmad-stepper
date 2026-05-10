@@ -29,7 +29,7 @@ Snapshot: <branch>:<sha>. Resume: /bmad-next --resume.
 
 The loop exits cleanly with a two-line message (per FR26): the exit reason + the resume hint. SIGINT during the loop triggers a graceful exit within 30 seconds (NFR-R5).
 
-The eight stop conditions are documented in `commands/bmad-loop.md`: `--until-epic-end`, `--until-story-end`, `--until=<step>`, `--until=epic:<n>`, `--token-budget`, `--max-iters` (default 50), `--time-budget`, and SIGINT.
+The eight stop conditions are documented in `skills/bmad-loop/SKILL.md`: `--until-epic-end`, `--until-story-end`, `--until=<step>`, `--until=epic:<n>`, `--token-budget`, `--max-iters` (default 50), `--time-budget`, and SIGINT.
 
 **Why this matters:** Bounded autonomy with the safety net intact (NFR-R1 zero data loss; NFR-R5 graceful SIGINT; FR22 per-step-type checkpoint) is the core differentiation from unbounded ralph-style PRD-to-code loops. The author's nightly loop on `makistack` is the canonical use case.
 

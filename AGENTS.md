@@ -4,7 +4,7 @@ This document is the **contract for AI agents and human contributors** working o
 
 ## Three-Layer Architecture
 
-- **Layer 1 (`commands/*.md`, `agents/*.md` descriptions):** Claude Code main thread. Communicates with Layer 2 via Bash; with Layer 3 via Task. NEVER does direct file IO.
+- **Layer 1 (`skills/<name>/SKILL.md`, `agents/*.md` descriptions):** Claude Code main thread. Communicates with Layer 2 via Bash; with Layer 3 via Task. NEVER does direct file IO. (v0.1.0 used `commands/*.md`; v0.2.0 migrated to `skills/` for picker UX parity with the bmad plugin.)
 - **Layer 2 (`src/**/*.ts`):** Bun TypeScript core. Communicates with the filesystem and the GitHub API (only inside `src/upgrade/`). NEVER calls Task or orchestrates sub-agents.
 - **Layer 3 (`agents/*.md` body):** BMAD sub-agents. File-in/file-out only via `staging/<run-id>/`. NEVER decides what comes next; never validates own output; never interacts with the user.
 
@@ -63,17 +63,20 @@ Errors are first-class UX. Every halt produces a single-line actionable hint mat
 - The contract is enforced by code review and documented here; the cross-cutting integration gate `src/integration/no-network-on-main.test.ts` is a forward-deferred enforcement for v0.2.
 - Sub-agents follow Claude Code's standard model API path (no Stepper code involvement).
 
-## Slash-Command Markdown Protocol (AR34)
+## Skill Markdown Protocol (AR34)
 
-Each `commands/<name>.md` follows this body pattern:
+Each `skills/<name>/SKILL.md` follows this body pattern:
 
-1. Bash: `bun run src/commands/<name>/run.ts -- $ARGUMENTS` (Layer 1 → Layer 2).
-2. Read the AR9-disciplined single JSON line from stdout.
-3. If `action: "dispatch"`, Task tool invokes the sub-agent (Layer 1 → Layer 3).
-4. Bash: `bun run src/commands/<name>/verify-and-advance.ts -- <run-id>` (Layer 1 → Layer 2 verify-and-advance).
-5. Print summary line.
+1. Capture the flag string the user typed after `/<name>` as `<captured-flags>`.
+2. Bash: `bun run src/commands/<name>/run.ts -- <captured-flags>` (Layer 1 → Layer 2).
+3. Read the AR9-disciplined single JSON line from stdout.
+4. If `action: "dispatch"`, Task tool invokes the sub-agent (Layer 1 → Layer 3).
+5. Bash: `bun run src/commands/<name>/verify-and-advance.ts -- <run-id>` (Layer 1 → Layer 2 verify-and-advance).
+6. Print summary line.
 
-Frontmatter requirements: `description`, `argumentHint`, `allowedTools: ["Bash", "Task", "Read"]`.
+Frontmatter requirements: `name` (matching the directory basename — Claude Code uses this to build the invocable name) and `description` (carries the inline argument hint that v0.1.0 stored in the slash-command-only `argumentHint` field).
+
+The v0.1.0 `allowedTools: ["Bash", "Task", "Read"]` slash-command frontmatter field is dropped in v0.2.0 — Claude Code's skill format does not accept it. The prompt-layer guardrails in each SKILL.md's `## Tool restrictions` section take its place; the architectural enforcement at Layer 2 (`src/verifiers/scope.ts:assertWithinScope`) is unchanged.
 
 ## Test Patterns (AR35)
 

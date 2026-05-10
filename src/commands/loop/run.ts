@@ -265,7 +265,7 @@ export type StopReason =
       // when an iteration's `dispatch` action returns successfully BUT
       // `state.lastSuccessfulStep` does not advance pre→post — meaning
       // the per-iteration Task subagent did not run (the v0.1 production
-      // limitation flagged in commands/bmad-loop.md §4: the loop runner
+      // limitation flagged in skills/bmad-loop/SKILL.md §4: the loop runner
       // is a SKELETON that emits dispatch specs without invoking Task).
       // Without this StopReason, the loop spins to `--max-iters` (typically
       // the default-50 cap) producing 50 wasted staging dirs for the same
@@ -1475,7 +1475,7 @@ export async function runLoop(
       // Capture pre-iteration `lastSuccessfulStep` for the no-progress
       // detector below. When the post-iteration value is identical AND
       // the action was `dispatch`, the per-iteration Task subagent did
-      // not run (v0.1 production limitation per commands/bmad-loop.md §4)
+      // not run (v0.1 production limitation per skills/bmad-loop/SKILL.md §4)
       // and the loop halts with `no-progress-detected` instead of spinning
       // to `--max-iters`.
       const preIterLastSuccessfulStep = state?.lastSuccessfulStep?.step ?? null;
@@ -1784,7 +1784,7 @@ export async function runLoop(
       // No-progress detector: when an iteration's `dispatch` action
       // returns successfully but `state.lastSuccessfulStep` does NOT
       // advance pre→post, the per-iteration Task subagent did not run
-      // (v0.1 SKELETON limitation per commands/bmad-loop.md §4 — the
+      // (v0.1 SKELETON limitation per skills/bmad-loop/SKILL.md §4 — the
       // loop runner is a single Bun process and cannot invoke the Task
       // tool, which is a Layer 1 capability). Without this short-
       // circuit, the loop spins to `--max-iters` (typically the default

@@ -6,9 +6,9 @@ Deeper onboarding companion to the [README Quick Start](../README.md#quick-start
 
 - **Bun ≥ 1.3** — Stepper's runtime (AR2 / NFR-I5). Verify with `bun --version`. Versions tested through Story 1.12: 1.3.12.
 - **Claude Code** — Anthropic's CLI; the host environment for the Stepper plugin (architecture §D1).
-- **BMAD installed via** `npx bmad-method install --tools claude-code`. This matches the verbatim `BmadNotInstalledError` actionable hint in `src/errors.ts` and is the canonical install path. The detector handles both real-world layouts:
-  - `~/.claude/plugins/cache/bmad-method/bmad/<version>/` (cache layout — what the BMAD installer actually produces in v6.x)
-  - `~/.claude/plugins/bmad-method-<version>/` (spec layout — what `architecture.md` describes)
+- **BMAD installed** via either route — the v0.2.0 detector accepts both:
+  - **Marketplace install** (recommended): `/plugin install bmad@bmad-method` (from either `bmad-code-org/bmad-method` or `tgorka/bmad-plugin`); lands at `~/.claude/plugins/cache/bmad-method/bmad/<version>/`. Tested against v6.5.0.1 and v6.6.0.0; the detector reads `~/.claude/plugins/installed_plugins.json` to resolve the installPath.
+  - **Legacy npx install**: `npx bmad-method install --tools claude-code`. This matches the verbatim `BmadNotInstalledError` actionable hint in `src/errors.ts`; lands at `~/.claude/plugins/bmad-method-<version>/` (spec layout — what older `architecture.md` versions describe).
 - **macOS** or **Linux** (Windows via WSL2). Per architecture line 1419 (NFR-I5).
 
 ## Installing the plugin
@@ -25,7 +25,9 @@ claude plugin marketplace add tgorka/bmad-stepper
 claude plugin install bmad-stepper@bmad-stepper
 ```
 
-For unreleased revisions, swap `tgorka/bmad-stepper` for the path to your local clone (e.g. `/path/to/bmad-stepper`). The marketplace install fetches `tgorka/bmad-stepper` to `~/.claude/plugins/cache/bmad-stepper/bmad-stepper/<version>/`. No code runs at install time — the plugin is invoked on demand via the slash commands declared in `.claude-plugin/plugin.json`.
+For unreleased revisions, swap `tgorka/bmad-stepper` for the path to your local clone (e.g. `/path/to/bmad-stepper`). The marketplace install fetches `tgorka/bmad-stepper` to `~/.claude/plugins/cache/bmad-stepper/bmad-stepper/<version>/`. No code runs at install time — the plugin is invoked on demand via the skills declared in `.claude-plugin/plugin.json` (under `skills/<name>/SKILL.md`).
+
+In the slash-command picker, type any of the bare names — `/bmad-next`, `/bmad-loop`, `/bmad-doctor` — and Claude Code resolves them since no other plugin defines those names. (v0.1.0 used `commands/*.md` which forced the `/bmad-stepper:bmad-loop` form; v0.2.0 migrated to `skills/` for picker UX parity with the bmad plugin.)
 
 ### Common install errors
 

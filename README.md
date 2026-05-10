@@ -13,11 +13,28 @@ BMAD Stepper is a Claude Code plugin that runs the [BMAD method](https://github.
    bun --version   # expect: 1.3.x or newer
    ```
 
-2. **Install BMAD.**
+2. **Install BMAD.** Two equivalent options:
+
+   **Option A — Claude Code marketplace (recommended for v0.2.0+):**
+   ```text
+   /plugin marketplace add bmad-code-org/bmad-method     # PabloLION upstream
+   /plugin install bmad@bmad-method
+   ```
+   Or `tgorka/bmad-plugin` (republishes the same `bmad-method` marketplace at v6.6.0.0):
+   ```text
+   /plugin marketplace add tgorka/bmad-plugin
+   /plugin install bmad@bmad-method
+   ```
+
+   **Option B — Legacy npx install:**
    ```bash
    npx bmad-method install --tools claude-code
    ```
-   This lands the plugin under `~/.claude/plugins/cache/bmad-method/bmad/<version>/` (cache layout) or `~/.claude/plugins/bmad-method-<version>/` (spec layout). Both layouts are detected automatically.
+
+   Stepper auto-detects either install method:
+   - Marketplace install lands at `~/.claude/plugins/cache/bmad-method/bmad/<version>/` and is registered in `~/.claude/plugins/installed_plugins.json` (the detector reads this manifest first).
+   - Legacy npx install lands at `~/.claude/plugins/bmad-method-<version>/` (the detector falls back to this scan).
+   When both are present, Stepper picks the lex-max version.
 
 3. **Add the Stepper marketplace and install the plugin.**
 
@@ -44,7 +61,7 @@ BMAD Stepper is a Claude Code plugin that runs the [BMAD method](https://github.
    claude plugin install bmad-stepper@bmad-stepper
    ```
 
-   The marketplace manifest at `.claude-plugin/marketplace.json` lists the `bmad-stepper` plugin; the plugin manifest at `.claude-plugin/plugin.json` declares the `/bmad-next`, `/bmad-doctor`, and `/bmad-loop` slash commands.
+   The marketplace manifest at `.claude-plugin/marketplace.json` lists the `bmad-stepper` plugin; the plugin manifest at `.claude-plugin/plugin.json` declares the `/bmad-next`, `/bmad-doctor`, and `/bmad-loop` skills (under `skills/<name>/SKILL.md`). Type any of the bare names in the Claude Code slash-command picker — Claude Code auto-resolves them since no other plugin defines those names. v0.2.0 migrated from the v0.1.0 `commands/*.md` layout to the `skills/` layout to match the bmad plugin's UX (no visible namespace prefix).
 
 4. **Run the diagnostic.**
    ```text
