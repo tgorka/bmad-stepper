@@ -63,6 +63,8 @@ BMAD Stepper is a Claude Code plugin that runs the [BMAD method](https://github.
 
 6. **Verify the exit code.** `/bmad-next --doctor` exits `0` on success, `1` on corrupt state, `3` on missing or incompatible BMAD. See [`docs/exit-codes.md`](docs/exit-codes.md) for the full FR53 catalog.
 
+   > **Note.** If you skip step 2, you don't need `--doctor` to discover it: every `/bmad-next` and `/bmad-loop` invocation surfaces the same verbatim hint (*"Run npx bmad-method install --tools claude-code first."*) on a missing-BMAD machine and exits `3`. `/bmad-loop`'s loop-exit transcript at `_bmad-output/.stepper/runs/<ts>-loop-exit.json` additionally captures the iteration's halt message under `stopReason.iterationMessage` for post-hoc inspection.
+
 7. **(Optional) Initialize a fresh project.** Either `npx bmad-method init` or just `cd` into an empty directory. The `_bmad-output/.stepper/` directory tree is created on the first `/bmad-next` invocation; doctor itself never writes to disk.
 
 8. **Time check.** If you reached step 7 in under 10 minutes, your install is healthy and the **NFR-M4** dogfood walkthrough is satisfied. The timed reference fixture lives at [`tests/fixtures/quick-start-walkthrough.md`](tests/fixtures/quick-start-walkthrough.md).
