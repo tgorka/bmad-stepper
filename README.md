@@ -19,11 +19,21 @@ BMAD Stepper is a Claude Code plugin that runs the [BMAD method](https://github.
    ```
    This lands the plugin under `~/.claude/plugins/cache/bmad-method/bmad/<version>/` (cache layout) or `~/.claude/plugins/bmad-method-<version>/` (spec layout). Both layouts are detected automatically.
 
-3. **Add the Stepper plugin.**
+3. **Add the Stepper marketplace and install the plugin.**
+
+   From a published GitHub release:
    ```text
-   /plugin marketplace add Tgorka/bmad-stepper
+   /plugin marketplace add tgorka/bmad-stepper
+   /plugin install bmad-stepper@bmad-stepper
    ```
-   The marketplace manifest at `.claude-plugin/plugin.json` declares the `/bmad-next` and `/bmad-doctor` slash commands.
+
+   Or from a local clone (development / unreleased revisions):
+   ```text
+   /plugin marketplace add /path/to/bmad-stepper
+   /plugin install bmad-stepper@bmad-stepper
+   ```
+
+   The marketplace manifest at `.claude-plugin/marketplace.json` lists the `bmad-stepper` plugin; the plugin manifest at `.claude-plugin/plugin.json` declares the `/bmad-next`, `/bmad-doctor`, and `/bmad-loop` slash commands.
 
 4. **Run the diagnostic.**
    ```text
@@ -72,7 +82,7 @@ The seven worked example bodies ship with the v0.1.0 marketplace release.
 
 ## Uninstall preserves your data
 
-Removing the Stepper plugin **never touches your project state**. `/plugin marketplace remove bmad-stepper` only deletes the plugin directory at `.claude/plugins/bmad-stepper/`. Your `_bmad-output/.stepper/state.yaml`, `_bmad-output/.stepper/state.yaml.bak`, `_bmad-output/.stepper/runs/*.log`, `_bmad-output/.stepper/runs/*.json`, and `staging/<run-id>/` directories are untouched. You can reinstall Stepper later and resume exactly where you left off (FR49).
+Removing the Stepper plugin **never touches your project state**. `/plugin uninstall bmad-stepper@bmad-stepper` (or `/plugin marketplace remove bmad-stepper` to remove the marketplace entirely) only deletes the cached plugin under `~/.claude/plugins/cache/`. Your `_bmad-output/.stepper/state.yaml`, `_bmad-output/.stepper/state.yaml.bak`, `_bmad-output/.stepper/runs/*.log`, `_bmad-output/.stepper/runs/*.json`, and `staging/<run-id>/` directories are untouched. You can reinstall Stepper later and resume exactly where you left off (FR49).
 
 To wipe project state explicitly, run:
 
@@ -99,5 +109,5 @@ To re-create from scratch after a wipe, just run `/bmad-next` again — the stat
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribution guide.
 - [`LICENSE`](LICENSE) — MIT.
 - [`SECURITY.md`](SECURITY.md) — security policy.
-- Issues: <https://github.com/Tgorka/bmad-stepper/issues> (live once v0.1.0 ships).
-- Discussions: <https://github.com/Tgorka/bmad-stepper/discussions> (live once v0.1.0 ships).
+- Issues: <https://github.com/tgorka/bmad-stepper/issues> (live once v0.1.0 ships).
+- Discussions: <https://github.com/tgorka/bmad-stepper/discussions> (live once v0.1.0 ships).

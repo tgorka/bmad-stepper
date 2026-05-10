@@ -7,7 +7,7 @@ updates:
       day: "monday"
     open-pull-requests-limit: 5
     reviewers:
-      - "Tgorka"
+      - "tgorka"
     commit-message:
       prefix: "deps"
       include: "scope"
@@ -19,7 +19,7 @@ updates:
       day: "monday"
     open-pull-requests-limit: 3
     reviewers:
-      - "Tgorka"
+      - "tgorka"
     commit-message:
       prefix: "ci"
       include: "scope"

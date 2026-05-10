@@ -14,10 +14,10 @@ Deeper onboarding companion to the [README Quick Start](../README.md#quick-start
 ## Installing the plugin
 
 ```text
-/plugin marketplace add Tgorka/bmad-stepper
+/plugin marketplace add tgorka/bmad-stepper
 ```
 
-The marketplace install fetches `Tgorka/bmad-stepper` to `~/.claude/plugins/bmad-stepper/`. No code runs at install time — the plugin is invoked on demand via the slash commands declared in `.claude-plugin/plugin.json`.
+The marketplace install fetches `tgorka/bmad-stepper` to `~/.claude/plugins/bmad-stepper/`. No code runs at install time — the plugin is invoked on demand via the slash commands declared in `.claude-plugin/plugin.json`.
 
 ### Common install errors
 

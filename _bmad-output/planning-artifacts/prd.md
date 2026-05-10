@@ -72,7 +72,7 @@ skippedSections:
 
 BMAD Stepper is a Claude Code plugin that adds two slash commands — `/bmad-next` and `/bmad-loop` — to the BMAD method workflow. It eliminates the manual orchestration tax of running BMAD by inferring project state from files (source of truth) plus a write-through `state.yaml` cache, then either advancing one step or running a bounded loop until a declared stop condition fires.
 
-The product solves a compounding cost: a single BMAD epic invokes 30+ skills across analysis, planning, solutioning, implementation, and retrospective phases. Each invocation is a manual context switch, an argument copy-paste, and an opportunity to lose track. For developers running BMAD across multiple projects in parallel — the primary user (Tgorka, dogfooding on `makistack`) and the adjacent target audience (indie devs, AI-native builders, BMAD adopters) — the cost is largest at the worst moment: returning to a project after a context switch, when momentum is already broken and the first question is always *"what step is next?"*
+The product solves a compounding cost: a single BMAD epic invokes 30+ skills across analysis, planning, solutioning, implementation, and retrospective phases. Each invocation is a manual context switch, an argument copy-paste, and an opportunity to lose track. For developers running BMAD across multiple projects in parallel — the primary user (tgorka, dogfooding on `makistack`) and the adjacent target audience (indie devs, AI-native builders, BMAD adopters) — the cost is largest at the worst moment: returning to a project after a context switch, when momentum is already broken and the first question is always *"what step is next?"*
 
 `/bmad-next` answers that question and runs it. `/bmad-loop` chains the answer until a stop condition fires. Both commands keep the main conversation window clean: every heavy task runs in an isolated sub-agent with declared context budget and file-based I/O; the main thread logs one or two lines per step. Eight stop-condition types, mandatory checkpoints, file-lock heartbeats, atomic writes, and branch+sha snapshots make autonomous runs trustworthy enough to leave unattended overnight.
 
@@ -132,7 +132,7 @@ There is no commercial business behind Stepper. *Business success* in this PRD m
 
 **Community adoption (track, do not optimize for):**
 
-- Marketplace installs of `Tgorka/bmad-stepper`.
+- Marketplace installs of `tgorka/bmad-stepper`.
 - GitHub stars on the repository.
 - Community-filed issues and PRs that pass the *evaluated against personal use first* governance bar.
 
@@ -207,7 +207,7 @@ Both `/bmad-next` and `/bmad-loop` ship together with the full flag inventory fr
 
 **Distribution and docs:**
 
-- Distribution: Claude Code plugin marketplace as `Tgorka/bmad-stepper`. MIT license.
+- Distribution: Claude Code plugin marketplace as `tgorka/bmad-stepper`. MIT license.
 - Stack: TypeScript on Bun + Bun test + Biome + Changesets + GitHub Actions matrix Linux + macOS.
 - Repo files: README, CHANGELOG, AGENTS.md, CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md, PR + issue templates.
 - README and getting-started docs are v0.1 deliverables, not follow-ups.
@@ -260,19 +260,19 @@ Two- to three-year horizon. The vision is *reliability and sustainability*, not 
 
 ### Journey 1: Primary User — Cold-Start Return (Happy Path)
 
-**Persona:** Tgorka — sole maintainer juggling `makistack` (active development), `bmad-stepper` (this project), and consulting work. Returns to projects after days or weeks of context switching.
+**Persona:** tgorka — sole maintainer juggling `makistack` (active development), `bmad-stepper` (this project), and consulting work. Returns to projects after days or weeks of context switching.
 
-**Opening Scene:** Monday morning. Tgorka opens a terminal, `cd makistack`. Last touched the project nine days ago. Without Stepper, this would mean opening `_bmad-output/`, scanning recent files, trying to remember whether `story-create` for epic 3 finished, scrolling Claude history, losing 15 minutes before any productive work.
+**Opening Scene:** Monday morning. tgorka opens a terminal, `cd makistack`. Last touched the project nine days ago. Without Stepper, this would mean opening `_bmad-output/`, scanning recent files, trying to remember whether `story-create` for epic 3 finished, scrolling Claude history, losing 15 minutes before any productive work.
 
-**Rising Action:** Tgorka types `/bmad-next --explain`. Stepper reads `_bmad-output/.stepper/state.yaml`, validates against files, computes the next step. Output:
+**Rising Action:** tgorka types `/bmad-next --explain`. Stepper reads `_bmad-output/.stepper/state.yaml`, validates against files, computes the next step. Output:
 
 > *"Next step: `dev-story` for epic 3 / story 3.2.*
 > *Reasoning: `story-create` completed on 2026-04-20 (frontmatter `status: ready`); no `dev-story` artifact exists yet; preconditions met (PRD §4.2 loaded, architecture §6 loaded, persona = `dev`).*
 > *Run with `/bmad-next` (or `/bmad-next --dry-run` to preview)."*
 
-**Climax:** Tgorka types `/bmad-next`. Main thread logs one line: *"Dispatching dev-story (epic 3 / story 3.2) → sub-agent (Sonnet, 60k context budget, 5 min timeout)."* The sub-agent runs in isolation, writes to `_bmad-output/.stepper/staging/dev-story-2026-04-29-09-12.md`, returns. The verifier checks frontmatter, required sections, and schema. State updates atomically. Main thread logs: *"✓ dev-story complete. Next: `code-review` (epic 3 / story 3.2)."*
+**Climax:** tgorka types `/bmad-next`. Main thread logs one line: *"Dispatching dev-story (epic 3 / story 3.2) → sub-agent (Sonnet, 60k context budget, 5 min timeout)."* The sub-agent runs in isolation, writes to `_bmad-output/.stepper/staging/dev-story-2026-04-29-09-12.md`, returns. The verifier checks frontmatter, required sections, and schema. State updates atomically. Main thread logs: *"✓ dev-story complete. Next: `code-review` (epic 3 / story 3.2)."*
 
-**Resolution:** In two minutes, Tgorka knows where the project is, has progressed it by one step, and can now decide: invoke `/bmad-next` again, chain through code-review and wrap-up via `/bmad-loop --until-story 3.2 --plan-first`, or context-switch back to `bmad-stepper` knowing exactly where `makistack` will resume.
+**Resolution:** In two minutes, tgorka knows where the project is, has progressed it by one step, and can now decide: invoke `/bmad-next` again, chain through code-review and wrap-up via `/bmad-loop --until-story 3.2 --plan-first`, or context-switch back to `bmad-stepper` knowing exactly where `makistack` will resume.
 
 **Capabilities revealed:** stateful resumption from files, `--explain` reasoning trace, single-step execution, sub-agent dispatch with declared budget, verifier-after-step gate, atomic state update.
 
@@ -282,9 +282,9 @@ Two- to three-year horizon. The vision is *reliability and sustainability*, not 
 
 **Opening Scene:** 7:30 AM. Coffee. Terminal showing the loop transcript. Last line: *"⚠ Verifier failed on `code-review` (epic 3 / story 3.4): missing `Checklist` section. Halted. Run `/bmad-next --resume` after fixing, or `/bmad-next --skip code-review --resume` to continue."*
 
-**Rising Action:** Tgorka opens the failed artifact and sees the issue: the sub-agent produced a code review but used a non-standard heading. Two options surface: (a) fix the artifact by hand and resume, or (b) re-dispatch with a tighter prompt. Tgorka picks (a) — quick fix.
+**Rising Action:** tgorka opens the failed artifact and sees the issue: the sub-agent produced a code review but used a non-standard heading. Two options surface: (a) fix the artifact by hand and resume, or (b) re-dispatch with a tighter prompt. tgorka picks (a) — quick fix.
 
-**Climax:** Tgorka edits the file, saves, runs `/bmad-next --resume`. Stepper re-runs validation, sees the verifier passes now, advances state to step 8, continues. The loop is not lost: `state.yaml` had `last_attempted: code-review (epic 3 story 3.4)` and `last_failure_reason: missing Checklist section`. After resume: *"✓ code-review (epic 3 / story 3.4) accepted on retry. Next: `wrap-up-review` (epic 3 / story 3.4)."*
+**Climax:** tgorka edits the file, saves, runs `/bmad-next --resume`. Stepper re-runs validation, sees the verifier passes now, advances state to step 8, continues. The loop is not lost: `state.yaml` had `last_attempted: code-review (epic 3 story 3.4)` and `last_failure_reason: missing Checklist section`. After resume: *"✓ code-review (epic 3 / story 3.4) accepted on retry. Next: `wrap-up-review` (epic 3 / story 3.4)."*
 
 **Resolution:** Total time lost: under 5 minutes. No re-running of completed work. No state corruption from the halt. The halt itself — graceful SIGINT-style — preserved partial work and produced an actionable error message instead of a stack trace.
 
@@ -292,25 +292,25 @@ Two- to three-year horizon. The vision is *reliability and sustainability*, not 
 
 ### Journey 3: Adjacent User — First Install (BMAD Community)
 
-**Persona:** Lena, indie dev who just discovered BMAD via a YouTube talk. Installed BMAD-method via `npx bmad-method install --tools claude-code`. Tried running an epic by hand for two days, got tired of remembering which agent runs next, found `Tgorka/bmad-stepper` on the marketplace.
+**Persona:** Lena, indie dev who just discovered BMAD via a YouTube talk. Installed BMAD-method via `npx bmad-method install --tools claude-code`. Tried running an epic by hand for two days, got tired of remembering which agent runs next, found `tgorka/bmad-stepper` on the marketplace.
 
-**Opening Scene:** Lena types `/plugin marketplace add Tgorka/bmad-stepper`. Plugin installs to `~/.claude/plugins/`. Lena is unsure if this works with her version of BMAD.
+**Opening Scene:** Lena types `/plugin marketplace add tgorka/bmad-stepper`. Plugin installs to `~/.claude/plugins/`. Lena is unsure if this works with her version of BMAD.
 
 **Rising Action:** Lena types `/bmad-next --doctor`. Output: *"BMAD detected: v6.3.0 (compatible). Project: `lena-app`. State file: not present (fresh project). Step registry: built from 31 BMAD skills + 0 project overrides; DAG validated; no cycles. Suggestion: run `/bmad-next` to start the analysis phase."* Lena reads the README's Quick Start (three commands), types `/bmad-next`. Stepper picks `analyst-research` as the first step (no analysis docs exist, project is brand new), explains the choice, asks Lena to confirm. Lena types `y`. Sub-agent runs.
 
 **Climax:** Five minutes later, Lena has her first BMAD artifact (`research-report.md`). She types `/bmad-next` again. Stepper picks the next step (`brainstorming`). Lena realizes she just used three commands to start a BMAD project end-to-end without memorizing any of the 31 skill names or which one comes after which.
 
-**Resolution:** Lena uses Stepper for two epics, files an issue: *"Could `/bmad-next --persona test-architect` accept TEA module's persona names too?"* Tgorka reads it, evaluates against personal use, decides it's an in-scope clarification rather than a new feature, replies with a one-line fix. Lena's PR merges three days later.
+**Resolution:** Lena uses Stepper for two epics, files an issue: *"Could `/bmad-next --persona test-architect` accept TEA module's persona names too?"* tgorka reads it, evaluates against personal use, decides it's an in-scope clarification rather than a new feature, replies with a one-line fix. Lena's PR merges three days later.
 
 **Capabilities revealed:** `--doctor` first-run validation, BMAD upstream version detection, fresh-project state initialization, DAG validation on registry load, marketplace install flow, governance posture (issues evaluated against personal use).
 
 ### Journey 4: Maintainer — BMAD Upstream Upgrade
 
-**Persona:** Tgorka in maintainer-of-Stepper hat, not user-of-Stepper hat. BMAD just shipped v6.4.0 with two new skills: `architecture-validator` and `epic-splitter`.
+**Persona:** tgorka in maintainer-of-Stepper hat, not user-of-Stepper hat. BMAD just shipped v6.4.0 with two new skills: `architecture-validator` and `epic-splitter`.
 
-**Opening Scene:** Tgorka updates BMAD locally via `npx bmad-method install --tools claude-code`. Runs Stepper on `makistack`. Stepper logs: *"⚠ Unknown upstream skills detected: `architecture-validator` (no DAG placement), `epic-splitter` (no DAG placement). Halting. Add overrides in `bmad-stepper.config.yaml` or wait for Stepper update."*
+**Opening Scene:** tgorka updates BMAD locally via `npx bmad-method install --tools claude-code`. Runs Stepper on `makistack`. Stepper logs: *"⚠ Unknown upstream skills detected: `architecture-validator` (no DAG placement), `epic-splitter` (no DAG placement). Halting. Add overrides in `bmad-stepper.config.yaml` or wait for Stepper update."*
 
-**Rising Action:** Tgorka opens `bmad-stepper.config.yaml`, adds DAG overrides:
+**Rising Action:** tgorka opens `bmad-stepper.config.yaml`, adds DAG overrides:
 
 ```yaml
 overrides:
@@ -326,7 +326,7 @@ overrides:
 
 Reruns `/bmad-next --doctor`. Output: *"DAG validated. 33 skills total (was 31). 2 overrides active."*
 
-**Climax:** Tgorka opens a new branch, writes a CHANGELOG entry under *BMAD Compatibility — v0.1.4*: "Tested with BMAD v6.4.0. Two new skills require overrides until the next minor release. See `examples/bmad-6.4-overrides.yaml`." Ships v0.1.4 within the hour.
+**Climax:** tgorka opens a new branch, writes a CHANGELOG entry under *BMAD Compatibility — v0.1.4*: "Tested with BMAD v6.4.0. Two new skills require overrides until the next minor release. See `examples/bmad-6.4-overrides.yaml`." Ships v0.1.4 within the hour.
 
 **Resolution:** Community users on BMAD v6.4 get a working Stepper either via the config override pattern (immediate) or via v0.1.4 (which ships built-in placements for the new skills, no override needed). Maintenance time: ~1 hour. No fork, no rebase, no merge conflict.
 
@@ -334,7 +334,7 @@ Reruns `/bmad-next --doctor`. Output: *"DAG validated. 33 skills total (was 31).
 
 ### Journey 5: CI/Automation Consumer — `--export-state` for Audit
 
-**Persona:** Future Tgorka or a community contributor who wants to embed Stepper in CI: gate PR merges on "no in-flight BMAD work that should not be interrupted."
+**Persona:** Future tgorka or a community contributor who wants to embed Stepper in CI: gate PR merges on "no in-flight BMAD work that should not be interrupted."
 
 **Opening Scene:** A CI job runs on every PR to `main`. The job needs to know: is there an active BMAD epic that is mid-implementation? If yes, warn the PR author.
 
@@ -430,10 +430,10 @@ Stepper is shipped as a Claude Code plugin — a developer tool whose primary di
 
 | Method | Command | Notes |
 |--------|---------|-------|
-| Marketplace install (recommended) | `/plugin marketplace add Tgorka/bmad-stepper` | Per-project (under `.claude/plugins/`) or per-user (under `~/.claude/plugins/`) at user choice |
+| Marketplace install (recommended) | `/plugin marketplace add tgorka/bmad-stepper` | Per-project (under `.claude/plugins/`) or per-user (under `~/.claude/plugins/`) at user choice |
 | Manual install (fallback) | Clone repo, copy plugin manifest | Documented but not the recommended path |
 | Upgrade | `/bmad-next --upgrade` | Checks GitHub Releases; reports current vs. latest; prompts user |
-| Uninstall | `/plugin marketplace remove Tgorka/bmad-stepper` | Removes the plugin only; `_bmad-output/.stepper/` data is left intact for the user to handle |
+| Uninstall | `/plugin marketplace remove tgorka/bmad-stepper` | Removes the plugin only; `_bmad-output/.stepper/` data is left intact for the user to handle |
 
 Installation prerequisites are checked at first run by `--doctor`:
 
@@ -732,7 +732,7 @@ This is the capability contract for v0.1.0. Every feature implemented downstream
 
 ### Distribution & Lifecycle
 
-- **FR47:** Users can install Stepper from the Claude Code marketplace (`/plugin marketplace add Tgorka/bmad-stepper`).
+- **FR47:** Users can install Stepper from the Claude Code marketplace (`/plugin marketplace add tgorka/bmad-stepper`).
 - **FR48:** Users can check for and install Stepper updates (`--upgrade`).
 - **FR49:** Users can uninstall Stepper while preserving local state data in `_bmad-output/.stepper/`.
 - **FR50:** System detects the installed BMAD version and validates compatibility on first run via `--doctor`.

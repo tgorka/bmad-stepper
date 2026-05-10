@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "description": "Stateful workflow orchestrator for BMAD Method projects in Claude Code.",
   "author": {
-    "name": "Tgorka"
+    "name": "Tomasz Gorka"
   },
-  "homepage": "https://github.com/Tgorka/bmad-stepper",
-  "repository": "https://github.com/Tgorka/bmad-stepper",
+  "homepage": "https://github.com/tgorka/bmad-stepper",
+  "repository": "https://github.com/tgorka/bmad-stepper",
   "license": "MIT",
   "keywords": [
     "claude-code",

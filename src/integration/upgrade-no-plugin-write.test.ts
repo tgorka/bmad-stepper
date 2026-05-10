@@ -14,7 +14,7 @@
  * NFR-S2 (architecture line 1397; PRD line 765) — read-only respect for
  * marketplace plugin runtime files.
  * AC-1 verbatim hint (epics.md line 1288) — `Run /plugin marketplace
- * update Tgorka/bmad-stepper to upgrade.` byte-identical via the
+ * update tgorka/bmad-stepper to upgrade.` byte-identical via the
  * renderer.
  *
  * AR35: tmpdir per test; cleanup in `afterEach`.
@@ -89,7 +89,7 @@ function makeStubFetch(body: unknown): typeof globalThis.fetch {
 
 const SAMPLE_RELEASE = {
   tag_name: "v0.2.0",
-  html_url: "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+  html_url: "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
   body: "## BMAD Compatibility — v6.5.x\n\nWhatever release notes go here.",
 };
 
@@ -160,7 +160,7 @@ describe("upgrade flow — NFR-S2 + AC-1.5 PRIMARY (no-plugin-write)", () => {
     expect(result.kind).toBe("upgrade-available");
     const report = renderUpgradeReport(result);
     expect(report).toContain(
-      "Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.",
+      "Run /plugin marketplace update tgorka/bmad-stepper to upgrade.",
     );
   });
 });

@@ -131,7 +131,7 @@ The PRD enumerates 54 Functional Requirements across 8 categories and 35 Non-Fun
 
 **Distribution & Lifecycle (FR47–FR51) — 5 FRs**
 
-- **FR47:** Users can install Stepper from the Claude Code marketplace (`/plugin marketplace add Tgorka/bmad-stepper`).
+- **FR47:** Users can install Stepper from the Claude Code marketplace (`/plugin marketplace add tgorka/bmad-stepper`).
 - **FR48:** Users can check for and install Stepper updates (`--upgrade`).
 - **FR49:** Users can uninstall Stepper while preserving local state data in `_bmad-output/.stepper/`.
 - **FR50:** System detects the installed BMAD version and validates compatibility on first run via `--doctor`.

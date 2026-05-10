@@ -89,7 +89,7 @@ This document provides the complete epic and story breakdown for bmad-stepper, d
 
 **Distribution & Lifecycle (FR47-FR51)**
 
-- **FR47:** Users can install Stepper from the Claude Code marketplace (`/plugin marketplace add Tgorka/bmad-stepper`).
+- **FR47:** Users can install Stepper from the Claude Code marketplace (`/plugin marketplace add tgorka/bmad-stepper`).
 - **FR48:** Users can check for and install Stepper updates (`--upgrade`).
 - **FR49:** Users can uninstall Stepper while preserving local state data in `_bmad-output/.stepper/`.
 - **FR50:** System detects the installed BMAD version and validates compatibility on first run via `--doctor`.
@@ -209,7 +209,7 @@ This document provides the complete epic and story breakdown for bmad-stepper, d
 
 **Distribution & Upgrade (D14):**
 
-- **AR29 (Read-only `--upgrade`):** Calls `gh api repos/Tgorka/bmad-stepper/releases/latest` via `Bun.fetch` (the only main-thread network I/O permitted by NFR-S1). Compares `currentVersion` to `latestVersion`; prints diff + CHANGELOG link + BMAD compat. Never auto-installs; emits hint `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.`
+- **AR29 (Read-only `--upgrade`):** Calls `gh api repos/tgorka/bmad-stepper/releases/latest` via `Bun.fetch` (the only main-thread network I/O permitted by NFR-S1). Compares `currentVersion` to `latestVersion`; prints diff + CHANGELOG link + BMAD compat. Never auto-installs; emits hint `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.`
 - **AR30 (BMAD-not-installed detection):** `BMAD_NOT_INSTALLED` (exit 3) check at top of every command runner: detect absence of `~/.claude/plugins/bmad-method-*` AND absence of `_bmad/` in project root. Hint: `Run npx bmad-method install --tools claude-code first.`
 
 **Implementation Patterns & Quality (P1-P8):**
@@ -1285,7 +1285,7 @@ So that I stay in control while always knowing whether an update is available.
 
 **Given** `src/upgrade/check.ts` invoked
 **When** `--upgrade` runs
-**Then** it calls `Bun.fetch("https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest")` (NFR-S1 exception — the only main-thread network I/O permitted), reads `currentVersion` from `.claude-plugin/plugin.json`, compares; if newer is available, prints version diff + CHANGELOG link + BMAD compat for latest + the hint `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.`
+**Then** it calls `Bun.fetch("https://api.github.com/repos/tgorka/bmad-stepper/releases/latest")` (NFR-S1 exception — the only main-thread network I/O permitted), reads `currentVersion` from `.claude-plugin/plugin.json`, compares; if newer is available, prints version diff + CHANGELOG link + BMAD compat for latest + the hint `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.`
 **And** Stepper never writes to `~/.claude/plugins/` from this code path (NFR-S2)
 **Given** the API call fails (offline, rate limit)
 **When** `--upgrade` runs
@@ -1304,6 +1304,6 @@ So that the product is shippable and contributable on day one.
 **Then** the repo contains: `README.md` (with Quick Start NFR-M4), `CHANGELOG.md` (Changesets-managed with the *BMAD Compatibility — v6.5.x* section), `AGENTS.md` (contributor + sub-agent contract), `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `LICENSE` (MIT), `.github/PULL_REQUEST_TEMPLATE.md`, `.github/ISSUE_TEMPLATE/{bug,feature,bmad-compat}.md`, `.github/dependabot.yml`
 **And** `docs/examples/` ships the seven worked examples (cold-start return, single-step, overnight loop, halt recovery, skip-on-failure, doctor diagnostic, state export for CI) plus `examples/scripting/{ci-state-check.sh, nightly-loop.sh}`
 **And** three CI workflows are green: `.github/workflows/ci.yml` (matrix Linux+macOS, `bun test` + `biome ci`), `release.yml` (Changesets PR-based release flow), `bmad-compat.yml` (weekly check vs latest BMAD upstream)
-**And** the plugin is published to the Claude Code marketplace at `Tgorka/bmad-stepper` (FR47); the dogfood-validation 30-day clock starts on this release
+**And** the plugin is published to the Claude Code marketplace at `tgorka/bmad-stepper` (FR47); the dogfood-validation 30-day clock starts on this release
 
 

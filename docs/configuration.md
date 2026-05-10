@@ -836,7 +836,7 @@ writes to `~/.claude/plugins/` (NFR-S2 + AC-1 verbatim).
 
 ### Endpoint and payload
 
-- **Endpoint:** `https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest`.
+- **Endpoint:** `https://api.github.com/repos/tgorka/bmad-stepper/releases/latest`.
 - **Permitted by NFR-S1:** the ONLY main-thread network I/O in the
   Stepper code path; all other paths are network-free (architecture
   §line 646-657 D14 + §line 1396 NFR-S1 mapping).
@@ -844,7 +844,7 @@ writes to `~/.claude/plugins/` (NFR-S2 + AC-1 verbatim).
   read at runtime via `fs.readFile` + `JSON.parse` + Zod-validated
   `PluginManifestSchema`. No hard-coded version (NFR-M3).
 - **CHANGELOG link:** taken from the release's `html_url` field
-  (e.g., `https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0`).
+  (e.g., `https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0`).
 - **BMAD compatibility extraction:** the GitHub release body is
   searched for a `## BMAD Compatibility — vX.Y.x` heading (regex
   `/(?:^|\n)#{1,6}\s+BMAD Compatibility\s+[—\-]\s+(v?\d+\.\d+\.[\d.x]+)/i`);

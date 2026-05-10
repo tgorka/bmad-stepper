@@ -14,7 +14,7 @@ This file is auto-managed by [Changesets](https://github.com/changesets/changese
 - **Telemetry:** opt-in (`telemetry.enabled: true`); local-only; no PII; rotated at 12 months.
 - **Auto-archival:** runs older than 90 days archived to `_bmad-output/.stepper/runs/.archive/`.
 - **Diagnostic flags:** `--doctor`, `--upgrade`, `--explain`, `--list`, `--export-state`, `--diff-state`, `--watch`, `--plan-first`, `--recompute-state`.
-- **Marketplace publication:** `/plugin marketplace add Tgorka/bmad-stepper` + `--upgrade` flow that checks GitHub Releases.
+- **Marketplace publication:** `/plugin marketplace add tgorka/bmad-stepper` + `--upgrade` flow that checks GitHub Releases.
 - **License:** MIT (see `LICENSE`).
 - **Documentation:** README + Quick Start (under 10 minutes per NFR-M4); `docs/{getting-started, configuration, exit-codes}.md`; seven worked examples in `docs/examples/`; scripting examples in `examples/scripting/`.
 
@@ -26,4 +26,4 @@ The `--doctor` command reports any unknown skill on first run; the `overrides:` 
 
 ### Marketplace publication note
 
-The Claude Code marketplace listing at `Tgorka/bmad-stepper` is submitted manually by the maintainer via the Claude Code marketplace UI at the v0.1.0 git tag (per architecture line 1566 — there is no Anthropic API for automated submission as of v0.1.0). The `release.yml` Changesets workflow automates the GitHub Release tag; the marketplace listing is the one-time human step that follows.
+The Claude Code marketplace listing at `tgorka/bmad-stepper` is submitted manually by the maintainer via the Claude Code marketplace UI at the v0.1.0 git tag (per architecture line 1566 — there is no Anthropic API for automated submission as of v0.1.0). The `release.yml` Changesets workflow automates the GitHub Release tag; the marketplace listing is the one-time human step that follows.

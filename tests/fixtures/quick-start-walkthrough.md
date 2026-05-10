@@ -21,7 +21,7 @@ Tick each step as you complete it; record the elapsed-time stamp. Targets are gu
 - [ ] **Step 1 — Install Bun** (target ≤ 1 min). `curl -fsSL https://bun.sh/install | bash` or `brew install oven-sh/bun/bun`.
 - [ ] **Step 2 — Verify Bun version** (target ≤ 30 sec). `bun --version` returns 1.3.x or newer (AR2 / NFR-I5).
 - [ ] **Step 3 — Install BMAD** (target ≤ 2 min, network-dependent). `npx bmad-method install --tools claude-code`. Expect plugin under `~/.claude/plugins/cache/bmad-method/bmad/<v>/` (cache layout) or `~/.claude/plugins/bmad-method-<v>/` (spec layout).
-- [ ] **Step 4 — Add Stepper marketplace** (target ≤ 1 min). `/plugin marketplace add Tgorka/bmad-stepper`. Anthropic CLI fetches `Tgorka/bmad-stepper` to `~/.claude/plugins/bmad-stepper/`.
+- [ ] **Step 4 — Add Stepper marketplace** (target ≤ 1 min). `/plugin marketplace add tgorka/bmad-stepper`. Anthropic CLI fetches `tgorka/bmad-stepper` to `~/.claude/plugins/bmad-stepper/`.
 - [ ] **Step 5 — Run the diagnostic** (target ≤ 10 sec). `/bmad-next --doctor` (or `/bmad-doctor`). Per architecture line 1672 this is read-only and lock-free.
 - [ ] **Step 6 — Verify exit code 0** (instant). The shell-visible exit code must be `0`. Anything else is a failure — see §Failure modes below.
 - [ ] **Step 7 — Verify the 5-line stderr output** (target ≤ 30 sec — eyeball check). The block must match this **byte-for-byte**:
@@ -42,7 +42,7 @@ Tick each step as you complete it; record the elapsed-time stamp. Targets are gu
 The three most likely failure paths and the expected exit code:
 
 1. **BMAD not installed.** Step 5 fails with exit `3` and the stderr line `Run npx bmad-method install --tools claude-code first.` Diagnosis: you skipped Step 3.
-2. **Stepper marketplace install fails.** Step 4 fails with an Anthropic CLI surface error (network, auth, unknown repo). This is **not** a Stepper exit code — it surfaces inside Claude Code itself. Re-check the repo slug `Tgorka/bmad-stepper` and your network.
+2. **Stepper marketplace install fails.** Step 4 fails with an Anthropic CLI surface error (network, auth, unknown repo). This is **not** a Stepper exit code — it surfaces inside Claude Code itself. Re-check the repo slug `tgorka/bmad-stepper` and your network.
 3. **5-line output mismatch.** Step 7 fails. Source-of-truth is `src/commands/doctor/checks.ts` (Story 1.12) — `checkBmadInstalled` (line 1), `checkProjectName` (line 2), `checkStateFile` (line 3), `checkStepRegistry` (line 4), and `runDoctor`'s static suggestion (line 5). File an issue if the runner output drifts from this fixture.
 
 ## Reporting template
