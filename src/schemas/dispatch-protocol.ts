@@ -61,6 +61,21 @@ export const DispatchActionV1Schema = z.discriminatedUnion("action", [
     action: z.literal("report"),
     message: z.string(),
     exitCode: z.number().int().min(0),
+    /**
+     * Optional flag set when the report represents an interactive-step
+     * pre-flight halt — Stepper wrote a questions stub at
+     * `_bmad-output/.stepper/pending-input/<step>.md` and is waiting
+     * for the user (or `/bmad-loop` Layer 1) to fill it. The loop
+     * runner uses this flag to break with the `await-input` stop
+     * reason instead of the misleading `all-steps-complete`.
+     *
+     * `awaitInputPath` carries the file path so the loop's exit
+     * message can point at it. Both fields are additive — older
+     * consumers that ignore them keep working.
+     */
+    awaitInput: z.boolean().optional(),
+    awaitInputPath: z.string().optional(),
+    awaitInputStep: z.string().optional(),
   }),
   z.object({
     action: z.literal("halt"),

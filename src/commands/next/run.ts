@@ -116,6 +116,10 @@ import {
   cleanStagingOrphans,
   type Phase as DispatchPhase,
   emitDispatchAction,
+  isQuestionsFilled,
+  questionsPathForStep,
+  readQuestionsForStep,
+  writeQuestionsStub,
 } from "../../dispatch/index.ts";
 import {
   ConfigError,
@@ -240,6 +244,24 @@ export interface RunNextOptions {
   readonly statePath?: string;
   /** Forwarded to `buildDispatchSpec` + `cleanStagingOrphans`. */
   readonly stagingRoot?: string;
+  /**
+   * Override the directory where the interactive-step questions stub
+   * is written. Defaults to a sibling of `stagingRoot` named
+   * `pending-input` when `stagingRoot` is set, else the production
+   * constant `_bmad-output/.stepper/pending-input`. Tests pass a
+   * tmpdir-rooted path so the stub does not leak into the repo.
+   */
+  readonly pendingInputDir?: string;
+  /**
+   * Test seam: when `true`, the interactive-step pre-flight halt is
+   * bypassed and the runner proceeds with the normal dispatch even
+   * for steps flagged `interactive: true`. Used by the runner's unit
+   * + integration tests that exercise dispatch behaviour without
+   * staging the questions stub. Production callers MUST NOT set
+   * this; the canonical halt-and-collect-input contract is the
+   * production behaviour.
+   */
+  readonly bypassInteractiveHalt?: boolean;
   /** Forwarded to `build` + `resolvePersona` (BMAD plugin root). */
   readonly pluginDir?: string;
   /**
@@ -2285,15 +2307,70 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       return reportWithMessage(message);
     }
 
+    // Pre-flight: interactive-step halt-and-collect-input.
+    //
+    // When `nextStep.interactive === true`, the underlying BMAD skill
+    // requires user dialogue (e.g., bmad-brainstorming asks for the
+    // topic). The sub-agent is contractually file-in/file-out, so we
+    // short-circuit dispatch:
+    //   1. If a pending-input file exists at
+    //      `_bmad-output/.stepper/pending-input/<step>.md` AND every
+    //      `<!-- FILL_ME -->` marker has been removed → include the
+    //      file as a context ref and proceed with normal dispatch.
+    //   2. Otherwise → write/refresh the stub and emit a `report`
+    //      action telling the user (or the loop) to fill it and run
+    //      `/bmad-next --resume`.
+    //
+    // The path is step-stable (NOT runId-scoped) so resume can find
+    // the same file without threading a runId through state.
+    let pendingInputContextRef: {
+      readonly path: string;
+      readonly label?: string;
+    } | null = null;
+    if (nextStep.interactive === true && opts?.bypassInteractiveHalt !== true) {
+      const resolvedPendingInputDir =
+        opts?.pendingInputDir ??
+        (opts?.stagingRoot !== undefined
+          ? path.join(path.dirname(opts.stagingRoot), "pending-input")
+          : undefined);
+      const existing = await readQuestionsForStep(
+        nextStep.name,
+        resolvedPendingInputDir,
+      );
+      if (existing !== null && isQuestionsFilled(existing)) {
+        pendingInputContextRef = {
+          path: questionsPathForStep(nextStep.name, resolvedPendingInputDir),
+          label: `User-supplied answers for ${nextStep.name}`,
+        };
+      } else {
+        const stubResult = await writeQuestionsStub(
+          nextStep.name,
+          resolvedPendingInputDir,
+        );
+        const verb = stubResult.created ? "Created" : "Pending";
+        const message =
+          `${verb} questions stub for interactive step ${nextStep.name} at ${stubResult.path}. ` +
+          `Fill every <!-- FILL_ME --> marker and run /bmad-next --resume to continue.`;
+        return reportWithMessage(message, {
+          path: stubResult.path,
+          step: nextStep.name,
+        });
+      }
+    }
+
     // Story 2.2 carry-over populators (Task 7.6 + Task 11).
     const contextRefs = buildContextRefs(nextStep, dag);
     // Story 3.2: append the resume-context refs (failure-reason
     // transcript + last-attempt artifact path) AFTER the prerequisite-
     // derived refs. Recency bias: the resume-context refs are the
     // most-recent context the sub-agent sees.
-    const finalContextRefs = args.resume
+    const baseContextRefs = args.resume
       ? [...contextRefs, ...resumeContextRefs]
       : contextRefs;
+    const finalContextRefs =
+      pendingInputContextRef !== null
+        ? [...baseContextRefs, pendingInputContextRef]
+        : baseContextRefs;
     const requiredSections = getRequiredSections(nextStep.name);
 
     // Build dispatch spec. Story 3.2: pass explicit `epic + story`
@@ -2448,13 +2525,26 @@ function haltWithHint(exitCode: 1 | 2 | 3 | 5, message: string): NextResult {
   };
 }
 
-function reportWithMessage(message: string): NextResult {
+function reportWithMessage(
+  message: string,
+  awaitInput?: {
+    readonly path: string;
+    readonly step: string;
+  },
+): NextResult {
   return {
     exitCode: 0,
     action: {
       action: "report",
       message,
       exitCode: 0,
+      ...(awaitInput !== undefined
+        ? {
+            awaitInput: true,
+            awaitInputPath: awaitInput.path,
+            awaitInputStep: awaitInput.step,
+          }
+        : {}),
     },
   };
 }

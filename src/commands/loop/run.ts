@@ -284,6 +284,22 @@ export type StopReason =
       step: string;
       runId: string | null;
       message: string;
+    }
+  | {
+      // Interactive-step pre-flight halt. Constructed DIRECTLY by the
+      // runner body when `runNext` returns a `"report"` action carrying
+      // `awaitInput === true` — meaning the dispatched step is flagged
+      // `interactive: true` and Stepper wrote a questions stub at
+      // `_bmad-output/.stepper/pending-input/<step>.md` for the user
+      // (or this loop's Layer 1) to fill. The loop halts cleanly so the
+      // user can fill the file before re-invoking `/bmad-loop` (or
+      // `/bmad-next --resume`). `path` carries the stub path for the
+      // transcript; `step` is the interactive BMAD step name.
+      code: "await-input";
+      iterCount: number;
+      step: string;
+      path: string;
+      message: string;
     };
 
 /**
@@ -1721,6 +1737,28 @@ export async function runLoop(
         break;
       }
 
+      // Interactive-step pre-flight halt. When `nextStep.interactive`
+      // is true, run.ts writes a questions stub and emits a `report`
+      // with `awaitInput: true`. The loop halts cleanly so the user
+      // (or this loop's Layer 1 LLM) can fill the file before
+      // re-invoking — this is distinct from `all-steps-complete` and
+      // must be checked FIRST so we don't misclassify it.
+      if (
+        nextResult.action.action === "report" &&
+        nextResult.exitCode === 0 &&
+        nextResult.action.awaitInput === true
+      ) {
+        const reportMessage = nextResult.action.message.replace(/\.$/, "");
+        stopReason = {
+          code: "await-input",
+          iterCount,
+          step: nextResult.action.awaitInputStep ?? "interactive step",
+          path: nextResult.action.awaitInputPath ?? "(unknown path)",
+          message: reportMessage,
+        };
+        break;
+      }
+
       // All-steps-complete graceful exit. The loop calls `runNextFn()`
       // with no flags, so the only no-flag `report` action path is the
       // dispatch happy-path's "All BMAD steps for this project are
@@ -2027,6 +2065,11 @@ export function formatExitReason(stopReason: StopReason): string {
       // so the loop transcript carries the same wording the AR9 final
       // line emits ("no-progress detected (dispatched <step> but state
       // did not advance) — run /bmad-next to execute the dispatched step").
+      return stopReason.message;
+    case "await-input":
+      // Interactive-step pre-flight halt: surface the runner-composed
+      // hint pointing at the questions stub so the loop transcript
+      // carries the same wording the report carried.
       return stopReason.message;
   }
 }

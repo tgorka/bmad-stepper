@@ -78,13 +78,14 @@
  *   - epics.md §Story 2.6 lines 664-682 (AC verbatim source).
  */
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, unlink } from "node:fs/promises";
 import type { DagAdjacency } from "../../dag/index.ts";
 import type { Phase } from "../../dag/types.ts";
 import {
   cleanStagingOrphans,
   emitDispatchAction,
   promote,
+  questionsPathForStep,
   resolvePhaseDir,
 } from "../../dispatch/index.ts";
 import {
@@ -190,6 +191,14 @@ export interface RunVerifyAndAdvanceOptions {
   readonly statePath?: string;
   /** Forwarded to `runVerifier` + `promote` + dispatch-spec read. */
   readonly stagingRoot?: string;
+  /**
+   * Override the directory where the interactive-step questions stub
+   * was written by `runNext`. Defaults to a sibling of `stagingRoot`
+   * named `pending-input` when `stagingRoot` is set, else the
+   * production constant `_bmad-output/.stepper/pending-input`. Tests
+   * pass a tmpdir-rooted path so the cleanup deletes the right file.
+   */
+  readonly pendingInputDir?: string;
   /** Forwarded to `promote` (defaults to BMAD_OUTPUT_ROOT). */
   readonly canonicalRoot?: string;
   /** Forwarded to `writeStepTranscript`. */
@@ -1395,6 +1404,37 @@ export async function runVerifyAndAdvance(
       nowIso: opts?.nowIso,
     });
     promotedTo = promoteResult.promotedTo;
+
+    // Best-effort cleanup of the interactive-step questions stub. When
+    // the just-promoted step was flagged `interactive: true`, run.ts
+    // wrote `_bmad-output/.stepper/pending-input/<step>.md` and the
+    // user (or the loop) filled it before this dispatch fired. The
+    // file's purpose ends here — a subsequent re-run of the same step
+    // (or a future invocation that picks the step again) should start
+    // from a fresh stub. ENOENT is silently swallowed for non-
+    // interactive steps; any other error is logged via warn() and
+    // ignored (cleanup MUST NOT block state advance).
+    const pendingInputDir =
+      opts?.pendingInputDir ??
+      (opts?.stagingRoot !== undefined
+        ? `${opts.stagingRoot.replace(/\/staging\/?$/, "")}/pending-input`
+        : undefined);
+    const pendingInputFile = questionsPathForStep(
+      dispatchSpec.step,
+      pendingInputDir,
+    );
+    try {
+      await unlink(pendingInputFile);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") {
+        warn(
+          `pending-input cleanup failed at ${pendingInputFile}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
 
     // Step 9: advance state. Append runHistory entry for the SUCCESSFUL
     // attempt (attemptNumber captures which attempt actually passed —

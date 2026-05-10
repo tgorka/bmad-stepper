@@ -59,6 +59,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: [],
     optional: true,
     persona: "analyst",
+    interactive: true,
   },
   {
     name: "bmad-domain-research",
@@ -66,6 +67,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: [],
     optional: true,
     persona: "analyst",
+    interactive: true,
   },
   {
     name: "bmad-market-research",
@@ -73,6 +75,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: [],
     optional: true,
     persona: "analyst",
+    interactive: true,
   },
   {
     name: "bmad-product-brief",
@@ -80,6 +83,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-brainstorming"],
     optional: true,
     persona: "analyst",
+    interactive: true,
   },
   {
     name: "bmad-prfaq",
@@ -87,6 +91,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-product-brief"],
     optional: true,
     persona: "pm",
+    interactive: true,
   },
 
   // Phase: planning (5)
@@ -96,6 +101,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-product-brief"],
     optional: false,
     persona: "pm",
+    interactive: true,
   },
   {
     name: "bmad-validate-prd",
@@ -103,6 +109,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-create-prd"],
     optional: true,
     persona: "pm",
+    interactive: true,
   },
   {
     name: "bmad-edit-prd",
@@ -110,6 +117,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-create-prd"],
     optional: true,
     persona: "pm",
+    interactive: true,
   },
   {
     name: "bmad-create-ux-design",
@@ -117,6 +125,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-create-prd"],
     optional: true,
     persona: "ux-designer",
+    interactive: true,
   },
   {
     name: "bmad-create-epics-and-stories",
@@ -124,6 +133,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-create-prd"],
     optional: false,
     persona: "pm",
+    interactive: true,
   },
 
   // Phase: solutioning (4)
@@ -133,6 +143,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-create-epics-and-stories"],
     optional: false,
     persona: "architect",
+    interactive: true,
   },
   {
     name: "bmad-check-implementation-readiness",
@@ -154,6 +165,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: [],
     optional: true,
     persona: "analyst",
+    interactive: true,
   },
 
   // Phase: implementation — core dev chain (10)
@@ -163,6 +175,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-sprint-planning"],
     optional: false,
     persona: ["analyst", "pm"],
+    interactive: true,
   },
   {
     name: "bmad-dev-story",
@@ -191,6 +204,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-create-story"],
     optional: true,
     persona: "pm",
+    interactive: true,
   },
   {
     name: "bmad-checkpoint-preview",
@@ -198,6 +212,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-dev-story"],
     optional: true,
     persona: "dev",
+    interactive: true,
   },
   {
     name: "bmad-generate-project-context",
@@ -330,6 +345,7 @@ export const seedV6_x: readonly SeedEntry[] = [
     after: ["bmad-code-review"],
     optional: true,
     persona: "pm",
+    interactive: true,
   },
 
   // Misc / utility (3)

@@ -128,6 +128,15 @@ Case action == "report":
   Print the `message` field DIRECTLY to the user. No Task dispatch. No
   second Bash invoke. Exit with the JSON line's exitCode (typically 0).
 
+  When the report carries `awaitInput: true`, the dispatched step is
+  flagged `interactive: true` in the DAG and Stepper has written a
+  questions stub at the path in `awaitInputPath` (also surfaced in the
+  message). The user (or you, the slash-command Layer-1 LLM) fills
+  every `<!-- FILL_ME -->` marker with an answer, then re-invokes
+  `/bmad-next --resume`. On the re-invocation Stepper detects the
+  filled file and includes it in the sub-agent's context — the
+  sub-agent then produces the artifact non-interactively.
+
 Case action == "halt":
   Print the `message` field DIRECTLY to the user (the actionable hint).
   No Task dispatch. No second Bash invoke. Exit with the JSON line's

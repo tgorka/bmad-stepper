@@ -34,6 +34,17 @@ export type {
 export { buildDispatchSpec } from "./generate-spec.ts";
 export type { PromoteInput, PromoteResult } from "./promote.ts";
 export { promote, resolvePhaseDir } from "./promote.ts";
+export type { QuestionPrompt } from "./questions-stub.ts";
+export {
+  FILL_ME_MARKER,
+  getQuestionsForStep,
+  isQuestionsFilled,
+  QUESTIONS_FILENAME,
+  questionsPathForStep,
+  readQuestionsForStep,
+  renderQuestionsStub,
+  writeQuestionsStub,
+} from "./questions-stub.ts";
 export type {
   CleanStagingOrphansOptions,
   CleanStagingOrphansResult,

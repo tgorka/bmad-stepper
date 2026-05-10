@@ -145,6 +145,24 @@ interface SpawnResult {
  * streams; await proc.exited; await Promise.all([stdout, stderr]) to
  * avoid pipe-buffer blocking.
  */
+/**
+ * Pre-fill the interactive-step questions stub so the runner's
+ * pre-flight halt sees a filled file and proceeds with dispatch.
+ * Production-equivalent: this is what the user (or the loop) does
+ * before re-running `/bmad-next --resume`.
+ */
+async function prefillQuestionsForStep(
+  cwd: string,
+  stepName: string,
+): Promise<void> {
+  const dir = path.join(cwd, "_bmad-output/.stepper/pending-input");
+  await fs.mkdir(dir, { recursive: true });
+  await Bun.write(
+    path.join(dir, `${stepName}.md`),
+    `# Questions for ${stepName}\n\nAnswered for the smoke test.\n`,
+  );
+}
+
 async function spawnRunner(
   scriptPath: string,
   args: readonly string[],
@@ -203,6 +221,11 @@ function stagedArtifactPath(
 
 describe("smoke /bmad-next happy path", () => {
   it("invokes run.ts → mocks Task → invokes verify-and-advance.ts → asserts full pipeline", async () => {
+    // bmad-brainstorming is flagged interactive in the seed DAG —
+    // pre-fill the questions stub so the runner's pre-flight halt
+    // sees a filled file and proceeds with dispatch (production-
+    // equivalent to the user filling answers before --resume).
+    await prefillQuestionsForStep(tmp, "bmad-brainstorming");
     // ─── Step 1: Bash invoke 1 (run.ts) ───────────────────────────────────
     const result1 = await spawnRunner(
       NEXT_RUN_TS,
@@ -347,6 +370,9 @@ describe("smoke /bmad-next happy path", () => {
     const parentDir = path.dirname(tmp);
     const parentMtimeBefore = (await fs.stat(parentDir)).mtimeMs;
 
+    // Pre-fill the interactive-step questions stub (bmad-brainstorming
+    // is flagged `interactive: true`).
+    await prefillQuestionsForStep(tmp, "bmad-brainstorming");
     // Re-run the happy-path smoke (Task 4.1 condensed).
     const result1 = await spawnRunner(
       NEXT_RUN_TS,
