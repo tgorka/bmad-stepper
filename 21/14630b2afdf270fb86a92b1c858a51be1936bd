@@ -1,0 +1,23 @@
+src/commands/loop/run.ts
+  s_aaa05a6d0e662d::t_0385d73ab987dd 1771-1772
+  s_aaa05a6d0e662d::t_13ebe7572dc552 612-622
+src/commands/loop/run.test.ts
+  s_aaa05a6d0e662d::t_e9b8649354cc4b 286-291,293-298,300-325,330-332,338,343-346,348,357-378,387-389,391-413
+  s_aaa05a6d0e662d::t_967b675b38def7 379-386,390
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "2114630b2afdf270fb86a92b1c858a51be1936bd",
+  "prompts": {},
+  "sessions": {
+    "s_aaa05a6d0e662d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "412b5501-990b-4537-b1b3-0d93d93f1b11",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
