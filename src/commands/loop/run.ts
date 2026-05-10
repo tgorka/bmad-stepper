@@ -1443,8 +1443,7 @@ export async function runLoop(
       // not run (v0.1 production limitation per commands/bmad-loop.md §4)
       // and the loop halts with `no-progress-detected` instead of spinning
       // to `--max-iters`.
-      const preIterLastSuccessfulStep =
-        state?.lastSuccessfulStep?.step ?? null;
+      const preIterLastSuccessfulStep = state?.lastSuccessfulStep?.step ?? null;
       // Story 4.3: use the opt-in DAG (loaded once at loop entry when
       // `args.phaseEnd === true`; null otherwise). The empty-DAG sentinel
       // is passed downstream to satisfy the predicate signature when
