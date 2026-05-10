@@ -1,0 +1,19 @@
+src/state/recompute.ts
+  s_89640b4c8d6578::t_86d16b8756e49f 199-200,203-216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "dec8e5a081765c9a5646ee548925d6ffce1f2c9b",
+  "prompts": {},
+  "sessions": {
+    "s_89640b4c8d6578": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d9c10967-53a3-47e7-85b3-0921cdc9bb85",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
