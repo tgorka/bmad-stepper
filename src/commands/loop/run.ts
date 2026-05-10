@@ -1229,6 +1229,14 @@ export async function runLoop(
         | undefined =
         args.autoFix === true ? "route-to-fixer" : opts?.failurePolicyOverride;
       return await runNext({
+        // Pass an empty argv so runNext does not inherit `process.argv`
+        // and reject loop-only flags (e.g. `--max-iters`) or unrelated
+        // process flags (e.g. `bun test --pass-with-no-tests` leaks
+        // `--pass-with-no-tests` into the runNext parser, surfacing a
+        // misleading EXIT_2 halt mid-loop). Each loop iteration picks
+        // the next step from state alone — no per-iteration runNext
+        // flags are plumbed through.
+        argv: [],
         ...(args.checkpointEach !== undefined
           ? { checkpointEach: args.checkpointEach }
           : {}),
