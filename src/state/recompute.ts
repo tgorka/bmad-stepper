@@ -37,6 +37,7 @@
  * No `console.*` calls anywhere — errors are thrown.
  */
 
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { acquire, type LockOptions } from "../lock/lock.ts";
 import type { State } from "../schemas/state.ts";
@@ -194,6 +195,11 @@ export async function recomputeState(opts?: RecomputeOptions): Promise<State> {
   const projectRoot = opts?.projectRoot ?? process.cwd();
   const bmadVersion = opts?.bmadVersion ?? "unknown";
   const statePath = opts?.statePath ?? STATE_PATH;
+  // Lock acquisition uses `mkdir(..., { recursive: false })` (lock.ts:379)
+  // which fails on a fresh project where `_bmad-output/.stepper/` does
+  // not yet exist. Create the parent directory eagerly so the first-run
+  // bootstrap path can acquire the lock cleanly.
+  await fs.mkdir(path.dirname(statePath), { recursive: true });
   const handle = await acquire(opts?.lockOptions);
   try {
     const projectName = path.basename(projectRoot);

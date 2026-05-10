@@ -405,25 +405,44 @@ describe("runNext — AC-2 read-only flag tests", () => {
   });
 });
 
-// ─── AC-3: state-loading failure path ─────────────────────────────────────
+// ─── AC-3: state-loading auto-bootstrap path ──────────────────────────────
 
-describe("runNext — AC-3 state-loading failure path", () => {
-  it("emits action: 'halt' with exitCode 1 + actionable hint when state.yaml is missing", async () => {
-    // Write empty state.yaml (size 0).
+describe("runNext — AC-3 state-loading auto-bootstrap path", () => {
+  it("auto-bootstraps state.yaml when missing instead of halting", async () => {
+    // Write empty state.yaml (size 0). Pre-fix this halted with
+    // CorruptStateError; the auto-bootstrap now recomputes from project
+    // artifacts (NFR-R3 — state.yaml is recomputable) and proceeds with
+    // the dispatch path.
+    const statePath = path.join(tmp, "state.yaml");
+    await Bun.write(statePath, "");
+
+    await runNext({
+      ...commonOpts(statePath),
+      argv: [],
+    });
+
+    // The bootstrap path writes a freshly-recomputed state.yaml. The
+    // exact downstream action depends on the fixture's BMAD detection
+    // (which can still halt for unrelated reasons in this stripped-down
+    // test fixture); the contract this test guards is that the missing-
+    // state load no longer halts on a CorruptStateError.
+    expect(Bun.file(statePath).size).toBeGreaterThan(0);
+  });
+
+  it("--recompute-state on an empty state.yaml emits a report and exits 0", async () => {
     const statePath = path.join(tmp, "state.yaml");
     await Bun.write(statePath, "");
 
     const result = await runNext({
       ...commonOpts(statePath),
-      argv: [],
+      argv: ["--recompute-state"],
     });
 
-    expect(result.exitCode).toBe(1);
-    expect(result.action.action).toBe("halt");
-    if (result.action.action !== "halt") return;
-    expect(result.action.exitCode).toBe(1);
-    // CorruptStateError.actionableHint starts with "Run /bmad-next…".
-    expect(result.action.message.startsWith("Run /bmad-next")).toBe(true);
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    expect(result.action.message).toContain("recomputed from project artifacts");
+    expect(Bun.file(statePath).size).toBeGreaterThan(0);
   });
 });
 
@@ -3640,11 +3659,18 @@ describe("runNext — Story 3.8 --diff-state and --export-state", () => {
     //
     // This test re-asserts the invariant at the runner level: the run.ts
     // imports for the new helpers are present; the locked variants are NOT.
+    //
+    // MAINTENANCE EXCEPTION: `recomputeState` IS imported by run.ts as of
+    // the auto-bootstrap + `--recompute-state` wiring (NFR-R3 — state.yaml
+    // is recomputable from disk). The exception is gated on the explicit
+    // flag and the fresh-project sentinel; the dispatch happy path remains
+    // lock-free. `saveState` itself is still forbidden (the only write
+    // surface is `recomputeState`'s internal save).
     const source = await Bun.file(path.join(import.meta.dir, "run.ts")).text();
     expect(source).toContain('from "../../state/diff.ts"');
     expect(source).toContain('from "../../state/export.ts"');
-    // Forbidden imports — ensure the locked variants are NOT imported by run.ts.
-    expect(source).not.toMatch(/\brecomputeState\b\s*[,}]/);
+    // saveState (lock-required write surface) is still forbidden as a
+    // direct import binding in run.ts.
     expect(source).not.toMatch(/\bsaveState\b\s*[,}]/);
   });
 });

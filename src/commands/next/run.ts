@@ -25,6 +25,16 @@
  * invocation; the lock-free → lock-held boundary is the process
  * boundary).
  *
+ * **MAINTENANCE EXCEPTION**: the `--recompute-state` branch and the
+ * first-run auto-bootstrap delegate to `recomputeState()` from
+ * `../../state/recompute.ts`, which DOES acquire the lock + write
+ * `state.yaml` via `saveState`. These are explicit one-shot maintenance
+ * operations (NFR-R3 — `state.yaml` is recomputable from disk); they do
+ * not violate the spirit of the lock-free dispatch contract because the
+ * dispatch happy path itself remains lock-free. The auto-bootstrap fires
+ * only when `state.yaml` is absent (fresh project) so the cost is paid
+ * once per project lifetime.
+ *
  * **AR9 STDOUT DISCIPLINE**: each `bun run` invocation emits EXACTLY
  * ONE JSON line on stdout — the `DispatchActionV1` line written via
  * `emitDispatchAction` (which calls `json()` from `src/io/log.ts` after
@@ -125,6 +135,8 @@ import { runArchivalAtStartup } from "../../startup/archival-trigger.ts";
 import { diffState } from "../../state/diff.ts";
 import { exportState } from "../../state/export.ts";
 import { loadStateUnlocked } from "../../state/load.ts";
+import { STATE_PATH } from "../../state/paths.ts";
+import { recomputeState } from "../../state/recompute.ts";
 // Story 6.9 — `--upgrade` short-circuit. Top-tier consumes mid-tier per
 // AR41; the upgrade modules are foundational + node:* + zod only.
 import { renderUpgradeReport, runUpgradeCheck } from "../../upgrade/index.ts";
@@ -1725,6 +1737,60 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
           ? "no runs to watch (fresh project)"
           : `watch session ended (${watchResult.filePath})`;
       return reportWithMessage(message);
+    }
+
+    // Step 5c: --recompute-state + first-run auto-bootstrap.
+    //
+    // `state.yaml` is a cache (NFR-R3) that can be rebuilt from project
+    // artifacts at any time. Two trigger paths share the same recompute
+    // call:
+    //   1. Explicit: `args.recomputeState === true` — user invoked
+    //      `/bmad-next --recompute-state`. Returns an AR9 `report` with
+    //      a one-line summary and exits 0.
+    //   2. Implicit: `state.yaml` is absent (fresh project, first run).
+    //      Bootstraps silently and falls through to the dispatch path so
+    //      the loop runner / next dispatcher work end-to-end on a brand-
+    //      new project. Logs an `info()` line to stderr so the user sees
+    //      what happened.
+    //
+    // Placement after `--doctor` / `--watch` is intentional: doctor's
+    // `checkStateFile` reports "State file: not present (fresh project)"
+    // and the user expects that diagnostic to remain truthful. Bootstrap
+    // fires only on paths that need state to make progress.
+    {
+      const statePathResolved = opts?.statePath ?? STATE_PATH;
+      const stateMissing = Bun.file(statePathResolved).size === 0;
+      if (args.recomputeState || stateMissing) {
+        try {
+          const fresh = await recomputeState({
+            ...(opts?.projectRoot !== undefined
+              ? { projectRoot: opts.projectRoot }
+              : {}),
+            ...(opts?.statePath !== undefined
+              ? { statePath: opts.statePath }
+              : {}),
+          });
+          if (args.recomputeState) {
+            const stepLine = fresh.lastSuccessfulStep
+              ? `lastSuccessfulStep=${fresh.lastSuccessfulStep.step}`
+              : "lastSuccessfulStep=null (no completed artifacts found)";
+            return reportWithMessage(
+              `state.yaml recomputed from project artifacts (${stepLine}).`,
+            );
+          }
+          // Auto-bootstrap path: log + fall through.
+          log.info(
+            "state.yaml not present — bootstrapped from project artifacts (first-run).",
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.error(`recompute-state: ${msg}`);
+          return haltWithHint(
+            1,
+            "Run /bmad-next --doctor to inspect the project; if _bmad-output/.stepper/state.yaml is corrupt, delete it and re-run.",
+          );
+        }
+      }
     }
 
     // Step 6: read-only flag handling (route order:
