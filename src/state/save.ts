@@ -18,9 +18,11 @@
  *   2. Trust the caller's `LockHandle`. The function does NOT validate
  *      the handle is live — that responsibility lives with the caller's
  *      `try/finally` discipline (read-modify-write pattern per AR12).
- *   3. Serialise to YAML via `Bun.YAML.stringify(...)` — Bun ships symmetric
- *      YAML emission; output is canonical (key order = declaration order;
- *      2-space indent; no anchors).
+ *   3. Serialise to YAML via `Bun.YAML.stringify(state, null, 2)` — Bun
+ *      ships symmetric YAML emission. The `2` indent argument forces
+ *      block-style output (multi-line, human-readable) rather than the
+ *      default flow-style (single-line `{a: 1, b: 2}`). Key order =
+ *      declaration order; no anchors.
  *   4. Ensure the parent directory exists via `fs.mkdir({ recursive: true })`
  *      (lazy creation on a fresh project — `_bmad-output/.stepper/` does not
  *      exist before the first save).
@@ -84,7 +86,7 @@ export async function saveState(
     );
   }
 
-  const yamlText = Bun.YAML.stringify(validated);
+  const yamlText = Bun.YAML.stringify(validated, null, 2);
   const targetPath = opts?.statePath ?? STATE_PATH;
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   await atomicWrite(targetPath, yamlText);
