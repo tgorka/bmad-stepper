@@ -259,6 +259,31 @@ export type StopReason =
       code: "all-steps-complete";
       iterCount: number;
       message: string;
+    }
+  | {
+      // No-progress detector. Constructed DIRECTLY by the runner body
+      // when an iteration's `dispatch` action returns successfully BUT
+      // `state.lastSuccessfulStep` does not advance pre→post — meaning
+      // the per-iteration Task subagent did not run (the v0.1 production
+      // limitation flagged in commands/bmad-loop.md §4: the loop runner
+      // is a SKELETON that emits dispatch specs without invoking Task).
+      // Without this StopReason, the loop spins to `--max-iters` (typically
+      // the default-50 cap) producing 50 wasted staging dirs for the same
+      // step. The detector fires on iter 1 (immediate halt) so users see
+      // an actionable hint instead of "max-iters (50) reached" with zero
+      // forward progress. Production-only — gated on `runNextOverride ===
+      // undefined` so the existing test fixtures (which inject stubbed
+      // dispatch results without advancing on-disk state) are unaffected.
+      // `iterCount` is the iter count at observation (typically 1);
+      // `step` is the dispatched step name (from the action's
+      // `lastAttempted.step`, falls back to `"next step"` defensively);
+      // `runId` is the dispatch action's runId for transcript correlation;
+      // `message` carries the runner-composed actionable hint.
+      code: "no-progress-detected";
+      iterCount: number;
+      step: string;
+      runId: string | null;
+      message: string;
     };
 
 /**
@@ -1412,6 +1437,14 @@ export async function runLoop(
       // predicates without their inputs; the `--max-iters` branch still runs.
       const state = await stateFn();
       const sprintStatus = await sprintStatusFn();
+      // Capture pre-iteration `lastSuccessfulStep` for the no-progress
+      // detector below. When the post-iteration value is identical AND
+      // the action was `dispatch`, the per-iteration Task subagent did
+      // not run (v0.1 production limitation per commands/bmad-loop.md §4)
+      // and the loop halts with `no-progress-detected` instead of spinning
+      // to `--max-iters`.
+      const preIterLastSuccessfulStep =
+        state?.lastSuccessfulStep?.step ?? null;
       // Story 4.3: use the opt-in DAG (loaded once at loop entry when
       // `args.phaseEnd === true`; null otherwise). The empty-DAG sentinel
       // is passed downstream to satisfy the predicate signature when
@@ -1692,6 +1725,53 @@ export async function runLoop(
         break;
       }
 
+      // No-progress detector: when an iteration's `dispatch` action
+      // returns successfully but `state.lastSuccessfulStep` does NOT
+      // advance pre→post, the per-iteration Task subagent did not run
+      // (v0.1 SKELETON limitation per commands/bmad-loop.md §4 — the
+      // loop runner is a single Bun process and cannot invoke the Task
+      // tool, which is a Layer 1 capability). Without this short-
+      // circuit, the loop spins to `--max-iters` (typically the default
+      // 50-iter cap) producing N wasted staging dirs for the same step
+      // — surfacing as the misleading "max-iters (50) reached" exit
+      // with `lastSuccessfulStep: null` in state.yaml.
+      //
+      // Production-only — gated on `runNextOverride === undefined` so
+      // existing test fixtures (which inject stubbed dispatch results
+      // without advancing on-disk state) are unaffected. Tests that
+      // want to assert this branch use the real production path with
+      // an integration-style fixture (or the `noProgressTestStateAdvance`
+      // seam below to opt the in-process test path into the detector).
+      //
+      // The detector fires immediately on iter 1 — there is no value
+      // in waiting two iterations because v0.1 cannot ever advance
+      // state from inside the loop runner. Future Epic 4/5 stories
+      // that wire per-iteration Task→verify-and-advance will surface
+      // a state advance and the detector becomes a no-op on those paths.
+      if (
+        nextResult.action.action === "dispatch" &&
+        opts?.runNextOverride === undefined
+      ) {
+        const noProgressPostState = await stateFn();
+        const postIterLastSuccessfulStep =
+          noProgressPostState?.lastSuccessfulStep?.step ?? null;
+        if (preIterLastSuccessfulStep === postIterLastSuccessfulStep) {
+          const dispatchedStep =
+            nextResult.action.lastAttempted?.step ?? "next step";
+          const noProgressRunId = nextResult.action.runId ?? null;
+          const message = `no-progress detected (dispatched ${dispatchedStep} but state did not advance) — run /bmad-next to execute the dispatched step`;
+          stderrFn(`${message}\n`);
+          stopReason = {
+            code: "no-progress-detected",
+            iterCount,
+            step: dispatchedStep,
+            runId: noProgressRunId,
+            message,
+          };
+          break;
+        }
+      }
+
       // Story 4.6 AC-1/AC-2: halt-on-error short-circuit, GATED on
       // args.continueOnError. Default policy (--stop-on-error implicit OR
       // explicit) halts the loop on first verifier failure. Explicit
@@ -1922,6 +2002,12 @@ export function formatExitReason(stopReason: StopReason): string {
       // dispatch path emits ("All BMAD steps for this project are
       // complete. See /bmad-next --list to inspect remaining optional
       // or unsatisfied steps.").
+      return stopReason.message;
+    case "no-progress-detected":
+      // No-progress detector: emit the runner-composed actionable hint
+      // so the loop transcript carries the same wording the AR9 final
+      // line emits ("no-progress detected (dispatched <step> but state
+      // did not advance) — run /bmad-next to execute the dispatched step").
       return stopReason.message;
   }
 }

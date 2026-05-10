@@ -124,7 +124,8 @@ Exit-code mapping per FR53 + Story 4.1:
 
 - `0` — clean exit (one of `max-iters-reached`, `epic-end-reached`,
   `until-story-reached`, `next-story-reached`, `phase-end-reached`,
-  `time-budget-reached`, `token-budget-reached`).
+  `time-budget-reached`, `token-budget-reached`,
+  `all-steps-complete`, `no-progress-detected`).
 - `1` — `halt-on-error` OR `error-stop` (Story 4.6 — verifier failure
   under default `--stop-on-error` policy). Both variants surface exit
   code `1` per FR53 `halt-with-actionable-error`; the AR22-conformant
@@ -133,6 +134,19 @@ Exit-code mapping per FR53 + Story 4.1:
   `halt-on-error` retains the v0.1 generic-halt message format for
   non-verifier halts).
 - `2` — argument parse error (configuration error per FR53).
+
+**No-progress detector**: when an iteration's `dispatch` action
+succeeds but `state.lastSuccessfulStep` does not advance pre→post,
+the per-iteration Task subagent did not run (the v0.1 SKELETON
+limitation flagged in §4 below — the loop runner is a single Bun
+process and cannot invoke the Task tool, which is a Layer 1
+capability). The runner halts on iter 1 with the `no-progress-detected`
+StopReason and the AR9 message
+`no-progress detected (dispatched <step> but state did not advance) —
+run /bmad-next to execute the dispatched step`. Exit code `0` (clean
+exit; the user is steered toward `/bmad-next` rather than allowed to
+spin to `--max-iters` producing 50 wasted staging dirs for the same
+step).
 
 Plan-mode (`--plan-first`) ALWAYS maps to exit code `0` (clean exit;
 the dry-run is the success path per Story 4.7 AC-1).
