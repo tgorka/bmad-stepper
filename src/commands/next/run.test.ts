@@ -441,7 +441,9 @@ describe("runNext — AC-3 state-loading auto-bootstrap path", () => {
     expect(result.exitCode).toBe(0);
     expect(result.action.action).toBe("report");
     if (result.action.action !== "report") return;
-    expect(result.action.message).toContain("recomputed from project artifacts");
+    expect(result.action.message).toContain(
+      "recomputed from project artifacts",
+    );
     expect(Bun.file(statePath).size).toBeGreaterThan(0);
   });
 });
