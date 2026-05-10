@@ -91,13 +91,15 @@ function commonOpts(statePath: string): Parameters<typeof runNext>[0] {
 //
 // The seed-v6.x DAG (Story 1.10) marks ALL analysis-phase entry-points
 // as `optional: true` — including some persona-null entries
-// (bmad-advanced-elicitation, bmad-help, bmad-distillator) that fall
-// through to the no-tier-resolves persona throw. The
-// alphabetically-first entry-point with `--include-optional` is
-// `bmad-advanced-elicitation` (persona null) — the runner halts with
-// the verbatim AC-2 hint per Story 1.11. To exercise the dispatch
-// happy path deterministically, the AC-1 tests use either an explicit
-// `--step` argument or a seeded state with `lastSuccessfulStep`.
+// (bmad-advanced-elicitation, bmad-help, bmad-distillator) that are
+// utility skills, not methodology entry-points. `pickNextStep` now
+// excludes `persona === null` candidates from automatic selection, so
+// the alphabetically-first auto-pick on a fresh project is
+// `bmad-brainstorming` (analyst). The AC-1 tests below still use an
+// explicit `--step` argument or a seeded `lastSuccessfulStep` for
+// determinism, but the empty-state path now bootstraps to a clean
+// dispatch instead of halting on the misleading "Add a persona for
+// bmad-advanced-elicitation" hint.
 
 describe("runNext — AC-1 happy path (explicit --step bmad-brainstorming)", () => {
   it("emits action: 'dispatch' with valid AR9 line + creates dispatch-spec.json", async () => {
@@ -296,6 +298,99 @@ describe("runNext — AC-1 happy path (post-first-step state)", () => {
   });
 });
 
+// ─── Fresh-project null-persona skip + unknown-lastSuccessfulStep all-done ─
+
+describe("runNext — fresh-project skips null-persona utility steps (Issue A)", () => {
+  it("auto-pick on a fresh project bootstraps to bmad-brainstorming, NOT bmad-advanced-elicitation", async () => {
+    // Pre-fix: alphabetically-first analysis entry-point with after:[] was
+    // `bmad-advanced-elicitation` (persona null in seed-v6.x.ts; defaults.ts
+    // OMITS it). The runner halted with "Add a persona for
+    // bmad-advanced-elicitation in bmad-stepper.config.yaml under the
+    // personas: block." — actively misleading on a fresh BMAD-installed
+    // project. Post-fix: pickNextStep filters `persona === null` from the
+    // candidate set, so the auto-pick lands on `bmad-brainstorming`.
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: [],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    expect(result.action.runId.includes("bmad-brainstorming")).toBe(true);
+  });
+
+  it("auto-pick still skips bmad-help / bmad-distillator (other null-persona utility steps)", async () => {
+    // Sanity: confirm the filter applies to all three null-persona analysis
+    // entry-points, not only bmad-advanced-elicitation. The picked step
+    // must be a real (non-null-persona) entry-point.
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: [],
+    });
+    if (result.action.action !== "dispatch") {
+      throw new Error("expected dispatch");
+    }
+    expect(
+      result.action.runId.includes("bmad-help") ||
+        result.action.runId.includes("bmad-advanced-elicitation") ||
+        result.action.runId.includes("bmad-distillator"),
+    ).toBe(false);
+  });
+
+  it("explicit --step bmad-advanced-elicitation still routes through (filter only affects auto-pick)", async () => {
+    // The explicit `--step` branch returns BEFORE the null-persona filter.
+    // Without `--persona`, the step still hits the AC-2 throw downstream,
+    // but the user's explicit intent is honoured at the pick level.
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: ["--step", "bmad-advanced-elicitation", "--persona", "analyst"],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("dispatch");
+    if (result.action.action !== "dispatch") return;
+    expect(result.action.runId.includes("bmad-advanced-elicitation")).toBe(
+      true,
+    );
+  });
+});
+
+describe("runNext — lastSuccessfulStep outside DAG = project all-done (Issue B)", () => {
+  it("emits the 'all complete' report when lastSuccessfulStep.step is not in the BMAD DAG", async () => {
+    // Scenario: `recomputeState` populated lastSuccessfulStep.step from an
+    // artifact's `story_key` (e.g., "6-10-repo-files-v0-1-0-marketplace-release")
+    // rather than a BMAD seed step name. Pre-fix: pickNextStep produced
+    // zero candidates (no DAG node has the custom name in its `after[]`)
+    // and threw "filter excludes all candidates." Post-fix: `isProjectAllDone`
+    // returns true, surfacing the friendly "All BMAD steps complete" report.
+    const stateText = Bun.YAML.stringify({
+      schemaVersion: 1,
+      project: { name: "stepper-test", bmadVersion: "unknown" },
+      lastSuccessfulStep: {
+        step: "6-10-repo-files-v0-1-0-marketplace-release",
+        epic: 6,
+        story: "6.10",
+        completedAt: "2026-05-06T06:05:00Z",
+      },
+      runHistory: [],
+      checkpoints: [],
+    });
+    const statePath = await writeMinimalState(stateText);
+    const result = await runNext({
+      ...commonOpts(statePath),
+      argv: [],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    expect(result.action.message).toContain(
+      "All BMAD steps for this project are complete",
+    );
+  });
+});
+
 // ─── AC-2: read-only flag report paths ────────────────────────────────────
 
 describe("runNext — AC-2 read-only flag tests", () => {
@@ -486,11 +581,16 @@ describe("runNext — AC-4 schema validation", () => {
   });
 
   it("the emitted action validates against DispatchActionV1Schema (halt path)", async () => {
-    const statePath = path.join(tmp, "state.yaml");
-    await Bun.write(statePath, "");
+    // Trigger a deterministic halt via an unknown explicit step (the
+    // `pickNextStep` explicit-step branch throws ConfigError → halt). The
+    // empty-state fall-through path used to halt-on-null-persona via
+    // `bmad-advanced-elicitation`, but `pickNextStep` now skips null-persona
+    // candidates so the empty-state path bootstraps cleanly to
+    // `bmad-brainstorming` (dispatch).
+    const statePath = await writeMinimalState();
     const result = await runNext({
       ...commonOpts(statePath),
-      argv: [],
+      argv: ["--step", "no-such-step-name"],
     });
     const parsed = DispatchActionV1Schema.parse(
       JSON.parse(JSON.stringify(result.action)),

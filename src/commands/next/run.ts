@@ -932,6 +932,17 @@ function pickNextStep(
     filtered = filtered.filter((n) => !n.optional);
   }
 
+  // Exclude utility/null-persona nodes from automatic selection. The seed
+  // marks `bmad-help`, `bmad-advanced-elicitation`, `bmad-distillator`,
+  // `bmad-customize`, and `bmad-shard-doc` with `persona: null` — they are
+  // user-invoked utility skills, not methodology entry-points. Picking
+  // them here would cascade into `resolvePersona`'s no-tier-resolves throw
+  // with the misleading hint "Add a persona for <step> in
+  // bmad-stepper.config.yaml under the personas: block." Users can still
+  // dispatch them explicitly via `--step <name> [--persona <name>]`; the
+  // explicit `--step` branch above returns BEFORE this filter runs.
+  filtered = filtered.filter((n) => n.persona !== null);
+
   if (filtered.length === 0) {
     throw new ConfigError(
       "No candidate next step matches the current state + filters.",
@@ -1329,6 +1340,12 @@ function formatCandidateLine(node: DagNode, state: State): string {
  *
  *   - If `state.lastSuccessfulStep === undefined`, return `false` (fresh
  *     project — never all-done).
+ *   - If `lastSuccessfulStep.step` is NOT in the resolved DAG (e.g.
+ *     `recomputeState` populated `lastSuccessfulStep.step` from a project-
+ *     specific `story_key` like `6-10-...` rather than a BMAD seed step
+ *     name), return `true` — treat as project-effectively-complete and
+ *     surface the friendly "all done" message instead of the misleading
+ *     "filter excludes all candidates" hint downstream in `pickNextStep`.
  *   - If `lastSuccessfulStep.phase` is `retro` (the highest-phase-order
  *     terminal phase) AND no candidate (computed under
  *     `args.includeOptional` semantics — i.e., as if `--include-optional`
@@ -1343,7 +1360,7 @@ function isProjectAllDone(state: State, dag: DagAdjacency): boolean {
   if (last === undefined || last === null) return false;
   // Look up the lastSuccessfulStep node in the DAG to check its phase.
   const lastNode = dag.nodes.get(last.step);
-  if (lastNode === undefined) return false;
+  if (lastNode === undefined) return true;
   if (lastNode.phase !== "retro") return false;
   // Compute the candidate set IGNORING --no-optional (i.e., as if
   // --include-optional were set). Any node whose `after[]` includes the
@@ -2090,6 +2107,21 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         ? { overrides: effectiveConfig.overrides }
         : {}),
     });
+
+    // All-done short-circuit on the dispatch path. When the project is
+    // effectively complete (every retro-phase step done, OR
+    // `lastSuccessfulStep.step` resolved by `recomputeState` is outside
+    // the BMAD DAG — e.g. a project-specific `story_key` like
+    // `6-10-...`), emit the friendly "all complete" report instead of
+    // walking pickNextStep all the way to the misleading
+    // "filter excludes all candidates" hint. Mirrors the existing
+    // `--explain` short-circuit at line 1932; gated behind `!args.resume`
+    // so the resume path retains its dedicated error-handling.
+    if (!args.resume && isProjectAllDone(state, dag)) {
+      return reportWithMessage(
+        "All BMAD steps for this project are complete. See /bmad-next --list to inspect remaining optional or unsatisfied steps.",
+      );
+    }
 
     // Story 3.2: --resume branch. When `args.resume === true`, substitute
     // `state.lastAttempted.step` for the standard `pickNextStep(...)`
