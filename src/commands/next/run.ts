@@ -107,6 +107,7 @@
  */
 
 import * as path from "node:path";
+import { detectBmadVersion } from "../../bmad-detect/index.ts";
 import { getStepConfig } from "../../config/step-config.ts";
 import { build, type DagAdjacency, type DagNode } from "../../dag/index.ts";
 import type { Phase } from "../../dag/types.ts";
@@ -241,6 +242,13 @@ export interface RunNextOptions {
   readonly stagingRoot?: string;
   /** Forwarded to `build` + `resolvePersona` (BMAD plugin root). */
   readonly pluginDir?: string;
+  /**
+   * Forwarded to `detectBmadVersion` (BMAD-not-installed pre-check on
+   * the dispatch path). Defaults to `os.homedir()`. Tests inject a
+   * tmpdir containing a fake `.claude/plugins/bmad-method-X/` layout
+   * (mirrors the `RunDoctorOptions.homeDir` precedent).
+   */
+  readonly homeDir?: string;
   /** Forwarded to `build` (overrides config path). */
   readonly overridesPath?: string;
   /** Forwarded to `resolvePersona` (project config personas: block). */
@@ -907,11 +915,20 @@ function pickNextStep(
   // dispatches the explicit step EVEN with `--no-optional` — the user's
   // explicit `--step` intent supersedes the toggle. This is intentional
   // per Story 3.5 §v0.1 Design Decisions.
+  //
+  // **Fresh-project carve-out**: every analysis-phase entry-point in the
+  // seed (`src/dag/seed-v6.x.ts`) is `optional: true`. With the steady-
+  // state default (exclude optional), a fresh project (`lastSuccessfulStep
+  // == null`) yields ZERO candidates and `/bmad-loop` halts iteration 1
+  // with the misleading "filter excludes all candidates" hint. The fresh-
+  // project case INCLUDES optional candidates UNLESS the user passed
+  // `--no-optional` explicitly — the methodology's true entry-points are
+  // optional ramps, so excluding them strands users on first run.
   if (args.noOptional) {
     filtered = filtered.filter((n) => !n.optional);
-  } else if (!args.includeOptional) {
-    // Default v0.1 behaviour: exclude optional nodes UNLESS
-    // includeOptional is explicitly set.
+  } else if (!args.includeOptional && lastStepName !== undefined) {
+    // Steady-state default: exclude optional nodes UNLESS includeOptional
+    // is explicitly set OR this is a fresh-project first-step pick.
     filtered = filtered.filter((n) => !n.optional);
   }
 
@@ -2044,6 +2061,20 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       }
       return reportWithMessage(lines.join("\n"));
     }
+
+    // Step 6b: BMAD-installed pre-check (dispatch path only). Read-only
+    // flags above (--list, --explain, --export-state, --diff-state) are
+    // informational and tolerate a missing BMAD install — they fall back
+    // to the seed DAG. The dispatch path, by contrast, would otherwise
+    // walk all the way to pickNextStep and surface the misleading hint
+    // "the current filter excludes all candidates." for a fresh checkout
+    // with no BMAD plugin. Throwing BmadNotInstalledError here surfaces
+    // the verbatim AC-2 hint ("Run npx bmad-method install --tools
+    // claude-code first.") with exitCode 3 instead. The outer try/catch
+    // (haltFromError) translates the throw into the AR9 halt action.
+    await detectBmadVersion(
+      opts?.homeDir !== undefined ? { homeDir: opts.homeDir } : undefined,
+    );
 
     // Steps 7-15: dispatch happy path (--dry-run shares this path
     // through dispatch-spec construction, but emits report instead of

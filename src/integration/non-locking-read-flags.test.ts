@@ -111,6 +111,16 @@ beforeEach(async () => {
       checkpoints: [],
     }),
   );
+  // Set up a fake BMAD plugin under <tmp>/.claude/plugins/ so the
+  // dispatch-path BMAD pre-check (`detectBmadVersion`) clears under
+  // the spawnRunner `HOME=tmp` env. --dry-run shares the dispatch
+  // happy path, so the BMAD check fires for it too.
+  const pluginDir = path.join(tmp, ".claude", "plugins", "bmad-method-6.5.0");
+  await fs.mkdir(path.join(pluginDir, ".claude-plugin"), { recursive: true });
+  await Bun.write(
+    path.join(pluginDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "bmad-method", version: "6.5.0" }),
+  );
   // Synthesise a held lock at the canonical path. The pid is process.pid
   // + 100_000 to evade the self-owned reclaim path; mtime is current so the
   // staleness evaluator would mark the holder as "live and heartbeating"
