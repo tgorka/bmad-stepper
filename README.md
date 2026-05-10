@@ -21,7 +21,7 @@ BMAD Stepper is a Claude Code plugin that runs the [BMAD method](https://github.
 
 3. **Add the Stepper marketplace and install the plugin.**
 
-   From a published GitHub release:
+   In-session (inside Claude Code), from a published GitHub release:
    ```text
    /plugin marketplace add tgorka/bmad-stepper
    /plugin install bmad-stepper@bmad-stepper
@@ -31,6 +31,17 @@ BMAD Stepper is a Claude Code plugin that runs the [BMAD method](https://github.
    ```text
    /plugin marketplace add /path/to/bmad-stepper
    /plugin install bmad-stepper@bmad-stepper
+   ```
+
+   External CLI (outside Claude Code) — same flow via the `claude` terminal command:
+   ```bash
+   # Published GitHub release
+   claude plugin marketplace add tgorka/bmad-stepper
+   claude plugin install bmad-stepper@bmad-stepper
+
+   # Local clone
+   claude plugin marketplace add /path/to/bmad-stepper
+   claude plugin install bmad-stepper@bmad-stepper
    ```
 
    The marketplace manifest at `.claude-plugin/marketplace.json` lists the `bmad-stepper` plugin; the plugin manifest at `.claude-plugin/plugin.json` declares the `/bmad-next`, `/bmad-doctor`, and `/bmad-loop` slash commands.

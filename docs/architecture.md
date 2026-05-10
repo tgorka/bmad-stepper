@@ -110,7 +110,8 @@ this document.
 ```
 bmad-stepper/
 ├── .claude-plugin/
-│   └── plugin.json              Marketplace manifest — version, slash commands
+│   ├── marketplace.json         Marketplace manifest — lists the bmad-stepper plugin
+│   └── plugin.json              Plugin manifest — version, slash commands
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml               Matrix CI (Linux + macOS, bun test + biome)
