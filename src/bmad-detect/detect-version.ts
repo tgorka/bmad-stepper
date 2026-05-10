@@ -1,6 +1,5 @@
 /**
- * src/bmad-detect/detect-version.ts — BMAD plugin version detector via
- * `~/.claude/plugins/bmad-method-X/.claude-plugin/plugin.json` reader
+ * src/bmad-detect/detect-version.ts — BMAD plugin version detector
  * (FR41, FR50, FR51, NFR-S1, NFR-R1, AR33, AR41).
  *
  * Operationalises architecture line 1380 (FR50 → `src/bmad-detect/detect-version.ts`)
@@ -12,13 +11,20 @@
  * exit code 3, verbatim hint `Run npx bmad-method install --tools claude-code first.`)
  * per AC-2.
  *
+ * Two install layouts are supported (in priority order):
+ *   1. **Marketplace install** (modern, `/plugin marketplace install`):
+ *      `<homeDir>/.claude/plugins/cache/<marketplace>/<plugin>/<version>/.claude-plugin/plugin.json`
+ *      with the `installed_plugins.json` v2 manifest at
+ *      `<homeDir>/.claude/plugins/installed_plugins.json` keying entries as
+ *      `"<plugin>@<marketplace>"`. The plugin name for BMAD's marketplace
+ *      install is `bmad` (NOT `bmad-method` — that's the marketplace name).
+ *   2. **Legacy install** (`npx bmad-method install --tools claude-code`):
+ *      `<homeDir>/.claude/plugins/bmad-method-<version>/.claude-plugin/plugin.json`.
+ *
  * Public surface:
  *   - `BmadDetection`         — `{ readonly bmadVersion: string; readonly skillNames: readonly string[] }`.
  *                               Matches AC-1's verbatim `{ bmadVersion, skillNames[] }` parsed
- *                               from BMAD's plugin manifest. The composer
- *                               `Promise.all([detectBmadVersion(), detectBmadSkills()])`
- *                               is the orchestrator's responsibility (Story 1.12 doctor /
- *                               Story 2.4 runner / Story 4.1 loop runner).
+ *                               from BMAD's plugin manifest.
  *   - `DetectBmadOptions`     — Test-only-but-exported escape hatch (Story 1.4
  *                               `LockOptions` / Story 1.8 `DetectSnapshotOptions`
  *                               pattern reapplied). All fields optional; `homeDir`
@@ -29,19 +35,20 @@
  *                               missing plugin directory. Throws system `Error` on
  *                               missing/corrupt manifest or non-string `version` field.
  *
- * Algorithm (story spec lines 226-263):
- *   1. List `<homeDir>/.claude/plugins/` for entries starting with `"bmad-method-"`.
- *      ENOENT on the plugins root → empty candidate list.
- *   2. If candidates is empty → throw `BmadNotInstalledError` (regardless of `_bmad/`
- *      presence — the upstream plugin is the disqualifier per AC-2; the project-side
- *      `_bmad/` check is asymmetric and informational only).
- *   3. Sort candidates descending lexicographically and pick the first
- *      (lex-max tie-breaker for the upgrade window when multiple
- *      `bmad-method-*` directories may transiently exist; a future story
- *      MAY parse the version-suffix and pick the highest semver).
- *   4. Read `<pluginDir>/.claude-plugin/plugin.json` via `Bun.file(...).json()`.
+ * Algorithm:
+ *   1. **Marketplace lookup**: read `<homeDir>/.claude/plugins/installed_plugins.json`.
+ *      For every entry whose key splits to `bmad@*` (plugin name `bmad`), collect
+ *      `installPath`. ENOENT or JSON-parse failure → empty list (silent fallback).
+ *   2. **Legacy lookup**: list `<homeDir>/.claude/plugins/` for entries starting
+ *      with `"bmad-method-"`. ENOENT on the plugins root → empty list.
+ *   3. If both lists are empty → throw `BmadNotInstalledError`.
+ *   4. Pick the marketplace install if any was found (modern install path is
+ *      authoritative; legacy `bmad-method-*` is a stale-window artifact).
+ *      Within marketplace candidates, pick the lex-max `path.basename` (= version
+ *      directory). Within legacy candidates, pick the lex-max directory name.
+ *   5. Read `<pluginDir>/.claude-plugin/plugin.json` via `Bun.file(...).json()`.
  *      Missing manifest or JSON parse errors propagate as system `Error`.
- *   5. Validate `typeof parsed.version === "string"`; if not, throw a system
+ *   6. Validate `typeof parsed.version === "string"`; if not, throw a system
  *      `Error` with the manifest path. Otherwise return `parsed.version`.
  *
  * AR33 (function & error semantics):
@@ -122,15 +129,96 @@ export interface DetectBmadOptions {
 /**
  * Resolve the BMAD plugin directory under `<homeDir>/.claude/plugins/`.
  * Internal helper shared by `detectBmadVersion` and `detectBmadSkills`
- * (kept module-private; not exported — Story 1.9 keeps the public surface
- * to two functions plus two types per architecture line 1224-1228).
+ * (kept module-private; not exported).
  *
- * Returns the absolute path to the lex-max `bmad-method-*` directory.
- * Throws `BmadNotInstalledError` when no candidate exists (or the plugins
- * root itself does not exist via ENOENT).
+ * Tries the modern marketplace install first, then falls back to the legacy
+ * `npx bmad-method install --tools claude-code` directory layout. Throws
+ * `BmadNotInstalledError` when neither layout has a candidate.
  */
 async function resolvePluginDir(opts?: DetectBmadOptions): Promise<string> {
   const homeDir = opts?.homeDir ?? os.homedir();
+
+  const marketplaceDir = await resolveMarketplacePluginDir(homeDir);
+  if (marketplaceDir !== undefined) return marketplaceDir;
+
+  const legacyDir = await resolveLegacyPluginDir(homeDir);
+  if (legacyDir !== undefined) return legacyDir;
+
+  throw new BmadNotInstalledError(
+    "BMAD is not installed (no marketplace plugin under ~/.claude/plugins/cache/<marketplace>/bmad/<version>/ via installed_plugins.json, and no legacy plugin under ~/.claude/plugins/bmad-method-*).",
+  );
+}
+
+/**
+ * Resolve the marketplace-installed BMAD plugin via
+ * `<homeDir>/.claude/plugins/installed_plugins.json` (v2 schema).
+ *
+ * The manifest keys plugins as `"<plugin>@<marketplace>"`. BMAD's marketplace
+ * install registers the plugin name as `bmad` (the marketplace itself is
+ * named `bmad-method`, but the plugin slug inside that marketplace is `bmad`).
+ *
+ * Returns the absolute path to the lex-max `installPath` (= version directory)
+ * across all matching entries, or `undefined` when no marketplace install
+ * exists / the manifest is missing or unparseable. Silent failure is
+ * intentional — the legacy fallback handles those cases.
+ */
+async function resolveMarketplacePluginDir(
+  homeDir: string,
+): Promise<string | undefined> {
+  const manifestPath = path.join(
+    homeDir,
+    ".claude",
+    "plugins",
+    "installed_plugins.json",
+  );
+
+  let raw: string;
+  try {
+    raw = await fs.readFile(manifestPath, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  }
+
+  let parsed: { plugins?: Record<string, ReadonlyArray<unknown>> };
+  try {
+    parsed = JSON.parse(raw) as typeof parsed;
+  } catch {
+    return undefined;
+  }
+
+  const installs = parsed.plugins ?? {};
+  const candidates: string[] = [];
+  for (const [key, entries] of Object.entries(installs)) {
+    const pluginName = key.split("@")[0];
+    if (pluginName !== "bmad") continue;
+    for (const entry of entries ?? []) {
+      const installPath = (entry as { installPath?: unknown }).installPath;
+      if (typeof installPath === "string" && installPath.length > 0) {
+        candidates.push(installPath);
+      }
+    }
+  }
+
+  if (candidates.length === 0) return undefined;
+  candidates.sort((a, b) => {
+    const av = path.basename(a);
+    const bv = path.basename(b);
+    if (av === bv) return 0;
+    return av < bv ? 1 : -1;
+  });
+  return candidates[0];
+}
+
+/**
+ * Resolve the legacy `npx bmad-method install --tools claude-code` plugin
+ * layout: `<homeDir>/.claude/plugins/bmad-method-<version>/`. Returns the
+ * absolute path to the lex-max directory, or `undefined` when no such
+ * directory exists.
+ */
+async function resolveLegacyPluginDir(
+  homeDir: string,
+): Promise<string | undefined> {
   const pluginsRoot = path.join(homeDir, ".claude", "plugins");
 
   let candidates: string[];
@@ -141,20 +229,11 @@ async function resolvePluginDir(opts?: DetectBmadOptions): Promise<string> {
       .sort()
       .reverse();
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      candidates = [];
-    } else {
-      throw err;
-    }
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
   }
 
-  if (candidates.length === 0) {
-    throw new BmadNotInstalledError(
-      "BMAD is not installed (no plugin under ~/.claude/plugins/bmad-method-*).",
-    );
-  }
-
-  // Non-null assertion: we just checked length > 0 above.
+  if (candidates.length === 0) return undefined;
   const top = candidates[0] as string;
   return path.join(pluginsRoot, top);
 }
