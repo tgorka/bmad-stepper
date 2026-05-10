@@ -1,0 +1,19 @@
+docs/architecture.md
+  s_f8b06fd850b4de::t_ecbaeff11328f6 113-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "835b12659c4c392bb2ab627eb84d5f73f2cabd70",
+  "prompts": {},
+  "sessions": {
+    "s_f8b06fd850b4de": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61db9185-ad5b-41fb-bd33-e9ef256f597d",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
