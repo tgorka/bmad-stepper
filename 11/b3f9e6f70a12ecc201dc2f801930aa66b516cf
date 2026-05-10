@@ -1,0 +1,21 @@
+docs/getting-started.md
+  s_87ba9acdd7b9b8::t_08419a28f5e4c0 91-92
+README.md
+  s_87ba9acdd7b9b8::t_1751e3bbeb1d23 66-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "11b3f9e6f70a12ecc201dc2f801930aa66b516cf",
+  "prompts": {},
+  "sessions": {
+    "s_87ba9acdd7b9b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a131ad83-430f-45df-8d6b-c3c511cf51ef",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
