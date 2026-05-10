@@ -1,0 +1,49 @@
+src/smoke/next.test.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 148-165,224-228,373-375
+src/commands/next/verify-and-advance.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 81,88,194-201,1408-1437
+commands/bmad-next.md
+  s_2dcc80c8048076::t_8de588ecb01f9b 131-139
+src/dag/seed-v6.x.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 62,70,78,86,94,104,112,120,128,136,146,168,178,207,215,348
+src/integration/no-write-outside-scope.test.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 218-227
+src/schemas/dispatch-protocol.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 64-78
+src/dag/types.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 59-64,74,112,150
+commands/bmad-loop.md
+  s_2dcc80c8048076::t_8de588ecb01f9b 128,138-151
+src/commands/loop/run.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 287-302,1740-1761,2069-2072
+src/commands/next/run.test.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 87-92
+src/dispatch/index.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 37-47
+src/dag/build.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 169-173,194-196,444,531-537,579,588,659-660,722-724,759-761
+src/commands/next/run.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 119-122,247-264,2310-2360,2367,2370-2373,2528-2534,2541-2547
+src/dispatch/questions-stub.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 1-349
+src/io/paths.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 44-53
+src/schemas/config.ts
+  s_2dcc80c8048076::t_8de588ecb01f9b 167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "5ac399fcd61c6d3b2ecbfe0cdd9e73b6f6509e05",
+  "prompts": {},
+  "sessions": {
+    "s_2dcc80c8048076": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e1473143-cdb1-41f9-b99b-91273bc9dbf5",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
