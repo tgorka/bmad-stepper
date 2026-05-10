@@ -125,7 +125,7 @@ Exit-code mapping per FR53 + Story 4.1:
 - `0` — clean exit (one of `max-iters-reached`, `epic-end-reached`,
   `until-story-reached`, `next-story-reached`, `phase-end-reached`,
   `time-budget-reached`, `token-budget-reached`,
-  `all-steps-complete`, `no-progress-detected`).
+  `all-steps-complete`, `no-progress-detected`, `await-input`).
 - `1` — `halt-on-error` OR `error-stop` (Story 4.6 — verifier failure
   under default `--stop-on-error` policy). Both variants surface exit
   code `1` per FR53 `halt-with-actionable-error`; the AR22-conformant
@@ -134,6 +134,21 @@ Exit-code mapping per FR53 + Story 4.1:
   `halt-on-error` retains the v0.1 generic-halt message format for
   non-verifier halts).
 - `2` — argument parse error (configuration error per FR53).
+
+**Interactive-step pre-flight halt** (`await-input`): when the next
+resolved step is flagged `interactive: true` in the DAG seed (e.g.,
+`bmad-brainstorming`, `bmad-create-prd`, `bmad-create-architecture`),
+the underlying BMAD skill needs user dialogue before it can produce a
+useful artifact. `runNext` short-circuits the dispatch: it writes a
+questions stub at `_bmad-output/.stepper/pending-input/<step>.md` and
+emits an AR9 `report` with `awaitInput: true`. The loop halts with
+the `await-input` StopReason on iter 1 (or whenever the interactive
+step is reached) and exit code `0`. The user (or this loop's Layer 1
+LLM) fills the stub by replacing each `<!-- FILL_ME -->` marker with
+the answer, then re-invokes `/bmad-loop` (or `/bmad-next --resume`).
+On the re-invocation, the runner detects the filled file and includes
+it in the dispatch's `taskSpec.context[]` so the sub-agent has the
+user's answers and runs non-interactively.
 
 **No-progress detector**: when an iteration's `dispatch` action
 succeeds but `state.lastSuccessfulStep` does not advance pre→post,

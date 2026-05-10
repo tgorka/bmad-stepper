@@ -166,6 +166,11 @@ function applyOverride(
         : existing.idempotent !== undefined
           ? { idempotent: existing.idempotent }
           : {}),
+      ...(override.interactive !== undefined
+        ? { interactive: override.interactive }
+        : existing.interactive !== undefined
+          ? { interactive: existing.interactive }
+          : {}),
     };
     resolved.set(name, merged);
     return;
@@ -185,6 +190,9 @@ function applyOverride(
     persona: override.persona ?? null,
     ...(override.idempotent !== undefined
       ? { idempotent: override.idempotent }
+      : {}),
+    ...(override.interactive !== undefined
+      ? { interactive: override.interactive }
       : {}),
   });
 }
@@ -433,6 +441,7 @@ function parseOverridesYaml(text: string): ReadonlyMap<string, OverrideEntry> {
       optional?: boolean;
       persona?: string | string[] | null;
       idempotent?: boolean;
+      interactive?: boolean;
     } = { name: skillName };
 
     while (i < lines.length) {
@@ -519,6 +528,13 @@ function parseOverridesYaml(text: string): ReadonlyMap<string, OverrideEntry> {
           );
         }
         entry.idempotent = parsed;
+      } else if (subKey === "interactive") {
+        if (typeof parsed !== "boolean") {
+          throw new Error(
+            `invalid interactive value for skill ${skillName}: ${subValueRaw}`,
+          );
+        }
+        entry.interactive = parsed;
       }
       // Unknown sub-keys are silently ignored — Story 6.1 owns strict
       // validation; Story 1.10 is graceful.
@@ -560,6 +576,7 @@ function parseFlatYaml(text: string): {
   optional?: boolean;
   persona?: string | string[] | null;
   idempotent?: boolean;
+  interactive?: boolean;
 } {
   const lines = text.split(/\r?\n/);
   const result: {
@@ -568,6 +585,7 @@ function parseFlatYaml(text: string): {
     optional?: boolean;
     persona?: string | string[] | null;
     idempotent?: boolean;
+    interactive?: boolean;
   } = {};
   let i = 0;
   while (i < lines.length) {
@@ -638,6 +656,8 @@ function parseFlatYaml(text: string): {
       }
     } else if (key === "idempotent" && typeof parsed === "boolean") {
       result.idempotent = parsed;
+    } else if (key === "interactive" && typeof parsed === "boolean") {
+      result.interactive = parsed;
     }
   }
   return result;
@@ -699,6 +719,9 @@ async function tier3FrontmatterParse(
     ...(parsed.idempotent !== undefined
       ? { idempotent: parsed.idempotent }
       : {}),
+    ...(parsed.interactive !== undefined
+      ? { interactive: parsed.interactive }
+      : {}),
   };
 }
 
@@ -733,6 +756,9 @@ export async function build(input: BuildInput): Promise<DagAdjacency> {
       before: [],
       optional: entry.optional,
       persona: entry.persona,
+      ...(entry.interactive !== undefined
+        ? { interactive: entry.interactive }
+        : {}),
     });
   }
 

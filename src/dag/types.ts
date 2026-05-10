@@ -56,6 +56,12 @@ export type Phase =
  *                module config.
  * - `idempotent` — When `true`, the runner may safely retry on failure
  *                  (Story 5.1). Optional in Story 1.10.
+ * - `interactive` — When `true`, the underlying BMAD skill requires user
+ *                   dialogue (e.g., bmad-brainstorming asks for the topic).
+ *                   The runner short-circuits the sub-agent dispatch on
+ *                   such steps: it writes a `inputs/questions.md` stub,
+ *                   halts with a "fill this file" report, and `--resume`
+ *                   picks up after the user (or the loop) fills it.
  */
 export interface DagNode {
   readonly name: string;
@@ -65,6 +71,7 @@ export interface DagNode {
   readonly optional: boolean;
   readonly persona: string | readonly string[] | null;
   readonly idempotent?: boolean;
+  readonly interactive?: boolean;
 }
 
 /**
@@ -102,6 +109,7 @@ export interface SeedEntry {
   readonly after: readonly string[];
   readonly optional: boolean;
   readonly persona: string | readonly string[] | null;
+  readonly interactive?: boolean;
 }
 
 /**
@@ -139,6 +147,7 @@ export interface OverrideEntry {
   readonly optional?: boolean;
   readonly persona?: string | readonly string[] | null;
   readonly idempotent?: boolean;
+  readonly interactive?: boolean;
 }
 
 /**

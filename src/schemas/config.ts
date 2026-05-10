@@ -164,6 +164,7 @@ export const OverrideEntrySchema = z
     optional: z.boolean().optional(),
     persona: z.union([z.string(), z.array(z.string()), z.null()]).optional(),
     idempotent: z.boolean().optional(),
+    interactive: z.boolean().optional(),
   })
   .strict();
 

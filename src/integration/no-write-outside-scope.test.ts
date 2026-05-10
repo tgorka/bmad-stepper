@@ -215,6 +215,16 @@ function stagedArtifactPath(
 
 describe("NFR-S2 enforcement — no writes outside _bmad-output/.stepper/ and tmpdir", () => {
   it("after a happy-path /bmad-next smoke, every file lives under one of the allowed roots", async () => {
+    // bmad-brainstorming is flagged interactive in the seed; pre-fill
+    // the questions stub so the runner proceeds with dispatch instead
+    // of halting on the pre-flight check (production-equivalent to
+    // the user filling answers before --resume).
+    const pendingDir = path.join(tmp, "_bmad-output/.stepper/pending-input");
+    await fs.mkdir(pendingDir, { recursive: true });
+    await Bun.write(
+      path.join(pendingDir, "bmad-brainstorming.md"),
+      "# Questions for bmad-brainstorming\n\nAnswered for the integration test.\n",
+    );
     // ─── Run the smoke pipeline (Steps 1-3 from src/smoke/next.test.ts). ──
     const result1 = await spawnRunner(
       NEXT_RUN_TS,

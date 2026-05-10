@@ -41,6 +41,17 @@ export const BMAD_OUTPUT_ROOT = "_bmad-output";
 export const STAGING_PATH = `${STEPPER_INTERNAL_ROOT}/staging`;
 
 /**
+ * Pending-input directory for interactive BMAD steps. When the next
+ * step is flagged `interactive: true`, the runner writes a questions
+ * stub at `<PENDING_INPUT_PATH>/<step>.md` and halts; the user (or the
+ * loop) fills the stub, then `/bmad-next --resume` includes it as
+ * dispatch context and proceeds. The path is step-stable (NOT runId-
+ * scoped) so resume can find the same file without threading a runId
+ * through `state.lastAttempted`.
+ */
+export const PENDING_INPUT_PATH = `${STEPPER_INTERNAL_ROOT}/pending-input`;
+
+/**
  * Returns true if `child` (already absolute and normalised) is the same
  * directory as `parent` or strictly inside it. Uses `path.relative()` so the
  * comparison handles trailing-separator differences and platform separators

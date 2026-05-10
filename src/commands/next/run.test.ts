@@ -84,6 +84,12 @@ function commonOpts(statePath: string): Parameters<typeof runNext>[0] {
     stagingRoot: path.join(tmp, "staging"),
     skillNames: [],
     nowIso: "2026-04-29T10:15:00.000Z",
+    // Most tests exercise dispatch behaviour for steps that are now
+    // flagged `interactive: true` (e.g., `bmad-brainstorming`). The
+    // runner's pre-flight halt would short-circuit those tests; the
+    // bypass keeps the dispatch path under test. Specific tests for
+    // the interactive-halt behaviour set this back to false / unset.
+    bypassInteractiveHalt: true,
   };
 }
 
