@@ -283,92 +283,134 @@ describe("runLoop — all-steps-complete short-circuit (Issue B)", () => {
 });
 
 describe("runLoop — no-progress detector (dispatch without state advance)", () => {
-  // Production-only short-circuit. When `runNext` returns a `dispatch`
-  // action successfully but `state.lastSuccessfulStep` does not advance
-  // pre→post, the per-iteration Task subagent did not run (v0.1 SKELETON
-  // limitation per commands/bmad-loop.md §4 — the loop runner is a
-  // single Bun process and cannot invoke the Task tool, which is a
-  // Layer 1 capability). Without this short-circuit, the loop spins to
-  // `--max-iters` (typically the default 50-iter cap) producing N wasted
-  // staging dirs for the same step.
+  // The detector fires when `runNext` returns a `dispatch` action but
+  // `state.lastSuccessfulStep` does not advance pre→post — the v0.1
+  // SKELETON limitation per commands/bmad-loop.md §4 (the loop runner
+  // is a single Bun process and cannot invoke the Task tool, which is
+  // a Layer 1 capability). Without this short-circuit, the loop spins
+  // to `--max-iters` producing N wasted staging dirs for the same step.
   //
-  // The detector is gated on `runNextOverride === undefined` (production
-  // heuristic) so the existing 130+ tests with stubbed dispatchers are
-  // unaffected. This integration-style test exercises the production
-  // path end-to-end: tmpdir cwd + tmpdir-rooted fake bmad install + a
-  // fresh state.yaml with `lastSuccessfulStep: null`.
-  let tmp: string;
-  let origCwd: string;
-  let origHome: string | undefined;
-
-  beforeEach(async () => {
-    tmp = await mkdtemp(join(tmpdir(), "bmad-stepper-noprog-"));
-    origCwd = process.cwd();
-    origHome = process.env.HOME;
-    process.chdir(tmp);
-    process.env.HOME = tmp;
-
-    // Seed a fake bmad-method install so detectBmadVersion clears.
-    const pluginDir = join(tmp, ".claude", "plugins", "bmad-method-6.5.0");
-    const { mkdir } = await import("node:fs/promises");
-    await mkdir(join(pluginDir, ".claude-plugin"), { recursive: true });
-    await Bun.write(
-      join(pluginDir, ".claude-plugin", "plugin.json"),
-      JSON.stringify({ name: "bmad-method", version: "6.5.0" }),
-    );
-
-    // Seed a fresh state.yaml at the canonical path. lastSuccessfulStep
-    // is null so the picker hits the analysis-phase optional entry-point
-    // bootstrap (per the prior fix in commit 21220c5).
-    const stateDir = join(tmp, "_bmad-output", ".stepper");
-    await mkdir(stateDir, { recursive: true });
-    await Bun.write(
-      join(stateDir, "state.yaml"),
-      Bun.YAML.stringify({
-        schemaVersion: 1,
-        project: { name: "test-noprog", bmadVersion: "6.5.0" },
-        runHistory: [],
-        checkpoints: [],
-      }),
-    );
-  });
-
-  afterEach(async () => {
-    process.chdir(origCwd);
-    if (origHome !== undefined) {
-      process.env.HOME = origHome;
-    } else {
-      delete process.env.HOME;
-    }
-    await rm(tmp, { recursive: true, force: true });
-  });
-
+  // The production gate is `runNextOverride === undefined` so the 130+
+  // existing tests with stubbed dispatchers are unaffected. Tests that
+  // want to assert the detector explicitly pass
+  // `forceNoProgressDetection: true` to bypass the gate, supplying a
+  // stateOverride that returns the same state on every call (no
+  // advance) and a runNextOverride that returns a dispatch action.
   it("halts on iter 1 when the dispatched step does not advance state", async () => {
-    // No `runNextOverride` — drives the real production path. Real runNext
-    // dispatches but cannot invoke Task (Layer 1 only), so state never
-    // advances. The detector must catch this on iter 1 instead of spinning
-    // to --max-iters.
+    const dispatchResult: NextResult = {
+      exitCode: 0,
+      action: {
+        action: "dispatch",
+        runId: "2026-05-10T07-14-13-bmad-brainstorming-abcde",
+        agent: "bmad-step-runner",
+        lastAttempted: {
+          step: "bmad-brainstorming",
+          epic: 0,
+          story: "0.0",
+          attemptedAt: "2026-05-10T07:14:13Z",
+        },
+        exitCode: 0,
+      },
+    };
+    const fixedState = {
+      schemaVersion: 1 as const,
+      project: { name: "test", bmadVersion: "6.5.0" },
+      lastSuccessfulStep: null,
+      lastAttempted: null,
+      lastFailureReason: null,
+      lastSnapshot: null,
+      checkpoints: [],
+      runHistory: [],
+    };
+    const { stub, calls } = countingStub(dispatchResult);
     const stderrChunks: string[] = [];
     const result = asLoop(
       await runLoop({
         argv: ["--max-iters", "5"],
+        runNextOverride: stub,
+        stateOverride: () => fixedState,
+        forceNoProgressDetection: true,
         stderrOverride: (chunk: string) => {
           stderrChunks.push(chunk);
         },
       }),
     );
+    expect(calls()).toBe(1);
     expect(result.iterations.length).toBe(1);
     expect(result.stopReason.code).toBe("no-progress-detected");
     if (result.stopReason.code !== "no-progress-detected") return;
     expect(result.stopReason.iterCount).toBe(1);
-    expect(result.stopReason.step.length).toBeGreaterThan(0);
+    expect(result.stopReason.step).toBe("bmad-brainstorming");
+    expect(result.stopReason.runId).toBe(
+      "2026-05-10T07-14-13-bmad-brainstorming-abcde",
+    );
     expect(result.stopReason.message).toContain("no-progress detected");
+    expect(result.stopReason.message).toContain("bmad-brainstorming");
     expect(result.stopReason.message).toContain("/bmad-next");
     expect(result.exitCode).toBe(0);
     // Stderr emission mirrors the AC pattern used by error-stop.
     expect(stderrChunks.some((c) => c.includes("no-progress detected"))).toBe(
       true,
     );
+  });
+
+  it("does NOT fire when state advances (lastSuccessfulStep changes pre→post)", async () => {
+    // When state advances post-iteration (the future production path
+    // where Task is wired), the detector must NOT fire. Verifies the
+    // detector's pre→post comparison correctly distinguishes progress
+    // from no-progress. Stub returns dispatch + a state-advance sequence
+    // (null → "bmad-brainstorming") and the loop falls through to the
+    // standard `--max-iters` cap.
+    const dispatchResult: NextResult = {
+      exitCode: 0,
+      action: {
+        action: "dispatch",
+        runId: "rid-advance",
+        agent: "bmad-step-runner",
+        lastAttempted: {
+          step: "bmad-brainstorming",
+          epic: 0,
+          story: "0.0",
+          attemptedAt: "2026-05-10T07:14:13Z",
+        },
+        exitCode: 0,
+      },
+    };
+    // The loop reads state multiple times per iteration: loop-entry
+    // baseline (call 1), top-of-while shouldStop (call 2 — captured as
+    // preIter), token accumulation (call 3), loopContext deferred-
+    // baseline (call 4, when loopContext.startStory is null), and the
+    // no-progress detector (call 5). To simulate state advance from the
+    // (hypothetical) Task subagent running, the pre-dispatch reads
+    // (calls 1 + 2) return null and the post-dispatch reads (calls 3+)
+    // return the advanced step.
+    let calls = 0;
+    const advancingState = () => {
+      calls++;
+      const step = calls <= 2 ? null : "bmad-brainstorming";
+      return {
+        schemaVersion: 1 as const,
+        project: { name: "test", bmadVersion: "6.5.0" },
+        lastSuccessfulStep:
+          step === null
+            ? null
+            : { step, epic: 0, story: "0.0", completedAt: "2026-05-10Z" },
+        lastAttempted: null,
+        lastFailureReason: null,
+        lastSnapshot: null,
+        checkpoints: [],
+        runHistory: [],
+      };
+    };
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: async () => dispatchResult,
+        stateOverride: advancingState,
+        forceNoProgressDetection: true,
+      }),
+    );
+    expect(result.stopReason.code).toBe("max-iters-reached");
   });
 
   it("formatExitReason returns the runner-composed message verbatim", () => {

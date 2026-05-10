@@ -609,6 +609,17 @@ export interface LoopOpts {
    * (treated as halt per the strict-`y` parsing rules per OQ-4).
    */
   readonly interactiveStdinOverride?: () => Promise<string> | string;
+  /**
+   * Test-injection seam for the no-progress detector. The detector's
+   * production gate (`runNextOverride === undefined`) suppresses the
+   * detector when a stub dispatcher is supplied — otherwise every
+   * existing test that uses a stub-returning `dispatch` action against
+   * a fixed-state fixture would trip the detector. Tests that want to
+   * assert the detector explicitly pass `forceNoProgressDetection: true`
+   * to bypass the gate, even when `runNextOverride` is supplied.
+   * Production callers do NOT supply this field.
+   */
+  readonly forceNoProgressDetection?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -1757,7 +1768,8 @@ export async function runLoop(
       // a state advance and the detector becomes a no-op on those paths.
       if (
         nextResult.action.action === "dispatch" &&
-        opts?.runNextOverride === undefined
+        (opts?.runNextOverride === undefined ||
+          opts?.forceNoProgressDetection === true)
       ) {
         const noProgressPostState = await stateFn();
         const postIterLastSuccessfulStep =
