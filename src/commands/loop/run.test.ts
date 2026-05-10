@@ -282,6 +282,150 @@ describe("runLoop — all-steps-complete short-circuit (Issue B)", () => {
   });
 });
 
+describe("runLoop — no-progress detector (dispatch without state advance)", () => {
+  // The detector fires when `runNext` returns a `dispatch` action but
+  // `state.lastSuccessfulStep` does not advance pre→post — the v0.1
+  // SKELETON limitation per commands/bmad-loop.md §4 (the loop runner
+  // is a single Bun process and cannot invoke the Task tool, which is
+  // a Layer 1 capability). Without this short-circuit, the loop spins
+  // to `--max-iters` producing N wasted staging dirs for the same step.
+  //
+  // The production gate is `runNextOverride === undefined` so the 130+
+  // existing tests with stubbed dispatchers are unaffected. Tests that
+  // want to assert the detector explicitly pass
+  // `forceNoProgressDetection: true` to bypass the gate, supplying a
+  // stateOverride that returns the same state on every call (no
+  // advance) and a runNextOverride that returns a dispatch action.
+  it("halts on iter 1 when the dispatched step does not advance state", async () => {
+    const dispatchResult: NextResult = {
+      exitCode: 0,
+      action: {
+        action: "dispatch",
+        runId: "2026-05-10T07-14-13-bmad-brainstorming-abcde",
+        agent: "bmad-step-runner",
+        lastAttempted: {
+          step: "bmad-brainstorming",
+          epic: 0,
+          story: "0.0",
+          attemptedAt: "2026-05-10T07:14:13Z",
+        },
+        exitCode: 0,
+      },
+    };
+    const fixedState = {
+      schemaVersion: 1 as const,
+      project: { name: "test", bmadVersion: "6.5.0" },
+      lastSuccessfulStep: null,
+      lastAttempted: null,
+      lastFailureReason: null,
+      lastSnapshot: null,
+      checkpoints: [],
+      runHistory: [],
+    };
+    const { stub, calls } = countingStub(dispatchResult);
+    const stderrChunks: string[] = [];
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "5"],
+        runNextOverride: stub,
+        stateOverride: () => fixedState,
+        forceNoProgressDetection: true,
+        stderrOverride: (chunk: string) => {
+          stderrChunks.push(chunk);
+        },
+      }),
+    );
+    expect(calls()).toBe(1);
+    expect(result.iterations.length).toBe(1);
+    expect(result.stopReason.code).toBe("no-progress-detected");
+    if (result.stopReason.code !== "no-progress-detected") return;
+    expect(result.stopReason.iterCount).toBe(1);
+    expect(result.stopReason.step).toBe("bmad-brainstorming");
+    expect(result.stopReason.runId).toBe(
+      "2026-05-10T07-14-13-bmad-brainstorming-abcde",
+    );
+    expect(result.stopReason.message).toContain("no-progress detected");
+    expect(result.stopReason.message).toContain("bmad-brainstorming");
+    expect(result.stopReason.message).toContain("/bmad-next");
+    expect(result.exitCode).toBe(0);
+    // Stderr emission mirrors the AC pattern used by error-stop.
+    expect(stderrChunks.some((c) => c.includes("no-progress detected"))).toBe(
+      true,
+    );
+  });
+
+  it("does NOT fire when state advances (lastSuccessfulStep changes pre→post)", async () => {
+    // When state advances post-iteration (the future production path
+    // where Task is wired), the detector must NOT fire. Verifies the
+    // detector's pre→post comparison correctly distinguishes progress
+    // from no-progress. Stub returns dispatch + a state-advance sequence
+    // (null → "bmad-brainstorming") and the loop falls through to the
+    // standard `--max-iters` cap.
+    const dispatchResult: NextResult = {
+      exitCode: 0,
+      action: {
+        action: "dispatch",
+        runId: "rid-advance",
+        agent: "bmad-step-runner",
+        lastAttempted: {
+          step: "bmad-brainstorming",
+          epic: 0,
+          story: "0.0",
+          attemptedAt: "2026-05-10T07:14:13Z",
+        },
+        exitCode: 0,
+      },
+    };
+    // The loop reads state multiple times per iteration: loop-entry
+    // baseline (call 1), top-of-while shouldStop (call 2 — captured as
+    // preIter), token accumulation (call 3), loopContext deferred-
+    // baseline (call 4, when loopContext.startStory is null), and the
+    // no-progress detector (call 5). To simulate state advance from the
+    // (hypothetical) Task subagent running, the pre-dispatch reads
+    // (calls 1 + 2) return null and the post-dispatch reads (calls 3+)
+    // return the advanced step.
+    let calls = 0;
+    const advancingState = () => {
+      calls++;
+      const step = calls <= 2 ? null : "bmad-brainstorming";
+      return {
+        schemaVersion: 1 as const,
+        project: { name: "test", bmadVersion: "6.5.0" },
+        lastSuccessfulStep:
+          step === null
+            ? null
+            : { step, epic: 0, story: "0.0", completedAt: "2026-05-10Z" },
+        lastAttempted: null,
+        lastFailureReason: null,
+        lastSnapshot: null,
+        checkpoints: [],
+        runHistory: [],
+      };
+    };
+    const result = asLoop(
+      await runLoop({
+        argv: ["--max-iters", "1"],
+        runNextOverride: async () => dispatchResult,
+        stateOverride: advancingState,
+        forceNoProgressDetection: true,
+      }),
+    );
+    expect(result.stopReason.code).toBe("max-iters-reached");
+  });
+
+  it("formatExitReason returns the runner-composed message verbatim", () => {
+    const stopReason: StopReason = {
+      code: "no-progress-detected",
+      iterCount: 1,
+      step: "bmad-brainstorming",
+      runId: "2026-05-10T07-14-13-bmad-brainstorming-abcde",
+      message:
+        "no-progress detected (dispatched bmad-brainstorming but state did not advance) — run /bmad-next to execute the dispatched step",
+    };
+    expect(formatExitReason(stopReason)).toBe(stopReason.message);
+  });
+});
+
 describe("runLoop — Test E (default --max-iters=50 when no stop condition supplied; Story 4.4 AC-1)", () => {
   it("argv=[] applies the default --max-iters=50 cap and runs 50 iterations", async () => {
     const { stub, calls } = countingStub(successResult());
