@@ -1,0 +1,85 @@
+_bmad-output/implementation-artifacts/6-9-upgrade-flow.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 13,99,102,113,128,131,201,204,224,234,291,299,305,308,374,387,406,416,482,548,626,769,803,810,848,1199
+.claude-plugin/plugin.json
+  s_f8b06fd850b4de::t_c0cfaf6f6a5948 6
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 8-9
+.changeset/v0-1-0-marketplace-release.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 5
+CONTRIBUTING.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 8,33
+_bmad-output/planning-artifacts/epics.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 92,212,1288,1307
+CHANGELOG.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 17,29
+src/commands/next/run.test.ts
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 649,659,689,714
+_bmad-output/implementation-artifacts/epic-6-retrospective.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 25,134-135,239,540,618
+commands/bmad-next.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 613,627
+src/integration/no-network-on-main.test.ts
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 142
+src/upgrade/cli.test.ts
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 93,102,130,187,211
+README.md
+  s_f8b06fd850b4de::t_c493b9a8e4fa06 22-24,27,29-36
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 26,112-113
+  s_f8b06fd850b4de::t_f7fdd42ee09690 85
+_bmad-output/planning-artifacts/implementation-readiness-report-2026-04-30.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 134
+_bmad-output/planning-artifacts/prd.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 75,135,210,263,265,267,273,275,285,287,295,297,303,309,311,313,329,337,433,436,735
+src/upgrade/render.test.ts
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 31,50,97
+src/integration/upgrade-no-plugin-write.test.ts
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 17,92,163
+docs/configuration.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 839,847
+_bmad-output/planning-artifacts/product-brief-bmad-stepper.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 50
+src/upgrade/render.ts
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 16,46,72
+_bmad-output/planning-artifacts/architecture.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 43,194,652,655,1490,1566
+docs/getting-started.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 17,20
+_bmad-output/brainstorming/brainstorming-session-2026-04-29-1656.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 18,211
+_bmad-output/planning-artifacts/product-brief-bmad-stepper-distillate.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 15,18,168
+_bmad-output/implementation-artifacts/6-10-repo-files-v0-1-0-marketplace-release.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 12-13,43,117,121,143,169,285,444,619,631,962,974,1076,1107,1224-1225,1410,1705,1745
+_bmad-output/implementation-artifacts/1-1-initialize-repository-scaffold.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 128,140-141,339
+src/upgrade/check.test.ts
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 142,152,165,183,286,305,323,341,359,388,421,436,451,469,481,483
+.claude-plugin/marketplace.json
+  s_f8b06fd850b4de::t_66ed3ad240a2c6 1-4,7-15
+  s_f8b06fd850b4de::t_ec94706c5236ee 5-6
+src/upgrade/check.ts
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 56,111,116
+.github/dependabot.yml
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 10,22
+docs/bmad-compatibility.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 108,117,169
+_bmad-output/implementation-artifacts/1-13-quick-start-documentation.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 59,114,129,167,180-181,250,289,389,629
+tests/fixtures/quick-start-walkthrough.md
+  s_f8b06fd850b4de::t_8f467a4b3cb4ae 24,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "72bd16ee7370cc2f8b691c638fa635f745f99b01",
+  "prompts": {},
+  "sessions": {
+    "s_f8b06fd850b4de": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61db9185-ad5b-41fb-bd33-e9ef256f597d",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
