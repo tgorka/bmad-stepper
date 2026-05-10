@@ -63,8 +63,13 @@
  *   - epics.md §Story 1.12 lines 544-557 — verbatim AC-1 5-line format.
  */
 
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import { build as buildDag, SEED_BMAD_VERSION } from "../../dag/index.ts";
 import { StepperError } from "../../errors.ts";
 import { error, info } from "../../io/log.ts";
+import { STEPPER_INTERNAL_ROOT } from "../../io/paths.ts";
 import { parseDoctorArgs } from "./args.ts";
 import {
   type CheckContext,
@@ -110,6 +115,13 @@ export interface RunDoctorOptions extends CheckContext {
     info(message: string): void;
     error(message: string): void;
   };
+  /**
+   * v0.2.0 — when true, runDoctor appends a diagnostics block AFTER the
+   * canonical 5 lines: detected install paths (cache + legacy), DAG
+   * node count, seed version, project state file path, lock dir state,
+   * last 3 run-log entries. Read-only; no state mutation.
+   */
+  readonly verbose?: boolean;
 }
 
 /**
@@ -120,6 +132,103 @@ export interface RunDoctorOptions extends CheckContext {
  */
 const SUGGESTION_LINE =
   "Suggestion: run /bmad-next to start the analysis phase.";
+
+/**
+ * v0.2.0 — collect read-only diagnostics for the `--verbose` block.
+ * Each returned string is one stderr line (no leading prefix; the
+ * caller adds the `  · ` bullet). Best-effort: any individual probe
+ * that throws is caught and surfaced as a "(unavailable: <reason>)"
+ * line instead of failing the whole block.
+ */
+async function collectVerboseDiagnostics(
+  ctx: CheckContext,
+): Promise<readonly string[]> {
+  const lines: string[] = [];
+  const homeDir = ctx.homeDir ?? os.homedir();
+  const projectRoot = ctx.projectRoot ?? process.cwd();
+
+  // BMAD install paths.
+  const cachePath = path.join(
+    homeDir,
+    ".claude",
+    "plugins",
+    "cache",
+    "bmad-method",
+    "bmad",
+  );
+  const cacheVersions = await safeReaddir(cachePath);
+  lines.push(
+    cacheVersions.length > 0
+      ? `BMAD cache layout: ${cachePath}/{${cacheVersions.join(", ")}}`
+      : `BMAD cache layout: (no installs at ${cachePath})`,
+  );
+  const pluginsRoot = path.join(homeDir, ".claude", "plugins");
+  const legacyEntries = (await safeReaddir(pluginsRoot)).filter((e) =>
+    e.startsWith("bmad-method-"),
+  );
+  lines.push(
+    legacyEntries.length > 0
+      ? `BMAD legacy layout: ${pluginsRoot}/{${legacyEntries.join(", ")}}`
+      : `BMAD legacy layout: (no bmad-method-* directories)`,
+  );
+
+  // Seed version + DAG node count.
+  lines.push(`Seed BMAD version: ${SEED_BMAD_VERSION}`);
+  try {
+    const dag = await buildDag({ skillNames: [], projectRoot });
+    lines.push(`DAG node count (seed only): ${dag.nodes.size}`);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    lines.push(`DAG node count: (unavailable: ${reason})`);
+  }
+
+  // State file + lock dir.
+  const statePath =
+    ctx.statePath ??
+    path.join(projectRoot, STEPPER_INTERNAL_ROOT, "state.yaml");
+  const stateExists = await safeStat(statePath);
+  lines.push(
+    `State file: ${statePath} ${stateExists ? "(present)" : "(not present)"}`,
+  );
+  const lockDir = path.join(
+    projectRoot,
+    STEPPER_INTERNAL_ROOT,
+    "state.yaml.lock",
+  );
+  const lockExists = await safeStat(lockDir);
+  lines.push(`Lock dir: ${lockDir} ${lockExists ? "(held)" : "(free)"}`);
+
+  // Last 3 run-log entries.
+  const runsDir = path.join(projectRoot, STEPPER_INTERNAL_ROOT, "runs");
+  const runEntries = (await safeReaddir(runsDir))
+    .filter((e) => e.endsWith(".log"))
+    .sort()
+    .slice(-3);
+  lines.push(
+    runEntries.length > 0
+      ? `Last 3 run logs: ${runEntries.join(", ")}`
+      : `Last 3 run logs: (none under ${runsDir})`,
+  );
+
+  return lines;
+}
+
+async function safeReaddir(dir: string): Promise<readonly string[]> {
+  try {
+    return await fs.readdir(dir);
+  } catch {
+    return [];
+  }
+}
+
+async function safeStat(p: string): Promise<boolean> {
+  try {
+    await fs.stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Run the doctor diagnostic suite. Composes the four checks from
@@ -188,6 +297,27 @@ export async function runDoctor(
       line: SUGGESTION_LINE,
     });
 
+    // 6. v0.2.0 — verbose diagnostics block (best-effort, read-only).
+    //    The block goes AFTER the canonical 5 lines so existing tests
+    //    that anchor on the 5-line shape are unaffected when verbose
+    //    is off (the default). Each diagnostic line is prefixed with
+    //    "  · " for visual separation from the canonical block.
+    if (opts?.verbose === true) {
+      const diags = await collectVerboseDiagnostics(ctx);
+      results.push({
+        name: "diagnostics-header",
+        status: "ok",
+        line: "Diagnostics (--verbose):",
+      });
+      for (const line of diags) {
+        results.push({
+          name: "diagnostic",
+          status: "ok",
+          line: `  · ${line}`,
+        });
+      }
+    }
+
     return { exitCode: 0, results };
   } catch (err) {
     if (err instanceof StepperError) {
@@ -243,7 +373,7 @@ if (import.meta.main) {
     process.exit(2);
   }
   try {
-    const result = await runDoctor();
+    const result = await runDoctor({ verbose: argResult.value.verbose });
     for (const r of result.results) {
       info(r.line);
     }

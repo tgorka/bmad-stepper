@@ -58,18 +58,24 @@ export type DoctorParseError = ParseError;
 // ─── Zod schema (empty in v0.1) ────────────────────────────────────────────
 
 /**
- * Zod schema for the parsed `/bmad-next --doctor` arguments. Empty in
- * v0.1 — the doctor command accepts no additional flags. `.strict()`
- * rejects any unknown key with an `unrecognized_keys` issue.
+ * Zod schema for the parsed `/bmad-next --doctor` arguments.
  *
- * The runner accepts argv ONLY in two forms:
- *   - `[]` (empty argv) → `{ ok: true, value: {} }`.
- *   - any non-empty argv → `{ ok: false, error: ParseError }`.
+ * v0.2 surface (additive over the v0.1 empty schema):
+ *   - `verbose` (boolean, optional) — when true, runDoctor emits an
+ *     extra "diagnostics" stderr block AFTER the canonical 5 lines:
+ *     detected install paths (cache + legacy), DAG node count, seed
+ *     version, project state file path, lock dir state, last 3
+ *     run-log entries. Read-only; no state mutation. Wired by the
+ *     `--verbose` flag in v0.2.0.
  *
- * Future schema extensions (e.g. `--json`, `--upgrade`) MUST preserve
- * `.strict()` to keep the unknown-flag rejection behaviour.
+ * `.strict()` rejects any unknown key with an `unrecognized_keys`
+ * issue. Future flag extensions MUST preserve `.strict()`.
  */
-export const DoctorArgsSchema = z.object({}).strict();
+export const DoctorArgsSchema = z
+  .object({
+    verbose: z.boolean().optional(),
+  })
+  .strict();
 
 export type DoctorArgs = z.infer<typeof DoctorArgsSchema>;
 
@@ -123,8 +129,7 @@ function kebabToCamel(input: string): string {
  *   2. `DoctorArgsSchema.safeParse(raw)` (sync; no IO).
  *   3. On success: `{ ok: true, value: parsed.data }` (the empty object).
  *   4. On failure: build `ParseError` with single-line AR22-compliant
- *      hint (`Run /bmad-next --doctor (no flags accepted in v0.1).
- *      (<first-issue>)`).
+ *      hint (`Run /bmad-next --doctor [--verbose]. (<first-issue>)`).
  *
  * The function NEVER throws on any input. The Result discriminated union
  * is the sole error channel.
@@ -141,7 +146,7 @@ export function parseDoctorArgs(
 
   const firstIssue = parsed.error.issues[0];
   const issueMessage = firstIssue?.message ?? "unknown parse error";
-  const hint = `Run /bmad-next --doctor (no flags accepted in v0.1). (${issueMessage})`;
+  const hint = `Run /bmad-next --doctor [--verbose]. (${issueMessage})`;
 
   return {
     ok: false,

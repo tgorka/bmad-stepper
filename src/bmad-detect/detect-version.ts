@@ -79,6 +79,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { BmadNotInstalledError } from "../errors.ts";
+import { traceLog } from "../io/log.ts";
 
 /**
  * BMAD detection value object — matches AC-1's verbatim
@@ -139,11 +140,18 @@ async function resolvePluginDir(opts?: DetectBmadOptions): Promise<string> {
   const homeDir = opts?.homeDir ?? os.homedir();
 
   const marketplaceDir = await resolveMarketplacePluginDir(homeDir);
-  if (marketplaceDir !== undefined) return marketplaceDir;
+  if (marketplaceDir !== undefined) {
+    traceLog(`bmad-detect: layout=marketplace dir=${marketplaceDir}`);
+    return marketplaceDir;
+  }
 
   const legacyDir = await resolveLegacyPluginDir(homeDir);
-  if (legacyDir !== undefined) return legacyDir;
+  if (legacyDir !== undefined) {
+    traceLog(`bmad-detect: layout=legacy dir=${legacyDir}`);
+    return legacyDir;
+  }
 
+  traceLog(`bmad-detect: layout=none homeDir=${homeDir}`);
   throw new BmadNotInstalledError(
     "BMAD is not installed (no marketplace plugin under ~/.claude/plugins/cache/<marketplace>/bmad/<version>/ via installed_plugins.json, and no legacy plugin under ~/.claude/plugins/bmad-method-*).",
   );
