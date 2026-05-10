@@ -259,7 +259,7 @@ export function renderQuestionsStub(
     `This step is **interactive** — the BMAD skill needs your input before it`,
   );
   lines.push(
-    "can produce a useful artifact. Replace each `<!-- FILL_ME -->` marker below",
+    "can produce a useful artifact. Replace each placeholder marker below",
   );
   lines.push(
     "with your answer (one line or many — leave the marker out when done).",
@@ -300,11 +300,20 @@ export function questionsPathForStep(
 
 /**
  * Returns true iff every `<!-- FILL_ME -->` marker has been removed
- * from the file. Used by the runner to decide whether the user (or the
- * loop) has filled the stub yet.
+ * from the answer-slot region of the file. Used by the runner to decide
+ * whether the user (or the loop) has filled the stub yet.
+ *
+ * The detection scans only the body that follows the `\n---\n` divider
+ * the renderer always emits between the instruction header and the
+ * numbered answer slots. Older stubs (and the header itself) reference
+ * the literal marker syntax in prose so the user knows what to look
+ * for, which would falsely match a naive substring check across the
+ * whole file. Anchoring on the divider keeps the check robust.
  */
 export function isQuestionsFilled(content: string): boolean {
-  return !content.includes(FILL_ME_MARKER);
+  const dividerIdx = content.indexOf("\n---\n");
+  const body = dividerIdx === -1 ? content : content.slice(dividerIdx);
+  return !body.includes(FILL_ME_MARKER);
 }
 
 /**
