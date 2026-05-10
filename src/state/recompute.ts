@@ -196,11 +196,24 @@ export async function recomputeState(opts?: RecomputeOptions): Promise<State> {
   const bmadVersion = opts?.bmadVersion ?? "unknown";
   const statePath = opts?.statePath ?? STATE_PATH;
   // Lock acquisition uses `mkdir(..., { recursive: false })` (lock.ts:379)
-  // which fails on a fresh project where `_bmad-output/.stepper/` does
-  // not yet exist. Create the parent directory eagerly so the first-run
+  // which fails on a fresh project where the state-file parent does not
+  // yet exist. Create the parent directory eagerly so the first-run
   // bootstrap path can acquire the lock cleanly.
   await fs.mkdir(path.dirname(statePath), { recursive: true });
-  const handle = await acquire(opts?.lockOptions);
+  // Co-locate the lock with the state file when `statePath` is overridden
+  // but no explicit `lockOptions.lockDir` is supplied. Production callers
+  // hit the default `_bmad-output/.stepper/state.yaml.lock` (sibling of
+  // `STATE_PATH`); test callers pass a tmpdir-rooted `statePath` and
+  // implicitly want the lock alongside it. Without this default the
+  // `acquire()` mkdir would target the real-cwd lock dir, which a fresh
+  // CI checkout does not have.
+  const resolvedLockOptions: LockOptions | undefined =
+    opts?.lockOptions?.lockDir !== undefined
+      ? opts.lockOptions
+      : opts?.statePath !== undefined
+        ? { ...(opts?.lockOptions ?? {}), lockDir: `${statePath}.lock` }
+        : opts?.lockOptions;
+  const handle = await acquire(resolvedLockOptions);
   try {
     const projectName = path.basename(projectRoot);
 
