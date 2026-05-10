@@ -324,6 +324,13 @@ function extractStopReasonMessage(stopReason: StopReason): string {
       // union. Delegate to the stored AC-3 verbatim message for
       // consistency with run.ts:formatExitReason.
       return stopReason.message;
+    case "all-steps-complete":
+      // All-steps-complete graceful exit. Plan-mode short-circuits BEFORE
+      // the iteration body — this branch is unreachable at plan-walk time
+      // but required for TypeScript exhaustiveness on the discriminated
+      // union. Delegate to the stored runNext report message for
+      // consistency with run.ts:formatExitReason.
+      return stopReason.message;
   }
 }
 

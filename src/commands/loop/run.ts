@@ -243,6 +243,22 @@ export type StopReason =
       response: string;
       receivedAt: string;
       message: string;
+    }
+  | {
+      // All-steps-complete graceful exit. Constructed DIRECTLY by the
+      // runner body when `runNext` returns a `"report"` action — the loop
+      // calls `runNextFn()` with no flags, so the only no-flag `report`
+      // path is the dispatch happy-path's "All BMAD steps for this project
+      // are complete." short-circuit (run.ts isProjectAllDone branch).
+      // Without this StopReason, the loop would spin to `--max-iters`
+      // emitting the same report every iteration with no state advance.
+      // `iterCount` is the iter count at observation (typically 1 — the
+      // detection fires on the first iteration that returns `report`);
+      // `message` carries the runNext report message verbatim for
+      // transparency in the loop-exit transcript.
+      code: "all-steps-complete";
+      iterCount: number;
+      message: string;
     };
 
 /**
@@ -1654,6 +1670,28 @@ export async function runLoop(
         break;
       }
 
+      // All-steps-complete graceful exit. The loop calls `runNextFn()`
+      // with no flags, so the only no-flag `report` action path is the
+      // dispatch happy-path's "All BMAD steps for this project are
+      // complete." short-circuit (run.ts isProjectAllDone branch). When
+      // that fires, the iteration committed nothing and re-running
+      // would emit the same report with no state advance — break with
+      // a clean stop reason instead of spinning to `--max-iters`.
+      // Gated on `exitCode === 0` so genuine halt paths (caught by the
+      // halt-on-error block below) are unaffected.
+      if (nextResult.action.action === "report" && nextResult.exitCode === 0) {
+        // Strip a single trailing period from the runNext message so
+        // formatLoopExitLines's `${...}.` suffix does NOT produce a
+        // double period in the final exit line.
+        const reportMessage = nextResult.action.message.replace(/\.$/, "");
+        stopReason = {
+          code: "all-steps-complete",
+          iterCount,
+          message: reportMessage,
+        };
+        break;
+      }
+
       // Story 4.6 AC-1/AC-2: halt-on-error short-circuit, GATED on
       // args.continueOnError. Default policy (--stop-on-error implicit OR
       // explicit) halts the loop on first verifier failure. Explicit
@@ -1877,6 +1915,13 @@ export function formatExitReason(stopReason: StopReason): string {
       // message is composed by the runner at construction (iteration-
       // body interactive-prompt gate when the user response is non-`y`);
       // we delegate to the stored message field for AC-byte-identical text.
+      return stopReason.message;
+    case "all-steps-complete":
+      // All-steps-complete graceful exit: emit the runNext report message
+      // verbatim so the loop transcript carries the same wording the
+      // dispatch path emits ("All BMAD steps for this project are
+      // complete. See /bmad-next --list to inspect remaining optional
+      // or unsatisfied steps.").
       return stopReason.message;
   }
 }

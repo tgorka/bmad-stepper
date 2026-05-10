@@ -200,7 +200,9 @@ describe("runLoop — Test D (IterationRecord shape)", () => {
     // To exercise the null-runId branch we need to break out of the loop
     // before halting; use --max-iters 1 with a report-action result.
     // The loop does NOT halt-on-error since exitCode===0, so iteration 1
-    // appends with runId=null and then max-iters fires.
+    // appends with runId=null. Post-fix: the all-steps-complete short-
+    // circuit ALSO fires on the report action, but iter 1 still records
+    // with runId=null + action=report regardless.
     const { stub } = countingStub(reportResult);
     const result = asLoop(
       await runLoop({
@@ -211,6 +213,72 @@ describe("runLoop — Test D (IterationRecord shape)", () => {
     expect(result.iterations.length).toBe(1);
     expect(result.iterations[0]?.runId).toBeNull();
     expect(result.iterations[0]?.action).toBe("report");
+  });
+});
+
+describe("runLoop — all-steps-complete short-circuit (Issue B)", () => {
+  it("breaks the loop on the first iteration that returns a report action", async () => {
+    // When `runNext` returns a no-flag `report` action (the dispatch happy
+    // path's `isProjectAllDone` short-circuit), the loop must NOT spin to
+    // `--max-iters` emitting the same report every iteration. The new
+    // `all-steps-complete` StopReason exits cleanly after iter 1.
+    const reportResult: NextResult = {
+      exitCode: 0,
+      action: {
+        action: "report",
+        message:
+          "All BMAD steps for this project are complete. See /bmad-next --list to inspect remaining optional or unsatisfied steps.",
+        exitCode: 0,
+      },
+    };
+    const { stub, calls } = countingStub(reportResult);
+    const result = asLoop(
+      await runLoop({
+        // No --max-iters — relying on the default cap (50). The all-steps-
+        // complete short-circuit must fire BEFORE the default cap takes
+        // effect.
+        argv: [],
+        runNextOverride: stub,
+      }),
+    );
+    expect(result.iterations.length).toBe(1);
+    expect(calls()).toBe(1);
+    expect(result.exitCode).toBe(0);
+    expect(result.stopReason.code).toBe("all-steps-complete");
+    if (result.stopReason.code !== "all-steps-complete") return;
+    expect(result.stopReason.iterCount).toBe(1);
+    expect(result.stopReason.message).toContain(
+      "All BMAD steps for this project are complete",
+    );
+  });
+
+  it("formatExitReason renders the all-steps-complete message verbatim", () => {
+    const stopReason: StopReason = {
+      code: "all-steps-complete",
+      iterCount: 1,
+      message:
+        "All BMAD steps for this project are complete. See /bmad-next --list to inspect remaining optional or unsatisfied steps",
+    };
+    expect(formatExitReason(stopReason)).toBe(stopReason.message);
+  });
+
+  it("strips a single trailing period from the runNext report message (avoids double-period in formatLoopExitLines)", async () => {
+    const reportResult: NextResult = {
+      exitCode: 0,
+      action: {
+        action: "report",
+        message: "All BMAD steps for this project are complete.",
+        exitCode: 0,
+      },
+    };
+    const { stub } = countingStub(reportResult);
+    const result = asLoop(await runLoop({ argv: [], runNextOverride: stub }));
+    expect(result.stopReason.code).toBe("all-steps-complete");
+    if (result.stopReason.code !== "all-steps-complete") return;
+    // No trailing period — formatLoopExitLines appends the period.
+    expect(result.stopReason.message).toBe(
+      "All BMAD steps for this project are complete",
+    );
   });
 });
 
