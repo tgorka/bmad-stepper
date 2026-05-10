@@ -1,0 +1,38 @@
+src/commands/next/run.test.ts
+  s_87ba9acdd7b9b8::t_cefc80e278ba96 39-47
+  s_87ba9acdd7b9b8::t_3d89ae61da97da 82
+src/integration/dry-run-no-writes.test.ts
+  s_87ba9acdd7b9b8::t_0b8a82d8416356 65-74
+src/commands/next/run.ts
+  s_87ba9acdd7b9b8::t_d79e1c0835c96f 245-251
+  s_87ba9acdd7b9b8::t_7b068026a64394 110
+  s_87ba9acdd7b9b8::t_1ad4dbd8410cbe 2065-2074,2078
+  s_87ba9acdd7b9b8::t_86a9284a1dc770 2075-2077
+  s_87ba9acdd7b9b8::t_1d686fe3d4215f 918-926,929-931
+src/integration/no-write-outside-scope.test.ts
+  s_87ba9acdd7b9b8::t_55c04ac417e1a2 74-83
+  s_87ba9acdd7b9b8::t_75f89c89a5d4ed 182-185,190
+src/integration/non-locking-read-flags.test.ts
+  s_87ba9acdd7b9b8::t_1b5ce481445284 114-123
+src/commands/loop/run.ts
+  s_87ba9acdd7b9b8::t_1f9b93e72c7f9d 157-173
+  s_87ba9acdd7b9b8::t_250fa2fd3fff16 1715-1732
+src/smoke/next.test.ts
+  s_87ba9acdd7b9b8::t_c1f95acc964ce6 102-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "21220c54fe07a7bec07cb486608583e503d510b9",
+  "prompts": {},
+  "sessions": {
+    "s_87ba9acdd7b9b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a131ad83-430f-45df-8d6b-c3c511cf51ef",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
