@@ -1,0 +1,21 @@
+docs/getting-started.md
+  s_f8b06fd850b4de::t_07fc6fc3e7825e 16,19,22-28
+README.md
+  s_f8b06fd850b4de::t_332989f7167527 24,36-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "c3a16db1ef40d031b6e553dc9c32f2a46b355e9d",
+  "prompts": {},
+  "sessions": {
+    "s_f8b06fd850b4de": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61db9185-ad5b-41fb-bd33-e9ef256f597d",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
