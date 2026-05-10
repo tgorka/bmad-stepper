@@ -1,0 +1,25 @@
+src/state/save.ts
+  s_e914f04dc81b57::t_f4b2aa2b708cdc 89
+  s_e914f04dc81b57::t_cc227361b4fe41 21-25
+src/dispatch/questions-stub.test.ts
+  s_e914f04dc81b57::t_a86294b74c846d 1-93
+src/dispatch/questions-stub.ts
+  s_e914f04dc81b57::t_b6771d1c0383a8 303-311,314-316
+  s_e914f04dc81b57::t_9357c295e2926f 262
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "d44f43888fac9942f0d27d47906f9a0c5c5e8eb8",
+  "prompts": {},
+  "sessions": {
+    "s_e914f04dc81b57": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b105f541-4d97-476b-b3bd-a16579754bd5",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
