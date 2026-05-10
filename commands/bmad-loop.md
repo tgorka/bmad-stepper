@@ -46,20 +46,145 @@ forwarded verbatim to `src/commands/loop/run.ts`'s argv (Story 4.1
 
 ## Behavior
 
-The `/bmad-loop` runner manages the iteration loop INTERNALLY as a single
-Bun process. The slash-command markdown's Bash step invokes the runner
-ONCE; the runner internally invokes `runNext` per iteration via in-process
-function call (NOT subprocess spawn — that would defeat AR9 + add ~30ms
-overhead per iteration). The loop runner's OWN `import.meta.main` block
-emits a SINGLE AR9 JSON line at exit summarising the loop outcome.
+`/bmad-loop` runs in one of two modes, selected by the presence of
+`--plan-first` in `$ARGUMENTS`:
 
-This is a critical distinction from `/bmad-next` (which dispatches ONE
-step per invocation): `/bmad-loop` invokes the runner ONCE; the runner
-loops internally; the four-step AR34 pattern (Bash → JSON line read →
-Task → Bash verify-and-advance) is replayed PER ITERATION inside the
-runner.
+- **Default mode (Layer-1 driver loop)** — repeats the `/bmad-next`
+  Bash + Task + Bash + summary cycle up to `--max-iters` times, with
+  Claude (the slash-command Layer-1 LLM) driving the iteration. This
+  is the v0.1.x production path: it can fire the `Task` tool per
+  iteration, so `state.lastSuccessfulStep` advances and the loop makes
+  real progress. Other stop-condition flags (`--until-X`,
+  `--time-budget`, `--token-budget`, `--checkpoint-each`,
+  `--interactive`, `--auto-fix`, `--stop-on-error`) are recognised by
+  the underlying TypeScript code but are NOT yet wired in this driver
+  loop — only `--max-iters` (with the FR25 default-50 cap) controls
+  the iteration count for now. Future stories will lift these into the
+  driver.
+- **Plan-first mode (`--plan-first`)** — delegates to the read-only
+  TypeScript loop runner at `src/commands/loop/run.ts`. The runner
+  resolves the planned step sequence (no dispatch, no Task), emits a
+  single AR9 `report` JSON line, and exits. Layer 1 prints the message
+  verbatim and exits.
 
-### 1. Bash: invoke the bounded-loop runner.
+### 0. Mode selection.
+
+If `$ARGUMENTS` contains `--plan-first`, jump to the **plan-first
+delegation** subsection (Step 4 below — the original single-Bash-
+invocation flow). Otherwise, run the **Layer-1 driver loop** described
+in Steps 1-3.
+
+### 1. Setup — parse `--max-iters` and initialise iteration state.
+
+Parse `--max-iters N` from `$ARGUMENTS`. When absent, default to `50`
+(per FR25 — prevents accidental infinite loops on a fresh project).
+Initialise:
+
+```
+iter_count   = 0
+max_iters    = <parsed N or 50>
+```
+
+Forward the rest of `$ARGUMENTS` (everything except `--max-iters` and
+its value) verbatim to each per-iteration `bun run
+src/commands/next/run.ts` call as `$NEXT_ARGS` (so e.g. `--resume`,
+`--skip`, `--auto-fix`, `--explain`, etc., still flow through to
+`/bmad-next`'s parser).
+
+### 2. Per-iteration body: Bash → JSON line read → Task → Bash → summary.
+
+Repeat the following sub-steps until either `iter_count == max_iters`
+(max-iters exit, see Step 3) OR an early break fires from a `report`
+or `halt` action (sub-steps 2d / 2e):
+
+#### 2a. Bash — invoke the lock-free pre-dispatch composer.
+
+```bash
+bun run src/commands/next/run.ts -- $NEXT_ARGS
+```
+
+This is the SAME entry-point the standalone `/bmad-next` slash command
+uses (`commands/bmad-next.md` Step 1). It reads `state.yaml` (lock-
+free), computes the next step, builds `staging/<runId>/dispatch-spec.json`,
+and emits exactly ONE AR9 JSON line on stdout.
+
+#### 2b. Parse the single stdout JSON line as `jsonLine`.
+
+Per `src/schemas/dispatch-protocol.ts` (`DispatchActionV1Schema`), the
+shape is one of three discriminated variants — `dispatch`, `report`,
+or `halt`. See `commands/bmad-next.md` Step 2 for the full schema
+reference. Increment `iter_count`.
+
+#### 2c. `jsonLine.action == "dispatch"` — execute the step end-to-end.
+
+Mirrors `commands/bmad-next.md` Steps 3-6 verbatim:
+
+1. **Task** — invoke the sub-agent with the dispatch spec and the
+   configured per-step model:
+   ```
+   Task(
+     agent  = <jsonLine.agent>,
+     prompt = "staging/<jsonLine.runId>/dispatch-spec.json",
+     model  = <dispatchSpec.model>     # read from staging/<runId>/dispatch-spec.json's `model` field
+   )
+   ```
+2. **Capture token counts** from the Task response object
+   (`response.tokens_in`, `response.tokens_out`). Fall back to `0 / 0`
+   when the runtime does not surface them.
+3. **Bash verify-and-advance** — lock-acquiring post-dispatch runner:
+   ```bash
+   bun run src/commands/next/verify-and-advance.ts -- \
+     --run-id <jsonLine.runId> \
+     --tokens-in <tokens_in> \
+     --tokens-out <tokens_out> \
+     --last-attempted-json '<JSON.stringify(jsonLine.lastAttempted)>'
+   ```
+4. **Parse the second AR9 JSON line.** If its `action == "halt"`,
+   print the `message` field VERBATIM and exit with the line's
+   `exitCode` (≥ 1) — `halt-on-error`. Do NOT continue the loop.
+5. **Print the FR18 one-line summary** (the second AR9 line's
+   `message` field) verbatim. Then continue to the next iteration
+   (back to sub-step 2a) — do NOT exit.
+
+#### 2d. `jsonLine.action == "report"` — graceful exit.
+
+- When `jsonLine.awaitInput == true`, the next step is flagged
+  `interactive: true` and `runNext` has written a questions stub at
+  `jsonLine.awaitInputPath`. Print `jsonLine.message` verbatim and
+  exit `0` (`await-input` stop reason). The user (or this Layer-1
+  LLM) fills the stub by replacing each `<!-- FILL_ME -->` marker
+  with an answer, then re-invokes `/bmad-loop` (or
+  `/bmad-next --resume`).
+- Otherwise (no `awaitInput` field), the report is the all-steps-
+  complete short-circuit ("All BMAD steps for this project are
+  complete..."). Print `jsonLine.message` verbatim and exit `0`.
+- In BOTH cases, do NOT continue the iteration loop.
+
+#### 2e. `jsonLine.action == "halt"` — actionable error.
+
+Print `jsonLine.message` verbatim and exit with `jsonLine.exitCode`
+(≥ 1). Do NOT continue the loop. The dispatch was not performed —
+there is nothing to verify.
+
+### 3. Loop-exit summary — `--max-iters` reached.
+
+When the iteration body completes `max_iters` times without an early
+break, emit the unified Story 4.10 two-line exit summary:
+
+```
+Loop exited: max-iters (<N>) reached.
+Snapshot: <state.yaml.lastSnapshot.sha>. Resume: /bmad-next --resume.
+```
+
+When `state.lastSnapshot` is null/absent (non-Git project per Story
+1.8), emit only the first line. Exit code `0` per FR53 (clean exit;
+the user-supplied cap was respected).
+
+### 4. Plan-first delegation (`--plan-first` only).
+
+When `$ARGUMENTS` contains `--plan-first`, the Layer-1 driver loop
+above is BYPASSED and Layer 1 invokes the read-only TypeScript loop
+runner unchanged:
 
 ```bash
 bun run src/commands/loop/run.ts -- $ARGUMENTS
@@ -166,7 +291,7 @@ step).
 Plan-mode (`--plan-first`) ALWAYS maps to exit code `0` (clean exit;
 the dry-run is the success path per Story 4.7 AC-1).
 
-### 2. Parse the single stdout JSON line.
+#### 4a. Plan-first runner: parse the single stdout JSON line.
 
 The runner emits EXACTLY ONE JSON line on stdout — the loop's exit
 summary. The shape is the AR9 `report` variant per
@@ -182,20 +307,20 @@ Parse the single line via `JSON.parse`. Do NOT inspect any other stdout
 content — the runner is contractually bound to emit exactly ONE line
 per AR9 + FR54.
 
-### 3. Print the FR18 one-line summary.
+#### 4b. Plan-first runner: print the FR18 one-line summary.
 
 Print the `message` field VERBATIM as a single human-readable line. Do
 NOT embellish with prefixes ("Stepper says:", "ERROR:", etc.) — the
 message is already FR18-conformant. Exit with the JSON line's
 `exitCode` (per the FR53 mapping above).
 
-After Step 3, `/bmad-loop` returns control to the user. The
+After this, `/bmad-loop` returns control to the user. The
 per-iteration transcripts (`<ts>-<step>.{log,json}` under
 `_bmad-output/.stepper/runs/`) are on disk for `/bmad-next --watch`
 (Story 3.9), `/bmad-next --diff-state` (Story 3.8), and
 `/bmad-next --export-state` (Story 3.10) to consume.
 
-### 4. Per-iteration AR34 pattern (replayed INSIDE the runner).
+#### 4c. Plan-first runner: per-iteration AR34 pattern (replayed INSIDE the runner).
 
 For every iteration the runner internally repeats the four-step AR34
 pattern that the standalone `/bmad-next` slash-command markdown
@@ -205,16 +330,18 @@ prescribes:
 2. **JSON line read**: the runner reads the AR9 line from `runNext`'s
    structured return value (NOT stdout — in-process invocation).
 3. **Task** (per-iteration dispatch): when `runNext` returns a `dispatch`
-   action, the dispatch is recorded in the iteration record. v0.1
-   conservative: the loop runner DOES NOT actually invoke the Task tool
-   from inside the iteration — the per-iteration Task→verify-and-advance
-   flow is owned by the standard `/bmad-next` slash-command path. Story
-   4.1's loop runner is a SKELETON: when used with the test-injection
-   stub, it asserts call counts; when used in production via
-   `bun run src/commands/loop/run.ts`, the per-iteration `runNext`
-   completes synchronously without a Task dispatch (the production
-   wiring of Task-per-iteration lands in subsequent Epic 4 + Epic 5
-   stories that integrate Layer 1's Task tool with the loop runner).
+   action, the dispatch is recorded in the iteration record. The Bun
+   loop runner DOES NOT actually invoke the Task tool from inside the
+   iteration — the per-iteration Task→verify-and-advance flow is owned
+   by the slash-command Layer-1 driver loop documented in Steps 1-3 above
+   (default mode) and by the standalone `/bmad-next` slash-command path
+   (single-step mode). Story 4.1's loop runner is therefore consulted
+   only for plan-first / dry-run preview today: when used with the
+   test-injection stub, it asserts call counts; when used in production
+   via `bun run src/commands/loop/run.ts --plan-first`, the runner
+   resolves the planned step sequence without dispatching anything.
+   In default `/bmad-loop` mode the Layer-1 driver above replaces this
+   path entirely.
 
    Story 6.3 — when the future Task-per-iteration wiring lands, the
    per-iteration Task invocation MUST forward the `model` parameter
@@ -246,10 +373,11 @@ prescribes:
    code TIMEOUT, exitCode 1, single-line hint). See
    `docs/configuration.md` `budgets:` section for configuration syntax.
 4. **Bash verify-and-advance** (per-iteration): when the per-iteration
-   `runNext` returns a `dispatch` action (production-wiring path), the
-   runner is responsible for invoking
-   `bun run src/commands/next/verify-and-advance.ts` after the Task
-   returns. v0.1 SKELETON does NOT yet wire this path.
+   `runNext` returns a `dispatch` action, the post-dispatch Bash
+   `verify-and-advance.ts` invocation is owned by the slash-command
+   Layer-1 driver loop (sub-step 2c above) — the Bun loop runner itself does
+   NOT spawn the second Bash process. In plan-first mode there is no
+   dispatch and therefore no verify-and-advance to run.
 
 The per-iteration AR9 lines from `runNext` are CAPTURED in-process via
 the structured return value — they do NOT stream to stdout per-iteration
