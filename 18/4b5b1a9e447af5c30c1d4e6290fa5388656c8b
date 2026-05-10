@@ -1,0 +1,30 @@
+commands/bmad-loop.md
+  s_e914f04dc81b57::t_549927d5b8f391 294
+  s_e914f04dc81b57::t_5bfdbcb0262d8d 310
+  s_e914f04dc81b57::t_a3ffd5fc2fe1a4 183
+  s_e914f04dc81b57::t_4a672e935b66b7 94,96-98,118,120,147-169
+  s_e914f04dc81b57::t_eb1dbd9b3aa0b7 49-72,76-81,83-93,95,99-117,119,121-146,170-182,185-187
+  s_e914f04dc81b57::t_533b89fa42cd94 333-335,337-344
+  s_e914f04dc81b57::t_6d8ff169d759cd 317
+  s_e914f04dc81b57::t_b81ccb5f1d1336 73-75
+  s_e914f04dc81b57::t_a8f0dec0128cbb 323
+  s_e914f04dc81b57::t_7794d9f4dc3c42 336
+  s_e914f04dc81b57::t_0f7a44702bf67a 376-377,379-380
+  s_e914f04dc81b57::t_c9c83581822203 378
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "184b5b1a9e447af5c30c1d4e6290fa5388656c8b",
+  "prompts": {},
+  "sessions": {
+    "s_e914f04dc81b57": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b105f541-4d97-476b-b3bd-a16579754bd5",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
