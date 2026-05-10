@@ -167,15 +167,21 @@ async function driveOneIteration(
   iterCount: number,
   argv: readonly string[] = [],
 ): Promise<IterationResult> {
-  // Override HOME so the BMAD detector finds the fake plugin under
-  // <tmp>/.claude/plugins. process.cwd() points at the repo root for
-  // `bun test`; we must explicitly thread the tmpdir as projectRoot.
+  // Pass `homeDir: cwd` + `projectRoot: cwd` explicitly through
+  // RunNextOptions so the BMAD detector finds the fake plugin under
+  // <tmp>/.claude/plugins regardless of the OS (process.env.HOME
+  // mutation works on macOS but not reliably on Linux — Bun caches
+  // os.homedir() differently per platform). chdir is still needed
+  // because verify-and-advance.ts resolves several paths relative to
+  // the cwd via the `_bmad-output/.stepper/` constant.
   const originalCwd = process.cwd();
-  const originalHome = process.env.HOME;
   process.chdir(cwd);
-  process.env.HOME = cwd;
   try {
-    const nextResult = await runNext({ argv });
+    const nextResult = await runNext({
+      argv,
+      projectRoot: cwd,
+      homeDir: cwd,
+    });
     const action = nextResult.action as unknown as Action;
 
     if (action.action === "report" || action.action === "halt") {
@@ -208,7 +214,10 @@ async function driveOneIteration(
         JSON.stringify(dispatch.lastAttempted),
       );
     }
-    const verifyResult = await runVerifyAndAdvance({ argv: verifyArgv });
+    const verifyResult = await runVerifyAndAdvance({
+      argv: verifyArgv,
+      projectRoot: cwd,
+    });
     return {
       iterCount,
       action,
@@ -217,11 +226,6 @@ async function driveOneIteration(
     };
   } finally {
     process.chdir(originalCwd);
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
   }
 }
 
