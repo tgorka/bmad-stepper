@@ -13,11 +13,19 @@ Deeper onboarding companion to the [README Quick Start](../README.md#quick-start
 
 ## Installing the plugin
 
+In-session (inside Claude Code):
 ```text
 /plugin marketplace add tgorka/bmad-stepper
+/plugin install bmad-stepper@bmad-stepper
 ```
 
-The marketplace install fetches `tgorka/bmad-stepper` to `~/.claude/plugins/bmad-stepper/`. No code runs at install time — the plugin is invoked on demand via the slash commands declared in `.claude-plugin/plugin.json`.
+External CLI (outside Claude Code) — same flow via the `claude` terminal command:
+```bash
+claude plugin marketplace add tgorka/bmad-stepper
+claude plugin install bmad-stepper@bmad-stepper
+```
+
+For unreleased revisions, swap `tgorka/bmad-stepper` for the path to your local clone (e.g. `/path/to/bmad-stepper`). The marketplace install fetches `tgorka/bmad-stepper` to `~/.claude/plugins/cache/bmad-stepper/bmad-stepper/<version>/`. No code runs at install time — the plugin is invoked on demand via the slash commands declared in `.claude-plugin/plugin.json`.
 
 ### Common install errors
 
