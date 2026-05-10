@@ -172,4 +172,82 @@ describe("smoke /bmad-doctor", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stderr).not.toContain("Diagnostics");
   });
+
+  it("(f) corrupt state.yaml halts with exit 1 + actionable hint", async () => {
+    await setupBmadPlugin(tmp, "6.6.0");
+    // Write garbage that defeats Bun.YAML.parse (binary-ish bytes guarantee
+    // it cannot be re-interpreted as a valid mapping).
+    await fs.mkdir(path.join(tmp, "_bmad-output/.stepper"), {
+      recursive: true,
+    });
+    await Bun.write(
+      path.join(tmp, "_bmad-output/.stepper/state.yaml"),
+      "\x00\x01not yaml at all: { unbalanced",
+    );
+    const result = await spawnRunner([], tmp);
+    expect(result.exitCode).toBe(1);
+    // The CorruptStateError actionable hint per src/errors.ts.
+    expect(result.stderr).toContain("--recompute-state");
+  });
+
+  it("(g) unknown flag exits with 2 + parser hint", async () => {
+    await setupBmadPlugin(tmp, "6.6.0");
+    const result = await spawnRunner(["--definitely-not-a-real-flag"], tmp);
+    expect(result.exitCode).toBe(2);
+    // The Story 1.7 / v0.2.0 parser hint mentions the canonical surface.
+    expect(result.stderr).toContain("--doctor");
+    expect(result.stderr).toContain("--verbose");
+  });
+
+  it("(h) marketplace cache layout (installed_plugins.json) is detected", async () => {
+    // The v0.2.0 fix at src/bmad-detect/detect-version.ts:165 reads
+    // installed_plugins.json first. This case verifies that path: NO legacy
+    // bmad-method-* directory, ONLY a cache install + the manifest.
+    const cacheVersion = "6.6.0";
+    const cacheDir = path.join(
+      tmp,
+      ".claude",
+      "plugins",
+      "cache",
+      "bmad-method",
+      "bmad",
+      cacheVersion,
+    );
+    await fs.mkdir(path.join(cacheDir, ".claude-plugin"), { recursive: true });
+    await Bun.write(
+      path.join(cacheDir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "bmad", version: cacheVersion }),
+    );
+    await fs.mkdir(path.join(cacheDir, "skills", "bmad-brainstorming"), {
+      recursive: true,
+    });
+    await Bun.write(
+      path.join(cacheDir, "skills", "bmad-brainstorming", "SKILL.md"),
+      "---\nname: bmad-brainstorming\ndescription: Stub.\n---\n",
+    );
+    // Marketplace registry that points the detector at the cache install.
+    await Bun.write(
+      path.join(tmp, ".claude", "plugins", "installed_plugins.json"),
+      JSON.stringify({
+        version: 2,
+        plugins: {
+          "bmad@bmad-method": [
+            {
+              scope: "user",
+              installPath: cacheDir,
+              version: cacheVersion,
+              installedAt: "2026-05-10T00:00:00.000Z",
+              lastUpdated: "2026-05-10T00:00:00.000Z",
+              gitCommitSha: "deadbeef",
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await spawnRunner([], tmp);
+    expect(result.exitCode).toBe(0);
+    // Detector reports the version from the cache install.
+    expect(result.stderr).toContain(`BMAD detected: v${cacheVersion}`);
+  });
 });

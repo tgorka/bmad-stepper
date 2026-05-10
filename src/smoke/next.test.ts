@@ -363,12 +363,22 @@ describe("smoke /bmad-next happy path", () => {
 
   // ─── No-write-outside-tmpdir property (AC-5 — partial) ──────────────────
   it("does not write any files outside the test tmpdir during the happy path", async () => {
-    // Snapshot the parent dir's mtime BEFORE the smoke. Per Story 2.8 §Task
-    // 5.2: this is a NECESSARY but not SUFFICIENT check — the dedicated
-    // src/integration/no-write-outside-scope.test.ts tightens this with a
-    // recursive walk + system-wide path-prefix assertion.
+    // Per Story 2.8 §Task 5.2: this is a NECESSARY but not SUFFICIENT check
+    // — the dedicated src/integration/no-write-outside-scope.test.ts tightens
+    // this with a recursive walk + system-wide path-prefix assertion.
+    //
+    // Original implementation (pre-PR #68) snapshotted parent.mtimeMs which
+    // is fragile — `os.tmpdir()` is shared with every other concurrent
+    // process touching tmpdir (other test runners, OS daemons, dev tools);
+    // a sibling write changes the parent mtime even though the smoke wrote
+    // nothing outside its own tmp. Replaced with a child-name diff: the
+    // smoke is responsible for siblings whose name matches our prefix
+    // (`stepper-smoke-next-*`); other siblings are out of scope.
     const parentDir = path.dirname(tmp);
-    const parentMtimeBefore = (await fs.stat(parentDir)).mtimeMs;
+    const myPrefix = path.basename(tmp).split("-").slice(0, -1).join("-");
+    const ownSiblingsBefore = (await fs.readdir(parentDir)).filter((e) =>
+      e.startsWith(myPrefix),
+    );
 
     // Pre-fill the interactive-step questions stub (bmad-brainstorming
     // is flagged `interactive: true`).
@@ -403,10 +413,11 @@ describe("smoke /bmad-next happy path", () => {
     );
     expect(result2.exitCode).toBe(0);
 
-    // Parent dir's mtime must be unchanged — no writes ABOVE tmpdir.
-    // (mtime change indicates a child was added/removed; we expect ZERO
-    // additions to the parent during the smoke.)
-    const parentMtimeAfter = (await fs.stat(parentDir)).mtimeMs;
-    expect(parentMtimeAfter).toBe(parentMtimeBefore);
+    // Set of own-prefix siblings must be unchanged — the smoke must not
+    // create new top-level dirs that look like ours under os.tmpdir().
+    const ownSiblingsAfter = (await fs.readdir(parentDir)).filter((e) =>
+      e.startsWith(myPrefix),
+    );
+    expect(new Set(ownSiblingsAfter)).toEqual(new Set(ownSiblingsBefore));
   });
 });
