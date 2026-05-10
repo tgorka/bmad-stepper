@@ -64,6 +64,65 @@ async function setupFakeBmadPlugin(
   return { pluginDir, manifestPath };
 }
 
+/**
+ * Test fixture: writes the marketplace install layout under
+ * `<homeDir>/.claude/plugins/cache/bmad-method/bmad/<version>/` plus the
+ * `installed_plugins.json` v2 manifest entry.
+ */
+async function setupFakeBmadMarketplacePlugin(
+  homeDir: string,
+  version: string,
+  skills: string[],
+): Promise<{ pluginDir: string; manifestPath: string }> {
+  const pluginDir = path.join(
+    homeDir,
+    ".claude",
+    "plugins",
+    "cache",
+    "bmad-method",
+    "bmad",
+    version,
+  );
+  const claudePluginDir = path.join(pluginDir, ".claude-plugin");
+  await fs.mkdir(claudePluginDir, { recursive: true });
+  const manifestPath = path.join(claudePluginDir, "plugin.json");
+  await Bun.write(
+    manifestPath,
+    JSON.stringify({
+      name: "bmad",
+      version,
+      description: "BMAD Method - Marketplace test fixture",
+    }),
+  );
+  for (const skill of skills) {
+    await fs.mkdir(path.join(pluginDir, "skills", skill), { recursive: true });
+  }
+
+  const installedManifest = path.join(
+    homeDir,
+    ".claude",
+    "plugins",
+    "installed_plugins.json",
+  );
+  let parsed: {
+    version: number;
+    plugins: Record<
+      string,
+      Array<{ scope: string; installPath: string; version: string }>
+    >;
+  } = { version: 2, plugins: {} };
+  if (await Bun.file(installedManifest).exists()) {
+    parsed = (await Bun.file(installedManifest).json()) as typeof parsed;
+  }
+  parsed.plugins["bmad@bmad-method"] = [
+    ...(parsed.plugins["bmad@bmad-method"] ?? []),
+    { scope: "user", installPath: pluginDir, version },
+  ];
+  await Bun.write(installedManifest, JSON.stringify(parsed));
+
+  return { pluginDir, manifestPath };
+}
+
 describe("detectBmadSkills — AC-1 happy path", () => {
   it("returns sorted skill names from plugin/skills/ directories", async () => {
     await setupFakeBmadPlugin(tmpDir, "6.5.0.1", [
@@ -125,6 +184,34 @@ describe("detectBmadSkills — empty + filtering edge cases", () => {
       projectRoot: tmpDir,
     });
     expect(skills).toEqual(["bar", "foo"]);
+  });
+});
+
+describe("detectBmadSkills — marketplace install layout", () => {
+  it("returns sorted skill names from a marketplace-installed plugin's skills/ dir", async () => {
+    await setupFakeBmadMarketplacePlugin(tmpDir, "6.5.0.1", [
+      "bmad-create-prd",
+      "bmad-create-story",
+      "bmad-dev-story",
+    ]);
+    const skills = await detectBmadSkills({
+      homeDir: tmpDir,
+      projectRoot: tmpDir,
+    });
+    expect(skills).toEqual([
+      "bmad-create-prd",
+      "bmad-create-story",
+      "bmad-dev-story",
+    ]);
+  });
+
+  it("returns [] when marketplace plugin has no skills/ subdirectory", async () => {
+    await setupFakeBmadMarketplacePlugin(tmpDir, "6.5.0.1", []);
+    const skills = await detectBmadSkills({
+      homeDir: tmpDir,
+      projectRoot: tmpDir,
+    });
+    expect(skills).toEqual([]);
   });
 });
 

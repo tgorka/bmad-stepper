@@ -67,6 +67,69 @@ async function setupFakeBmadPlugin(
   return { pluginDir, manifestPath };
 }
 
+/**
+ * Test fixture: writes the marketplace install layout under
+ * `<homeDir>/.claude/plugins/cache/bmad-method/bmad/<version>/` plus the
+ * `installed_plugins.json` v2 manifest entry that points at it.
+ *
+ * Mirrors the real Claude Code marketplace install at
+ * `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`. Multiple
+ * calls accumulate entries in the same `installed_plugins.json`.
+ */
+async function setupFakeBmadMarketplacePlugin(
+  homeDir: string,
+  version: string,
+  skills: string[],
+): Promise<{ pluginDir: string; manifestPath: string }> {
+  const pluginDir = path.join(
+    homeDir,
+    ".claude",
+    "plugins",
+    "cache",
+    "bmad-method",
+    "bmad",
+    version,
+  );
+  const claudePluginDir = path.join(pluginDir, ".claude-plugin");
+  await fs.mkdir(claudePluginDir, { recursive: true });
+  const manifestPath = path.join(claudePluginDir, "plugin.json");
+  await Bun.write(
+    manifestPath,
+    JSON.stringify({
+      name: "bmad",
+      version,
+      description: "BMAD Method - Marketplace test fixture",
+    }),
+  );
+  for (const skill of skills) {
+    await fs.mkdir(path.join(pluginDir, "skills", skill), { recursive: true });
+  }
+
+  const installedManifest = path.join(
+    homeDir,
+    ".claude",
+    "plugins",
+    "installed_plugins.json",
+  );
+  let parsed: {
+    version: number;
+    plugins: Record<
+      string,
+      Array<{ scope: string; installPath: string; version: string }>
+    >;
+  } = { version: 2, plugins: {} };
+  if (await Bun.file(installedManifest).exists()) {
+    parsed = (await Bun.file(installedManifest).json()) as typeof parsed;
+  }
+  parsed.plugins["bmad@bmad-method"] = [
+    ...(parsed.plugins["bmad@bmad-method"] ?? []),
+    { scope: "user", installPath: pluginDir, version },
+  ];
+  await Bun.write(installedManifest, JSON.stringify(parsed));
+
+  return { pluginDir, manifestPath };
+}
+
 describe("detectBmadVersion — AC-1 happy path", () => {
   it("returns the version string from plugin.json for an installed BMAD plugin", async () => {
     await setupFakeBmadPlugin(tmpDir, "6.5.0.1", []);
@@ -200,5 +263,110 @@ describe("detectBmadVersion — multi-plugin lex-max selection", () => {
 
     const v = await detectBmadVersion({ homeDir: tmpDir, projectRoot: tmpDir });
     expect(v).toBe("6.5.0.1");
+  });
+});
+
+describe("detectBmadVersion — marketplace install layout", () => {
+  it("returns the version string from a marketplace-installed BMAD plugin", async () => {
+    // ~/.claude/plugins/cache/bmad-method/bmad/<version>/ + installed_plugins.json
+    await setupFakeBmadMarketplacePlugin(tmpDir, "6.5.0.1", []);
+    const v = await detectBmadVersion({ homeDir: tmpDir, projectRoot: tmpDir });
+    expect(v).toBe("6.5.0.1");
+  });
+
+  it("picks the lex-max marketplace install when multiple versions are registered", async () => {
+    await setupFakeBmadMarketplacePlugin(tmpDir, "6.5.0.0", []);
+    await setupFakeBmadMarketplacePlugin(tmpDir, "6.5.0.1", []);
+    const v = await detectBmadVersion({ homeDir: tmpDir, projectRoot: tmpDir });
+    expect(v).toBe("6.5.0.1");
+  });
+
+  it("prefers the marketplace install over a legacy bmad-method-* directory when both exist", async () => {
+    await setupFakeBmadPlugin(tmpDir, "6.4.0.0", []);
+    await setupFakeBmadMarketplacePlugin(tmpDir, "6.5.0.1", []);
+    const v = await detectBmadVersion({ homeDir: tmpDir, projectRoot: tmpDir });
+    expect(v).toBe("6.5.0.1");
+  });
+
+  it("falls back to legacy when installed_plugins.json has no bmad@* entry", async () => {
+    // Marketplace manifest exists but only registers an unrelated plugin.
+    const installedManifest = path.join(
+      tmpDir,
+      ".claude",
+      "plugins",
+      "installed_plugins.json",
+    );
+    await fs.mkdir(path.dirname(installedManifest), { recursive: true });
+    await Bun.write(
+      installedManifest,
+      JSON.stringify({
+        version: 2,
+        plugins: {
+          "other-plugin@some-marketplace": [
+            {
+              scope: "user",
+              installPath: path.join(
+                tmpDir,
+                ".claude/plugins/cache/some-marketplace/other-plugin/1.0.0",
+              ),
+              version: "1.0.0",
+            },
+          ],
+        },
+      }),
+    );
+    await setupFakeBmadPlugin(tmpDir, "6.5.0.1", []);
+
+    const v = await detectBmadVersion({ homeDir: tmpDir, projectRoot: tmpDir });
+    expect(v).toBe("6.5.0.1");
+  });
+
+  it("falls back to legacy when installed_plugins.json is corrupt JSON", async () => {
+    const installedManifest = path.join(
+      tmpDir,
+      ".claude",
+      "plugins",
+      "installed_plugins.json",
+    );
+    await fs.mkdir(path.dirname(installedManifest), { recursive: true });
+    await Bun.write(installedManifest, "{ this is not json");
+    await setupFakeBmadPlugin(tmpDir, "6.5.0.1", []);
+
+    const v = await detectBmadVersion({ homeDir: tmpDir, projectRoot: tmpDir });
+    expect(v).toBe("6.5.0.1");
+  });
+
+  it("ignores bmad-stepper@* entries (only matches plugin name 'bmad' exactly)", async () => {
+    const stepperPluginDir = path.join(
+      tmpDir,
+      ".claude/plugins/cache/bmad-stepper/bmad-stepper/0.1.0",
+    );
+    await fs.mkdir(stepperPluginDir, { recursive: true });
+    const installedManifest = path.join(
+      tmpDir,
+      ".claude",
+      "plugins",
+      "installed_plugins.json",
+    );
+    await Bun.write(
+      installedManifest,
+      JSON.stringify({
+        version: 2,
+        plugins: {
+          "bmad-stepper@bmad-stepper": [
+            {
+              scope: "user",
+              installPath: stepperPluginDir,
+              version: "0.1.0",
+            },
+          ],
+        },
+      }),
+    );
+
+    // No bmad@* entry, no legacy dir → still throws.
+    await expect(
+      detectBmadVersion({ homeDir: tmpDir, projectRoot: tmpDir }),
+    ).rejects.toBeInstanceOf(BmadNotInstalledError);
   });
 });

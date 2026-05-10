@@ -50,6 +50,7 @@
  */
 
 import * as path from "node:path";
+import { _resolvePluginDir } from "../../bmad-detect/detect-version.ts";
 import {
   detectBmadSkills,
   detectBmadVersion,
@@ -505,34 +506,25 @@ export async function checkStepRegistry(
 }
 
 /**
- * Reconstruct the BMAD plugin directory from the homeDir using the
- * same lex-max algorithm as `bmad-detect/detect-version.ts`. Internal
- * helper for `checkStepRegistry`.
+ * Reconstruct the BMAD plugin directory from the homeDir by delegating to
+ * `bmad-detect/detect-version.ts`'s shared resolver. Internal helper for
+ * `checkStepRegistry`.
  *
- * Throws if the plugin directory cannot be resolved; in practice this
- * never happens because `checkBmadInstalled` ran first and would have
- * thrown `BmadNotInstalledError`.
+ * Returns `undefined` only when the resolver throws `BmadNotInstalledError`;
+ * in practice this never happens because `checkBmadInstalled` ran first and
+ * would have surfaced the same error. The `undefined` fallback is preserved
+ * to keep the existing call signature stable.
  */
 async function resolvePluginDir(
   bmad: DoctorBmadDetection,
 ): Promise<string | undefined> {
-  const fs = await import("node:fs/promises");
-  const os = await import("node:os");
-  const homeDir = bmad.homeDir ?? os.homedir();
-  const pluginsRoot = path.join(homeDir, ".claude", "plugins");
-  let entries: string[];
   try {
-    entries = await fs.readdir(pluginsRoot);
+    return await _resolvePluginDir(
+      bmad.homeDir !== undefined ? { homeDir: bmad.homeDir } : undefined,
+    );
   } catch {
     return undefined;
   }
-  const candidates = entries
-    .filter((e) => e.startsWith("bmad-method-"))
-    .sort()
-    .reverse();
-  if (candidates.length === 0) return undefined;
-  // biome-ignore lint/style/noNonNullAssertion: length checked above
-  return path.join(pluginsRoot, candidates[0]!);
 }
 
 // ─── Composer (used by run.ts) ─────────────────────────────────────────────
