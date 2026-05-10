@@ -1,0 +1,29 @@
+src/bmad-detect/detect-skills.test.ts
+  s_ff8b39cb5fbe66::t_e655afd80cc37b 67-125
+  s_ff8b39cb5fbe66::t_ba2f8c9451bed8 190-217
+src/bmad-detect/detect-version.ts
+  s_ff8b39cb5fbe66::t_004ed9761ebca9 2,14-23,27,38-49,51
+  s_ff8b39cb5fbe66::t_d8875865267609 132,134-136,140-221,232-233,236
+src/bmad-detect/detect-version.test.ts
+  s_ff8b39cb5fbe66::t_415bb5002217d0 70-132
+  s_ff8b39cb5fbe66::t_038000fc9b221b 268-372
+src/commands/doctor/checks.ts
+  s_ff8b39cb5fbe66::t_b2f80e308426b9 53
+  s_ff8b39cb5fbe66::t_cd29509888d372 509-511,513-516,522-524
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "37fbfe6edc9b2e94600e03ffff60785a7f8c322a",
+  "prompts": {},
+  "sessions": {
+    "s_ff8b39cb5fbe66": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59db7187-1b93-439b-b797-b9351971cd2d",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
