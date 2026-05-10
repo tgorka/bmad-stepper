@@ -139,7 +139,7 @@ describe("runUpgradeCheck — AC-1 happy path", () => {
         body: {
           tag_name: "v0.2.0",
           html_url:
-            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
           body: SAMPLE_BODY_WITH_BMAD,
         },
       }),
@@ -149,7 +149,7 @@ describe("runUpgradeCheck — AC-1 happy path", () => {
     expect(result.currentVersion).toBe("0.1.0");
     expect(result.latestVersion).toBe("0.2.0");
     expect(result.changelogUrl).toBe(
-      "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+      "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
     );
     expect(result.bmadCompat).toBe("v6.5.x");
   });
@@ -162,7 +162,7 @@ describe("runUpgradeCheck — AC-1 happy path", () => {
         body: {
           tag_name: "v0.1.0",
           html_url:
-            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.1.0",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.1.0",
           body: SAMPLE_BODY_WITH_BMAD,
         },
       }),
@@ -180,7 +180,7 @@ describe("runUpgradeCheck — AC-1 happy path", () => {
         body: {
           tag_name: "v0.0.9",
           html_url:
-            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.0.9",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.0.9",
           body: SAMPLE_BODY_NO_BMAD,
         },
       }),
@@ -283,7 +283,7 @@ describe("runUpgradeCheck — request shape + extraction helpers", () => {
         body: {
           tag_name: "v0.1.0",
           html_url:
-            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.1.0",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.1.0",
           body: "",
         },
       }),
@@ -302,7 +302,7 @@ describe("runUpgradeCheck — request shape + extraction helpers", () => {
         body: {
           tag_name: "v0.2.0",
           html_url:
-            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
           body: SAMPLE_BODY_WITH_BMAD,
         },
       }),
@@ -320,7 +320,7 @@ describe("runUpgradeCheck — request shape + extraction helpers", () => {
         body: {
           tag_name: "v0.2.0",
           html_url:
-            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
           body: SAMPLE_BODY_NO_BMAD,
         },
       }),
@@ -338,7 +338,7 @@ describe("runUpgradeCheck — request shape + extraction helpers", () => {
         body: {
           tag_name: "v0.2.0",
           html_url:
-            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
           body: "",
         },
       }),
@@ -356,7 +356,7 @@ describe("runUpgradeCheck — request shape + extraction helpers", () => {
       fetch: makeStubFetch({
         body: {
           tag_name: "0.2.0",
-          html_url: "https://github.com/Tgorka/bmad-stepper/releases/tag/0.2.0",
+          html_url: "https://github.com/tgorka/bmad-stepper/releases/tag/0.2.0",
           body: "",
         },
       }),
@@ -385,7 +385,7 @@ describe("runUpgradeCheck — NFR-S2 no-write at unit level", () => {
           body: {
             tag_name: "v0.2.0",
             html_url:
-              "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+              "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
             body: SAMPLE_BODY_WITH_BMAD,
           },
         }),
@@ -418,7 +418,7 @@ describe("runUpgradeCheck — semver compare correctness", () => {
       fetch: makeStubFetch({
         body: {
           tag_name: "0.2.0",
-          html_url: "https://github.com/Tgorka/bmad-stepper/releases/tag/0.2.0",
+          html_url: "https://github.com/tgorka/bmad-stepper/releases/tag/0.2.0",
           body: "",
         },
       }),
@@ -433,7 +433,7 @@ describe("runUpgradeCheck — semver compare correctness", () => {
       fetch: makeStubFetch({
         body: {
           tag_name: "0.1.0",
-          html_url: "https://github.com/Tgorka/bmad-stepper/releases/tag/0.1.0",
+          html_url: "https://github.com/tgorka/bmad-stepper/releases/tag/0.1.0",
           body: "",
         },
       }),
@@ -448,7 +448,7 @@ describe("runUpgradeCheck — semver compare correctness", () => {
       fetch: makeStubFetch({
         body: {
           tag_name: "0.9.0",
-          html_url: "https://github.com/Tgorka/bmad-stepper/releases/tag/0.9.0",
+          html_url: "https://github.com/tgorka/bmad-stepper/releases/tag/0.9.0",
           body: "",
         },
       }),
@@ -466,7 +466,7 @@ describe("runUpgradeCheck — semver compare correctness", () => {
       fetch: makeStubFetch({
         body: {
           tag_name: "0.9.0",
-          html_url: "https://github.com/Tgorka/bmad-stepper/releases/tag/0.9.0",
+          html_url: "https://github.com/tgorka/bmad-stepper/releases/tag/0.9.0",
           body: "",
         },
       }),
@@ -478,9 +478,9 @@ describe("runUpgradeCheck — semver compare correctness", () => {
 // ─── Constants exposed for the integration test + cli.ts ────────────────
 
 describe("module constants", () => {
-  it("RELEASES_URL_DEFAULT points to the canonical Tgorka/bmad-stepper repo", () => {
+  it("RELEASES_URL_DEFAULT points to the canonical tgorka/bmad-stepper repo", () => {
     expect(RELEASES_URL_DEFAULT).toBe(
-      "https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest",
+      "https://api.github.com/repos/tgorka/bmad-stepper/releases/latest",
     );
   });
 

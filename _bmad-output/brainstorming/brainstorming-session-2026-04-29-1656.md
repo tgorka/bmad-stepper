@@ -15,7 +15,7 @@ key_decisions:
 
 # Brainstorming Session Results
 
-**Facilitator:** Tgorka
+**Facilitator:** tgorka
 **Date:** 2026-04-29
 
 ## Session Overview
@@ -208,7 +208,7 @@ G. Failure mode      : halt | skip | retry-N | route-to-fixer | escalate
 102. Plugin does not bundle BMAD skills (assume installed separately)
 103. Detection at first run: "BMAD found at X" / "BMAD not found, install with..."
 104. Compatibility matrix in README
-105. Install via `/plugin marketplace add Tgorka/bmad-stepper` + project scope
+105. Install via `/plugin marketplace add tgorka/bmad-stepper` + project scope
 106. `--upgrade` flag checks gh releases
 107. `--doctor` sanity check (BMAD installed? config valid?)
 108. Per-project (`.claude/plugins/`) or per-user

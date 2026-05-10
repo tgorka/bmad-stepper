@@ -40,7 +40,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 | Failure Handling & Recovery (FR27–33) | 7 | Four failure-UX modes (retry / skip / route-to-fixer / escalate) configurable per step; `last_attempted` + `last_failure_reason` recorded on every halt; `--resume` always picks up cleanly from `state.yaml`; no stack traces on the main thread. |
 | Configuration & Customization (FR34–40) | 7 | Layered resolution: project (`bmad-stepper.config.yaml`) > user (`~/.config/bmad-stepper/config.yaml`) > plugin defaults. Override surfaces: `personas`, `overrides` (DAG placement), `verifiers`, `failure-policies`, `models`, `budgets`, `paths`, `telemetry`. |
 | Diagnostics & Observability (FR41–46) | 6 | `--doctor`, `--watch`, per-step markdown transcript + JSON run-log, opt-in human-readable telemetry report, single-line actionable error on main thread + full detail in run log. |
-| Distribution & Lifecycle (FR47–51) | 5 | Marketplace install path (`Tgorka/bmad-stepper`), `--upgrade` flow against GitHub Releases, BMAD version detection at first run, fail-loudly on unknown upstream skills with remediation hint. |
+| Distribution & Lifecycle (FR47–51) | 5 | Marketplace install path (`tgorka/bmad-stepper`), `--upgrade` flow against GitHub Releases, BMAD version detection at first run, fail-loudly on unknown upstream skills with remediation hint. |
 | Scripting & Integration (FR52–54) | 3 | Read-only flags (`--export-state`, `--list`, `--explain`, `--dry-run`, `--diff-state`) safe in non-interactive contexts and never hold the project lock; documented exit codes 0–5; stdout = JSON only on `--export-state`, stderr = diagnostics. |
 
 **Non-Functional Requirements (35 NFRs across 6 categories):**
@@ -191,7 +191,7 @@ bunx changeset init
 **Versioning & Distribution:**
 
 - Changesets for PR-based versioning + CHANGELOG. Convention: `MAJOR` = plugin API break, `MINOR` = features, `PATCH` = fix.
-- Distribution: Claude Code marketplace as `Tgorka/bmad-stepper`; `--upgrade` checks GitHub Releases.
+- Distribution: Claude Code marketplace as `tgorka/bmad-stepper`; `--upgrade` checks GitHub Releases.
 - Plugin manifest `.claude-plugin/plugin.json` includes `name`, `version`, `description`, `author`, `homepage`, `repository`, `license: MIT`, `keywords: ["claude-code", "claude-code-plugin", "bmad", "bmad-method", "agile", "ai-development"]`.
 
 **Schema Validation Library:**
@@ -649,10 +649,10 @@ export function parseNextArgs(argv: string[]): Result<NextArgs, ParseError>;
 
 **Flow:**
 
-1. `bun run check-upgrade` calls `gh api repos/Tgorka/bmad-stepper/releases/latest` via `Bun.fetch` (this is the **only** main-thread network I/O permitted by NFR-S1, and it's user-explicit).
+1. `bun run check-upgrade` calls `gh api repos/tgorka/bmad-stepper/releases/latest` via `Bun.fetch` (this is the **only** main-thread network I/O permitted by NFR-S1, and it's user-explicit).
 2. Compares `currentVersion` (read from our own `.claude-plugin/plugin.json`) to `latestVersion`.
 3. Prints diff: current, latest, CHANGELOG link, BMAD compatibility for latest.
-4. If newer available, prints actionable hint: `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.`
+4. If newer available, prints actionable hint: `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.`
 
 **No auto-install.** Auto-install would require writes to `~/.claude/plugins/` from our code, violating NFR-S2 and the read-only respect for plugin runtime files. The user remains in control.
 
@@ -1487,7 +1487,7 @@ Layer 1 prints summary to user.
 #### External Integrations
 
 - **BMAD upstream filesystem** (`~/.claude/plugins/<bmad>/**`): read-only via `src/bmad-detect/`. Never written to.
-- **GitHub Releases API** (`api.github.com/repos/Tgorka/bmad-stepper/releases/latest`): read-only via `src/upgrade/check.ts`. Only invoked by `--upgrade`.
+- **GitHub Releases API** (`api.github.com/repos/tgorka/bmad-stepper/releases/latest`): read-only via `src/upgrade/check.ts`. Only invoked by `--upgrade`.
 - **Claude Code plugin marketplace**: side-effect of user typing `/plugin marketplace …`. Stepper does not call marketplace APIs.
 - **Git** (any project repository where Stepper runs): read-only via `Bun.spawn(["git", "rev-parse", ...])`. Used by `src/io/snapshot.ts` to capture branch+sha and detect branch switches.
 
@@ -1563,7 +1563,7 @@ state.yaml (canonical)
 
 **Build process:** none. `package.json` has no `build` script. Source files in `src/` are loaded directly by Bun at runtime via `bun run src/...`. The plugin manifest's command files are markdown.
 
-**Release process:** Changesets PR-based flow. `bun run changeset` creates a Changeset entry; merging the auto-generated *Version Packages* PR publishes a GitHub Release; users update via `/plugin marketplace update Tgorka/bmad-stepper`.
+**Release process:** Changesets PR-based flow. `bun run changeset` creates a Changeset entry; merging the auto-generated *Version Packages* PR publishes a GitHub Release; users update via `/plugin marketplace update tgorka/bmad-stepper`.
 
 **Deployment structure:** the plugin is its own deployment unit. The repository tarball *is* the artifact installed by the marketplace. There is no separate dist or container.
 

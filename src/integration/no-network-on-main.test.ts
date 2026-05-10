@@ -139,7 +139,7 @@ describe("no-network-on-main — F-3 (AGENTS.md / CONTRIBUTING.md contract)", ()
         json: async () => ({
           tag_name: "v0.1.0",
           html_url:
-            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.1.0",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.1.0",
           body: "",
         }),
       } as unknown as Response)) as typeof globalThis.fetch);

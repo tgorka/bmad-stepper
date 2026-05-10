@@ -13,7 +13,7 @@
  *     hint (no upgrade action needed).
  *
  * **AC-1 verbatim hint string** (epics.md line 1288 — byte-identical):
- *   `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.`
+ *   `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.`
  *
  * **BMAD compat fallback** (per OQ-4): when `bmadCompat === undefined`,
  * the renderer emits `(BMAD compat info not present in release notes)`
@@ -43,7 +43,7 @@ import type { UpgradeCheckResult } from "./check.ts";
  * `UPGRADE_69_RUN_SHORT_CIRCUIT_*`. Any drift here is a regression.
  */
 const UPGRADE_HINT =
-  "Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.";
+  "Run /plugin marketplace update tgorka/bmad-stepper to upgrade.";
 
 /**
  * Fallback rendered for the BMAD compatibility line when the GitHub
@@ -69,7 +69,7 @@ const BMAD_COMPAT_MISSING_TEXT =
  * - CHANGELOG: <changelogUrl>
  * - BMAD compatibility (latest): <bmadCompat OR fallback>
  *
- * Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.
+ * Run /plugin marketplace update tgorka/bmad-stepper to upgrade.
  * ```
  *
  * **Up-to-date layout**:

@@ -610,7 +610,7 @@ the AR9 JSON-line schema, see `src/schemas/dispatch-protocol.ts` (Story
 ### --upgrade (Story 6.9)
 
 Checks the GitHub Releases API at
-`https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest` for a
+`https://api.github.com/repos/tgorka/bmad-stepper/releases/latest` for a
 newer Stepper version.
 
 - Reads `currentVersion` from `.claude-plugin/plugin.json`.
@@ -624,7 +624,7 @@ to `~/.claude/plugins/` from this code path. The user-action path is to
 copy-paste the emitted hint:
 
 ```text
-Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.
+Run /plugin marketplace update tgorka/bmad-stepper to upgrade.
 ```
 
 **Network discipline (NFR-S1):** this is the ONLY main-thread network

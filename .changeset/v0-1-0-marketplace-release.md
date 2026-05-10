@@ -2,7 +2,7 @@
 "bmad-stepper": minor
 ---
 
-Initial public release: v0.1.0 marketplace listing at `Tgorka/bmad-stepper`.
+Initial public release: v0.1.0 marketplace listing at `tgorka/bmad-stepper`.
 
 Two slash commands ship: `/bmad-next` (zero-config single-step advance with full flag inventory per FR1-FR15 + FR27-FR32 + FR41-FR42 + FR50-FR54) and `/bmad-loop` (bounded loop with eight stop conditions, four failure-UX modes, SIGINT graceful exit per FR19-FR30).
 

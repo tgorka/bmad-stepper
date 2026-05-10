@@ -47,7 +47,7 @@ The status-quo cost is not catastrophic per session, but it is large in aggregat
 
 ## Who This Serves
 
-**Primary user: the author.** Built and dogfooded by Tgorka on `makistack` and other internal projects. The plugin earns its keep when the author uses it daily in place of manual skill chains, on real product and consulting work.
+**Primary user: the author.** Built and dogfooded by tgorka on `makistack` and other internal projects. The plugin earns its keep when the author uses it daily in place of manual skill chains, on real product and consulting work.
 
 **Adjacent users: the BMAD community.** Open-source release on the Claude Code marketplace gives BMAD adopters a one-command upgrade path. The audience is indie devs and AI-native builders running BMAD seriously, especially anyone juggling multiple BMAD projects in parallel.
 

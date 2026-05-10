@@ -5,7 +5,7 @@ Thanks for your interest in contributing to Stepper. This document covers (a) th
 ## Development Setup
 
 1. Install Bun ≥ 1.3: `curl -fsSL https://bun.sh/install | bash` or `brew install oven-sh/bun/bun`.
-2. Clone the repo: `git clone https://github.com/Tgorka/bmad-stepper && cd bmad-stepper`.
+2. Clone the repo: `git clone https://github.com/tgorka/bmad-stepper && cd bmad-stepper`.
 3. Install dependencies: `bun install --frozen-lockfile`.
 4. Run the test suite: `bun test`. Expected: all pass.
 5. Run the full check: `bun run check` (Biome lint + tests).
@@ -30,7 +30,7 @@ Stepper uses [Changesets](https://github.com/changesets/changesets) for release 
 1. Lands feature PRs to `main`; each carries a Changeset entry under `.changeset/<name>.md`.
 2. The `.github/workflows/release.yml` workflow auto-opens or updates a *Version Packages* PR aggregating the pending Changesets into a CHANGELOG entry + version bump.
 3. Merging the *Version Packages* PR triggers `release.yml` to (a) tag the release (v0.1.0, v0.2.0, etc.) and (b) create a GitHub Release.
-4. **Manual step:** the maintainer submits the new version to the Claude Code marketplace UI at `Tgorka/bmad-stepper` (per architecture line 1566 — there is no Anthropic API for automated submission as of v0.1.0). The GitHub Release tarball IS the marketplace artifact (per architecture line 1568 — there is no separate dist or container).
+4. **Manual step:** the maintainer submits the new version to the Claude Code marketplace UI at `tgorka/bmad-stepper` (per architecture line 1566 — there is no Anthropic API for automated submission as of v0.1.0). The GitHub Release tarball IS the marketplace artifact (per architecture line 1568 — there is no separate dist or container).
 
 ## Code Style (AR31, AR33, AR36)
 

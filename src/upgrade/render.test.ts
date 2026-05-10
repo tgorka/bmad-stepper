@@ -28,7 +28,7 @@ function makeUpgradeAvailable(
     kind: "upgrade-available",
     currentVersion: "0.1.0",
     latestVersion: "0.2.0",
-    changelogUrl: "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+    changelogUrl: "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
     bmadCompat: "v6.5.x",
     ...overrides,
   };
@@ -47,7 +47,7 @@ function makeUpToDate(
 
 // AC-1 verbatim hint per epics.md line 1288 — byte-identical assertion target.
 const AC_1_HINT =
-  "Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.";
+  "Run /plugin marketplace update tgorka/bmad-stepper to upgrade.";
 
 const FORBIDDEN_PII_SUBSTRINGS = [
   "password",
@@ -94,7 +94,7 @@ describe("renderUpgradeReport — VERSION_DIFF", () => {
 
 describe("renderUpgradeReport — CHANGELOG_LINK", () => {
   it("RENDER_69_CHANGELOG_LINK_1: changelogUrl appears verbatim", () => {
-    const url = "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0";
+    const url = "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0";
     const out = renderUpgradeReport(
       makeUpgradeAvailable({ changelogUrl: url }),
     );

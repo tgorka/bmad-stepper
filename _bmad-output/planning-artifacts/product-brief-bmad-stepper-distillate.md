@@ -12,10 +12,10 @@ This is the dense overflow companion to the executive brief. Each bullet is self
 
 ## 1. Product Identity & Scope Boundary
 
-- Name: BMAD Stepper. Repo: `Tgorka/bmad-stepper`. License: MIT.
+- Name: BMAD Stepper. Repo: `tgorka/bmad-stepper`. License: MIT.
 - Form factor: Claude Code plugin shipping two slash commands (`/bmad-next`, `/bmad-loop`) plus optional `--doctor` diagnostic.
 - Scope is stepper-only. Plugin does NOT bundle BMAD skills. User installs upstream BMAD separately via `npx bmad-method install`. Stepper layers on top read-only.
-- Internal-tool-first by design. Author (Tgorka) is the primary user, dogfooded on `makistack` (which uses BMM, TEA, BMB, CIS, GDS modules). Open-source release is a bonus to the BMAD community, not the goal.
+- Internal-tool-first by design. Author (tgorka) is the primary user, dogfooded on `makistack` (which uses BMM, TEA, BMB, CIS, GDS modules). Open-source release is a bonus to the BMAD community, not the goal.
 - Versioning is independent of BMAD upstream. Stepper semver: MAJOR = plugin API break, MINOR = features, PATCH = fix. CHANGELOG includes a "BMAD Compatibility" section per release.
 
 ## 2. Detailed User Scenarios (Problem Detail)
@@ -165,7 +165,7 @@ Four failure policies, selectable per step or via flag:
 
 ## 14. Distribution & Repo Infrastructure
 
-- Marketplace install: `/plugin marketplace add Tgorka/bmad-stepper`.
+- Marketplace install: `/plugin marketplace add tgorka/bmad-stepper`.
 - Project or per-user scope supported. Per-project install lives at `.claude/plugins/`.
 - GH Releases as stable channel. `--upgrade` and `--doctor` commands for upgrade flow.
 - Plugin manifest committed: `.claude-plugin/plugin.json`.

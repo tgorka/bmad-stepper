@@ -105,7 +105,7 @@ bun run upgrade
 The upgrade flow:
 
 1. Reads the current Stepper version from `.claude-plugin/plugin.json`.
-2. Calls `https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest`.
+2. Calls `https://api.github.com/repos/tgorka/bmad-stepper/releases/latest`.
 3. Compares the current version against the latest release (numeric semver tuple, not
    lexicographic — so `0.10.0 > 0.9.0` is correct).
 4. Extracts the `## BMAD Compatibility — vX.Y.x` section from the release body (when
@@ -114,7 +114,7 @@ The upgrade flow:
 
 The upgrade flow is **read-only**: Stepper never auto-installs and never writes to
 `~/.claude/plugins/` (NFR-S2 + AC-1). The CHANGELOG link in the report points to the
-GitHub Release at `https://github.com/Tgorka/bmad-stepper/releases/tag/v<version>`.
+GitHub Release at `https://github.com/tgorka/bmad-stepper/releases/tag/v<version>`.
 
 Network failures (offline, 403 rate limit, 4xx/5xx, 10-second timeout) exit 1 with:
 
@@ -166,7 +166,7 @@ If the weekly job opens an issue, the maintainer:
 ## Filing a compatibility issue
 
 Use the GitHub issue template at `.github/ISSUE_TEMPLATE/bmad-compat.md`
-([direct link](https://github.com/Tgorka/bmad-stepper/issues/new?template=bmad-compat.md)):
+([direct link](https://github.com/tgorka/bmad-stepper/issues/new?template=bmad-compat.md)):
 
 - **Title:** `[BMAD-COMPAT] <short description>`
 - **Label:** `bmad-compat`

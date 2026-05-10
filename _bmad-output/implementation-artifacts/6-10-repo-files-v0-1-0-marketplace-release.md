@@ -9,8 +9,8 @@ last_updated: '2026-05-06T06:05:00Z'
 priority: high
 estimated_effort: L
 fr_coverage:
-  - FR47     # PRIMARY — marketplace install path: `/plugin marketplace add Tgorka/bmad-stepper`. Story 6.10 ships `.claude-plugin/plugin.json` finalised (version bump 0.0.0 → 0.1.0; keywords already present from Story 1.1) + the Claude Code marketplace listing (manual one-time submission per architecture line 1566 release process). The dogfood-validation 30-day clock per PRD §dogfood_validation_plan + product brief §Daily replacement target STARTS at this release.
-  - FR48     # SECONDARY — `--upgrade` already ships in Story 6.9 (status: done; the upgrade flow's hint `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.` references the marketplace identifier published in this story). Story 6.10 finalises the marketplace publication that makes the upgrade hint actionable for community users.
+  - FR47     # PRIMARY — marketplace install path: `/plugin marketplace add tgorka/bmad-stepper`. Story 6.10 ships `.claude-plugin/plugin.json` finalised (version bump 0.0.0 → 0.1.0; keywords already present from Story 1.1) + the Claude Code marketplace listing (manual one-time submission per architecture line 1566 release process). The dogfood-validation 30-day clock per PRD §dogfood_validation_plan + product brief §Daily replacement target STARTS at this release.
+  - FR48     # SECONDARY — `--upgrade` already ships in Story 6.9 (status: done; the upgrade flow's hint `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.` references the marketplace identifier published in this story). Story 6.10 finalises the marketplace publication that makes the upgrade hint actionable for community users.
   - FR49     # SECONDARY — uninstall preserves state. Documented in `README.md` (already present at lines 73-83 — verify) + `CONTRIBUTING.md` + `docs/getting-started.md` (already present from Story 1.13). NO code changes; documentation-only confirmation in this story.
   - FR53     # SECONDARY — exit-code catalog. The new `CHANGELOG.md` initial v0.1.0 entry references the FR53 exit-code catalog at `docs/exit-codes.md` (already complete from Story 6.9 — verify). Documentation-only.
 nfr_coverage:
@@ -40,7 +40,7 @@ ar_coverage:
   - AR32     # SECONDARY — repository structure (colocated tests, one folder per command, centralised schemas/errors/io) documented in AGENTS.md "code architecture" section.
 deps:
   - story: '6.9'
-    reason: 'PRIMARY — Story 6.9 (status: done) ships the `--upgrade` flow that uses the marketplace identifier `Tgorka/bmad-stepper` in the AC-1 verbatim hint `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.`. Story 6.10 finalises the marketplace publication so this hint is actionable. The upgrade flow ALSO consumes the canonical `BMAD Compatibility — v6.5.x` heading shape via `extractBmadCompat()` regex; Story 6.10 ships the FIRST CHANGELOG with this heading shape so the regex has real content to match against (not just synthetic test fixtures). The OQ-15 forward-deferral from Story 6.9 (cross-cutting `no-network-on-main.test.ts` enforcement) is RESOLVED IN-SCOPE-OPTIONAL by this story per OQ-3 below — the architecture pre-listing at line 1246 makes this a Story 6.10 candidate.'
+    reason: 'PRIMARY — Story 6.9 (status: done) ships the `--upgrade` flow that uses the marketplace identifier `tgorka/bmad-stepper` in the AC-1 verbatim hint `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.`. Story 6.10 finalises the marketplace publication so this hint is actionable. The upgrade flow ALSO consumes the canonical `BMAD Compatibility — v6.5.x` heading shape via `extractBmadCompat()` regex; Story 6.10 ships the FIRST CHANGELOG with this heading shape so the regex has real content to match against (not just synthetic test fixtures). The OQ-15 forward-deferral from Story 6.9 (cross-cutting `no-network-on-main.test.ts` enforcement) is RESOLVED IN-SCOPE-OPTIONAL by this story per OQ-3 below — the architecture pre-listing at line 1246 makes this a Story 6.10 candidate.'
   - story: '6.8'
     reason: 'PRIMARY — Story 6.8 (status: done) closes the auto-archival lifecycle (collector → aggregator → archiver). Story 6.10 INHERITS Sprint 6 storage hygiene SHIP. The CHANGELOG entry for v0.1.0 lists Story 6.8 as a feature delivery line ("Auto-archival of runs and telemetry; storage hygiene compliant").'
   - story: '6.7'
@@ -114,11 +114,11 @@ Status: done
 
 As a community user discovering Stepper,
 I want a complete OSS-ready repository (README, CHANGELOG, AGENTS.md, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, LICENSE, examples, dependabot, weekly bmad-compat CI) and a v0.1.0 release on the Claude Code marketplace,
-So that the product is shippable and contributable on day one — closing Epic 6 and Sprint 6 with the SHIP-IT deliverable for the v0.1.0 marketplace listing at `Tgorka/bmad-stepper` (FR47), with the dogfood-validation 30-day clock starting on this release.
+So that the product is shippable and contributable on day one — closing Epic 6 and Sprint 6 with the SHIP-IT deliverable for the v0.1.0 marketplace listing at `tgorka/bmad-stepper` (FR47), with the dogfood-validation 30-day clock starting on this release.
 
 ## Context Summary
 
-This is the **TENTH AND FINAL STORY of Epic 6** (Sprint 6 — Configuration & Distribution) and the **v0.1.0 marketplace release deliverable**. Story 6.9 just shipped (status: done; 1610/0/5192 across 83 files; errors registry 17 verified independently; `--upgrade` flow fully wired with NFR-S1 sole exception isolated to `src/upgrade/`). Story 6.10 closes the project's v0.1.0 release by shipping the AR38/AR39/AR40 repo-files inventory + bumping the version to `0.1.0` + publishing the plugin to the Claude Code marketplace at `Tgorka/bmad-stepper`.
+This is the **TENTH AND FINAL STORY of Epic 6** (Sprint 6 — Configuration & Distribution) and the **v0.1.0 marketplace release deliverable**. Story 6.9 just shipped (status: done; 1610/0/5192 across 83 files; errors registry 17 verified independently; `--upgrade` flow fully wired with NFR-S1 sole exception isolated to `src/upgrade/`). Story 6.10 closes the project's v0.1.0 release by shipping the AR38/AR39/AR40 repo-files inventory + bumping the version to `0.1.0` + publishing the plugin to the Claude Code marketplace at `tgorka/bmad-stepper`.
 
 **Story 6.10 is therefore primarily a DOCUMENTATION + CI WORKFLOW + RELEASE story** — ZERO source code changes under `src/`. The deliverables are:
 
@@ -140,7 +140,7 @@ This is the **TENTH AND FINAL STORY of Epic 6** (Sprint 6 — Configuration & Di
 
 9. **Initial Changesets entry** — `.changeset/v0-1-0-marketplace-release.md` containing the v0.1.0 release notes that, on merge, drives the auto-generated Version Packages PR + GitHub Release. The Changeset summary is the FIRST `## BMAD Compatibility — v6.5.x` heading consumed by Story 6.9's `extractBmadCompat()` regex.
 
-10. **Marketplace publication** — Manual one-time submission of the plugin to the Claude Code marketplace at `Tgorka/bmad-stepper` per architecture line 1566 release process. This is a HUMAN-DRIVEN action (developer submits the listing via the Claude Code marketplace UI); Story 6.10 ships the artifact (the repo tarball at the v0.1.0 tag) that is the marketplace's installable unit per architecture line 1568 ("the repository tarball *is* the artifact installed by the marketplace; there is no separate dist or container").
+10. **Marketplace publication** — Manual one-time submission of the plugin to the Claude Code marketplace at `tgorka/bmad-stepper` per architecture line 1566 release process. This is a HUMAN-DRIVEN action (developer submits the listing via the Claude Code marketplace UI); Story 6.10 ships the artifact (the repo tarball at the v0.1.0 tag) that is the marketplace's installable unit per architecture line 1568 ("the repository tarball *is* the artifact installed by the marketplace; there is no separate dist or container").
 
 The dogfood-validation 30-day clock per PRD §dogfood_validation_plan + product brief §Daily replacement (≥30 days target, first 60 days post-v0.1.0) STARTS at this release. **Closing the dogfood-validation clock is OUT OF SCOPE for Story 6.10** — Story 6.10 only STARTS the clock by shipping v0.1.0; the post-release retrospective (Epic 6 retrospective optional + future post-v0.1 retrospective) closes it.
 
@@ -166,7 +166,7 @@ The dogfood-validation 30-day clock per PRD §dogfood_validation_plan + product 
    - **Telemetry:** opt-in (`telemetry.enabled: true`); local-only; no PII; rotated at 12 months.
    - **Auto-archival:** runs older than 90 days archived to `_bmad-output/.stepper/runs/.archive/`.
    - **Diagnostic flags:** `--doctor`, `--upgrade`, `--explain`, `--list`, `--export-state`, `--diff-state`, `--watch`, `--plan-first`, `--recompute-state`.
-   - **Marketplace publication:** `/plugin marketplace add Tgorka/bmad-stepper` + `--upgrade` flow that checks GitHub Releases.
+   - **Marketplace publication:** `/plugin marketplace add tgorka/bmad-stepper` + `--upgrade` flow that checks GitHub Releases.
    - **Documentation:** README + Quick Start (under 10 minutes per NFR-M4); `docs/{getting-started, configuration, exit-codes}.md`; seven worked examples in `docs/examples/`; scripting examples in `examples/scripting/`.
 
    ### BMAD Compatibility — v6.5.x
@@ -282,7 +282,7 @@ The dogfood-validation 30-day clock per PRD §dogfood_validation_plan + product 
    ## Development Setup
 
    1. Install Bun ≥ 1.3: `curl -fsSL https://bun.sh/install | bash` or `brew install oven-sh/bun/bun`.
-   2. Clone the repo: `git clone https://github.com/Tgorka/bmad-stepper && cd bmad-stepper`.
+   2. Clone the repo: `git clone https://github.com/tgorka/bmad-stepper && cd bmad-stepper`.
    3. Install dependencies: `bun install --frozen-lockfile`.
    4. Run the test suite: `bun test`. Expected: all pass.
    5. Run the full check: `bun run check` (Biome lint + tests).
@@ -441,7 +441,7 @@ The dogfood-validation 30-day clock per PRD §dogfood_validation_plan + product 
    ```
    Per OQ-1 below, this REPLACEMENT is the correction for an existing inconsistency where Story 1.1 shipped Apache 2.0 by accident; the AC + product brief have always specified MIT.
 
-7. **BUMPED `.claude-plugin/plugin.json:version`** — `"0.0.0"` → `"0.1.0"`. ALL OTHER FIELDS UNCHANGED (verify: `name: "bmad-stepper"`, `description`, `author: { name: "Tgorka" }`, `homepage: "https://github.com/Tgorka/bmad-stepper"`, `repository: "https://github.com/Tgorka/bmad-stepper"`, `license: "MIT"` — verify present per AR3, `keywords: ["claude-code", "claude-code-plugin", "bmad", "bmad-method", "agile", "ai-development"]`).
+7. **BUMPED `.claude-plugin/plugin.json:version`** — `"0.0.0"` → `"0.1.0"`. ALL OTHER FIELDS UNCHANGED (verify: `name: "bmad-stepper"`, `description`, `author: { name: "tgorka" }`, `homepage: "https://github.com/tgorka/bmad-stepper"`, `repository: "https://github.com/tgorka/bmad-stepper"`, `license: "MIT"` — verify present per AR3, `keywords: ["claude-code", "claude-code-plugin", "bmad", "bmad-method", "agile", "ai-development"]`).
 
 8. **BUMPED `package.json:version`** — `"0.0.0"` → `"0.1.0"`. ALL OTHER FIELDS UNCHANGED.
 
@@ -616,7 +616,7 @@ The dogfood-validation 30-day clock per PRD §dogfood_validation_plan + product 
           day: "monday"
         open-pull-requests-limit: 5
         reviewers:
-          - "Tgorka"
+          - "tgorka"
         commit-message:
           prefix: "deps"
           include: "scope"
@@ -628,7 +628,7 @@ The dogfood-validation 30-day clock per PRD §dogfood_validation_plan + product 
           day: "monday"
         open-pull-requests-limit: 3
         reviewers:
-          - "Tgorka"
+          - "tgorka"
         commit-message:
           prefix: "ci"
           include: "scope"
@@ -959,7 +959,7 @@ The dogfood-validation 30-day clock per PRD §dogfood_validation_plan + product 
     "bmad-stepper": minor
     ---
 
-    Initial public release: v0.1.0 marketplace listing at `Tgorka/bmad-stepper`.
+    Initial public release: v0.1.0 marketplace listing at `tgorka/bmad-stepper`.
 
     Two slash commands ship: `/bmad-next` (zero-config single-step advance with full flag inventory per FR1-FR15 + FR27-FR32 + FR41-FR42 + FR50-FR54) and `/bmad-loop` (bounded loop with eight stop conditions, four failure-UX modes, SIGINT graceful exit per FR19-FR30).
 
@@ -971,7 +971,7 @@ The dogfood-validation 30-day clock per PRD §dogfood_validation_plan + product 
 
 #### Marketplace publication (HUMAN ACTION; SCOPED OUT for the dev iteration)
 
-30. **MARKETPLACE PUBLICATION** — manual one-time submission of the plugin to the Claude Code marketplace at `Tgorka/bmad-stepper`. This is OUT-OF-SCOPE for the dev iteration of Story 6.10 (per OQ-8 below — the dev iter ships the artifact; the human maintainer submits to the marketplace UI). The submission steps are documented in CONTRIBUTING.md "Release process" section + the README "Repo links" section.
+30. **MARKETPLACE PUBLICATION** — manual one-time submission of the plugin to the Claude Code marketplace at `tgorka/bmad-stepper`. This is OUT-OF-SCOPE for the dev iteration of Story 6.10 (per OQ-8 below — the dev iter ships the artifact; the human maintainer submits to the marketplace UI). The submission steps are documented in CONTRIBUTING.md "Release process" section + the README "Repo links" section.
 
 ### Cross-story coordination preserved
 
@@ -1073,7 +1073,7 @@ The following are reproduced byte-identical from `_bmad-output/planning-artifact
 **Then** the repo contains: `README.md` (with Quick Start NFR-M4), `CHANGELOG.md` (Changesets-managed with the *BMAD Compatibility — v6.5.x* section), `AGENTS.md` (contributor + sub-agent contract), `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `LICENSE` (MIT), `.github/PULL_REQUEST_TEMPLATE.md`, `.github/ISSUE_TEMPLATE/{bug,feature,bmad-compat}.md`, `.github/dependabot.yml`
 **And** `docs/examples/` ships the seven worked examples (cold-start return, single-step, overnight loop, halt recovery, skip-on-failure, doctor diagnostic, state export for CI) plus `examples/scripting/{ci-state-check.sh, nightly-loop.sh}`
 **And** three CI workflows are green: `.github/workflows/ci.yml` (matrix Linux+macOS, `bun test` + `biome ci`), `release.yml` (Changesets PR-based release flow), `bmad-compat.yml` (weekly check vs latest BMAD upstream)
-**And** the plugin is published to the Claude Code marketplace at `Tgorka/bmad-stepper` (FR47); the dogfood-validation 30-day clock starts on this release
+**And** the plugin is published to the Claude Code marketplace at `tgorka/bmad-stepper` (FR47); the dogfood-validation 30-day clock starts on this release
 
 ## Tasks / Subtasks
 
@@ -1104,7 +1104,7 @@ The following are reproduced byte-identical from `_bmad-output/planning-artifact
   - [ ] 1.24 Read `docs/configuration.md` (full file) — confirm the bmad-stepper.config.yaml schema reference. Story 6.10's `examples/bmad-stepper.config.yaml` cross-links here. ZERO modifications.
   - [ ] 1.25 Read `docs/exit-codes.md` (full file) — confirm the FR53 exit-code catalog 0-5. Story 6.10's worked examples cross-link here. ZERO modifications.
   - [ ] 1.26 Read `src/upgrade/check.ts` lines 250-280 — confirm the `extractBmadCompat()` regex at the canonical convention `## BMAD Compatibility — v6.5.x`. Story 6.10's CHANGELOG entry uses this exact heading shape so the regex matches.
-  - [ ] 1.27 Read `src/upgrade/render.ts` lines 60-100 — confirm the canonical hint at `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.`. Story 6.10's marketplace publication makes this hint actionable.
+  - [ ] 1.27 Read `src/upgrade/render.ts` lines 60-100 — confirm the canonical hint at `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.`. Story 6.10's marketplace publication makes this hint actionable.
   - [ ] 1.28 Read `.bmad-stepper/state.yaml` (top section only — full file is 423kB, beyond Read tool limit) — confirm the workflow position. Story 6.10's spec-creation iter does NOT mutate state.yaml (orchestrator owns that).
   - [ ] 1.29 Read `.bmad-stepper/runs/2026-05-06T050848Z-bmad-next/` (current runId directory; create if missing) — confirm tasks subdirectory exists. Story 6.10's spec-creation iter writes a task record at `.bmad-stepper/runs/2026-05-06T050848Z-bmad-next/tasks/bmad-create-story.md`.
   - [ ] 1.30 (OPTIONAL) Inspect `tests/fixtures/quick-start-walkthrough.md` if present — confirm the NFR-M4 reference fixture (Story 1.13 baseline). Story 6.10 does NOT modify the fixture.
@@ -1221,8 +1221,8 @@ The following are reproduced byte-identical from `_bmad-output/planning-artifact
 - [ ] 12. **NEW `.github/dependabot.yml`** (per AR38 + architecture line 1537)
   - [ ] 12.1 Create `.github/dependabot.yml`.
   - [ ] 12.2 Content per the spec body Section 14 above:
-    - npm ecosystem, weekly Mondays, max 5 PRs, reviewer Tgorka, commit prefix `deps`.
-    - github-actions ecosystem, weekly Mondays, max 3 PRs, reviewer Tgorka, commit prefix `ci`.
+    - npm ecosystem, weekly Mondays, max 5 PRs, reviewer tgorka, commit prefix `deps`.
+    - github-actions ecosystem, weekly Mondays, max 3 PRs, reviewer tgorka, commit prefix `ci`.
 
 - [ ] 13. **VERIFY + EXTEND `.github/workflows/ci.yml`** (per AR40 + OQ-2)
   - [ ] 13.1 Confirm matches AR40: `name: CI`, on `push` + `pull_request`, matrix `[ubuntu-latest, macos-latest]`, `bun install --frozen-lockfile`, `bun run check`.
@@ -1407,7 +1407,7 @@ The following are reproduced byte-identical from `_bmad-output/planning-artifact
   - [ ] 33.1 The dev iter does NOT submit to the Claude Code marketplace UI (per OQ-8).
   - [ ] 33.2 The dev iter LEAVES A NOTE in the runs/<runId>/tasks/ record + the Done Criteria + the Deviations section documenting the human-action requirement.
   - [ ] 33.3 The maintainer (human) takes the v0.1.0 git tag (auto-created by Changesets release.yml on the *Version Packages* PR merge) and submits the listing to the Claude Code marketplace UI manually.
-  - [ ] 33.4 Once submitted, the marketplace identifier `Tgorka/bmad-stepper` is live and the AC-1 hint from Story 6.9 (`Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.`) becomes actionable for community users.
+  - [ ] 33.4 Once submitted, the marketplace identifier `tgorka/bmad-stepper` is live and the AC-1 hint from Story 6.9 (`Run /plugin marketplace update tgorka/bmad-stepper to upgrade.`) becomes actionable for community users.
   - [ ] 33.5 The dogfood-validation 30-day clock per PRD §dogfood_validation_plan + product brief §Daily replacement (≥30-day target, first 60 days post-v0.1.0) STARTS at this submission.
 
 ## Dev Notes
@@ -1702,7 +1702,7 @@ ZERO repair iters. All gates passed on first attempt.
 
 ### Marketplace publication note
 
-The Claude Code marketplace listing at `Tgorka/bmad-stepper` is OUT-OF-SCOPE for the dev iter per OQ-8. The maintainer (human) submits the listing manually via the Claude Code marketplace UI at the v0.1.0 git tag (auto-created by Changesets release.yml on the *Version Packages* PR merge). The dogfood-validation 30-day clock per PRD §dogfood_validation_plan starts at the marketplace submission.
+The Claude Code marketplace listing at `tgorka/bmad-stepper` is OUT-OF-SCOPE for the dev iter per OQ-8. The maintainer (human) submits the listing manually via the Claude Code marketplace UI at the v0.1.0 git tag (auto-created by Changesets release.yml on the *Version Packages* PR merge). The dogfood-validation 30-day clock per PRD §dogfood_validation_plan starts at the marketplace submission.
 
 ### Open items / blockers for code review
 
@@ -1742,7 +1742,7 @@ Story 6.10 ships the canonical AR38/AR39/AR40 inventory for the v0.1.0 marketpla
 | `.github/ISSUE_TEMPLATE/bug.md` | `.github/ISSUE_TEMPLATE/bug.md:1-37` | Frontmatter `name/about/title/labels: bug` + Description + Steps + Expected/Actual + Environment + Checklist |
 | `.github/ISSUE_TEMPLATE/feature.md` | `.github/ISSUE_TEMPLATE/feature.md:1-28` | Frontmatter `name/about/title/labels: enhancement` + Use Case + Proposed Behavior + Alternatives + Compatibility + Additional Context |
 | `.github/ISSUE_TEMPLATE/bmad-compat.md` | `.github/ISSUE_TEMPLATE/bmad-compat.md:1-34` | Frontmatter `name/about/title/labels: bmad-compat` (label consumed by bmad-compat.yml auto-issue per OQ-7) + BMAD Version + Stepper Version + Symptom + Failing Skill + Workaround + Suggested Fix |
-| `.github/dependabot.yml` | `.github/dependabot.yml:1-25` | npm + github-actions ecosystems, weekly Mondays (per OQ-12), reviewers Tgorka, commit prefix deps/ci |
+| `.github/dependabot.yml` | `.github/dependabot.yml:1-25` | npm + github-actions ecosystems, weekly Mondays (per OQ-12), reviewers tgorka, commit prefix deps/ci |
 
 **AC-2 PASS** — Seven worked examples + scripting:
 

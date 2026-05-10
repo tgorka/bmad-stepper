@@ -53,7 +53,7 @@
  *     `up-to-date`).
  *   - `RunUpgradeCheckOptions` — test seams: `pluginManifestPath?`,
  *     `fetch?`, `timeoutMs?`, `releasesUrl?`.
- *   - `RELEASES_URL_DEFAULT` — `"https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest"`.
+ *   - `RELEASES_URL_DEFAULT` — `"https://api.github.com/repos/tgorka/bmad-stepper/releases/latest"`.
  *   - `UPGRADE_FETCH_TIMEOUT_MS` — `10_000` (10 seconds; not configurable
  *     in v0.1 per OQ-8).
  *   - `PluginManifestSchema` / `GitHubReleaseSchema` — exported for
@@ -108,12 +108,12 @@ export const GitHubReleaseSchema = z
 
 /**
  * Default GitHub Releases API endpoint per AC-1 verbatim + architecture
- * §D14 line 646-657. The URL hard-codes the `Tgorka/bmad-stepper`
+ * §D14 line 646-657. The URL hard-codes the `tgorka/bmad-stepper`
  * repository (the Stepper's canonical home); future stories may add a
  * `--repo <owner/name>` override.
  */
 export const RELEASES_URL_DEFAULT =
-  "https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest";
+  "https://api.github.com/repos/tgorka/bmad-stepper/releases/latest";
 
 /**
  * Default `AbortController` timeout for the fetch call per OQ-8. Not

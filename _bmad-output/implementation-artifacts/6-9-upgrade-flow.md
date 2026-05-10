@@ -10,7 +10,7 @@ priority: high
 estimated_effort: M
 fr_coverage:
   - FR48     # PRIMARY — `--upgrade` flow: GitHub Releases API check + version diff + actionable hint (architecture line 1378; epics.md AC-1)
-  - FR47     # SECONDARY — Marketplace install path; the upgrade hint references `/plugin marketplace update Tgorka/bmad-stepper`
+  - FR47     # SECONDARY — Marketplace install path; the upgrade hint references `/plugin marketplace update tgorka/bmad-stepper`
 nfr_coverage:
   - NFR-S1   # PRIMARY EXCEPTION — main-thread network I/O is FORBIDDEN except `--upgrade` (architecture line 1396; PRD line 764; AC-1 verbatim "the only main-thread network I/O permitted")
   - NFR-S2   # PRIMARY — Stepper NEVER writes to `~/.claude/plugins/` from this code path (AC-1 verbatim); marketplace ops are user-driven via `/plugin marketplace update`
@@ -96,10 +96,10 @@ So that I stay in control while always knowing whether an update is available �
 This is the **NINTH STORY of Epic 6** (Sprint 6 — Configuration & Distribution) and lands the **`--upgrade` FLOW** that has been a placeholder/forward-deferral guard since Story 2.4. Story 6.8 just shipped (status: done; 1564/0/5078 across 79 files; errors registry 17 verified independently). Story 6.9 closes the FR48 gap by:
 
 1. **Implementing the `src/upgrade/` mid-tier module** (architecture line 1219-1222 pre-listing — `index.ts`, `check.ts`, `check.test.ts`; Story 6.9 EXTENDS with `render.ts`, `render.test.ts`, `cli.ts`, `cli.test.ts`).
-2. **Calling the GitHub Releases API ONCE** via `Bun.fetch("https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest")` — the **ONLY** main-thread network I/O permitted by NFR-S1 (architecture line 1396 + AC-1 verbatim).
+2. **Calling the GitHub Releases API ONCE** via `Bun.fetch("https://api.github.com/repos/tgorka/bmad-stepper/releases/latest")` — the **ONLY** main-thread network I/O permitted by NFR-S1 (architecture line 1396 + AC-1 verbatim).
 3. **Reading `currentVersion` from `.claude-plugin/plugin.json`** via `fs.readFile` + JSON.parse + Zod-validated `PluginManifestSchema`.
 4. **Comparing versions** via a small semver helper (compares major.minor.patch lexicographically by integer; strict-shaped per OQ-3).
-5. **Rendering the upgrade report** via a pure renderer (`renderUpgradeReport(currentVersion, latest, opts)`) returning a markdown-style human-readable string with: H1 + version diff + CHANGELOG link (taken from `latest.html_url`) + BMAD compat for latest (extracted from `latest.body` markdown if present, "(BMAD compat info not present in release notes)" otherwise) + the AC-mandated hint `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.`
+5. **Rendering the upgrade report** via a pure renderer (`renderUpgradeReport(currentVersion, latest, opts)`) returning a markdown-style human-readable string with: H1 + version diff + CHANGELOG link (taken from `latest.html_url`) + BMAD compat for latest (extracted from `latest.body` markdown if present, "(BMAD compat info not present in release notes)" otherwise) + the AC-mandated hint `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.`
 6. **Wiring the short-circuit at `src/commands/next/run.ts` Step 0a** (a NEW pre-Step-0 short-circuit that runs BEFORE BMAD detection, BEFORE state read, BEFORE the existing forward-deferral guards at lines 1565-1570 — when `args.upgrade === true`, the runner invokes `runUpgradeCheck()` and returns the result).
 7. **Updating the slash-command markdown** at `commands/bmad-next.md` to document the `--upgrade` flag's behaviour (per OQ-11 — the slash-command markdown SHOULD document new user-visible flags).
 8. **Adding a top-level `## Upgrade flow` section** to `docs/configuration.md` documenting the GH Releases API endpoint, the `currentVersion` read source, the BMAD compat extraction heuristic, and the failure semantics.
@@ -110,7 +110,7 @@ This is the **NINTH STORY of Epic 6** (Sprint 6 — Configuration & Distribution
 
 1. **NEW file `src/upgrade/check.ts`** — exports `checkForUpgrade(opts)` mid-tier function. The function:
    - Reads `currentVersion` from `<pluginRoot>/.claude-plugin/plugin.json` via `fs.readFile` + `JSON.parse` + `PluginManifestSchema.parse` (defence-in-depth at the filesystem boundary).
-   - Calls `await fetch("https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest", { signal, headers: { "User-Agent": `bmad-stepper/${currentVersion}`, "Accept": "application/vnd.github+json" } })` via the injected `fetch` seam (defaulting to global Bun.fetch — see OQ-13 below) with an `AbortController` timeout of 10 seconds (per OQ-8 — explicit budget without invoking Story 6.4 budgets module).
+   - Calls `await fetch("https://api.github.com/repos/tgorka/bmad-stepper/releases/latest", { signal, headers: { "User-Agent": `bmad-stepper/${currentVersion}`, "Accept": "application/vnd.github+json" } })` via the injected `fetch` seam (defaulting to global Bun.fetch — see OQ-13 below) with an `AbortController` timeout of 10 seconds (per OQ-8 — explicit budget without invoking Story 6.4 budgets module).
    - Validates the response status (`if (!response.ok) throw new Error(...)` for 4xx/5xx — including 403 rate limit; converted to AC-2 hint by the orchestrator).
    - Parses the response body via `await response.json()` + `GitHubReleaseSchema.parse` (defence-in-depth at the network boundary).
    - Compares `currentVersion` to `latestRelease.tag_name` (after stripping a leading `v` if present per OQ-7 — GitHub releases conventionally use `v0.1.0`).
@@ -125,10 +125,10 @@ This is the **NINTH STORY of Epic 6** (Sprint 6 — Configuration & Distribution
 
    - Current version: 0.1.0
    - Latest version: 0.2.0
-   - CHANGELOG: https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0
+   - CHANGELOG: https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0
    - BMAD compatibility (latest): v6.5.x
 
-   Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.
+   Run /plugin marketplace update tgorka/bmad-stepper to upgrade.
    ```
    For the up-to-date case:
    ```
@@ -198,10 +198,10 @@ This is the **NINTH STORY of Epic 6** (Sprint 6 — Configuration & Distribution
     - The flag's purpose: check GitHub Releases for a newer Stepper version + report.
     - The output: stdout markdown report (NOT JSON line — per OQ-5).
     - The exit codes: 0 success (report emitted), 1 network failure.
-    - The user-action path: never auto-installs (per AC-1 + D14); the report includes `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.` for the user to copy-paste.
+    - The user-action path: never auto-installs (per AC-1 + D14); the report includes `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.` for the user to copy-paste.
 
 13. **MODIFIED file `docs/configuration.md`** — adds a new top-level `## Upgrade flow` section documenting:
-    - The GH Releases API endpoint: `https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest`.
+    - The GH Releases API endpoint: `https://api.github.com/repos/tgorka/bmad-stepper/releases/latest`.
     - The `currentVersion` read source: `.claude-plugin/plugin.json:version`.
     - The BMAD compat extraction heuristic: searches `latest.body` for `BMAD Compatibility` heading.
     - The failure semantics: exit 1 + AC-2 hint.
@@ -221,7 +221,7 @@ The runner architecture is INDEPENDENT of `verify-and-advance.ts` and the dispat
    - Resolves `pluginManifestPath = opts.pluginManifestPath ?? path.join(process.cwd(), ".claude-plugin/plugin.json")` (test seam: when supplied, overrides the manifest path; production callers omit and use the project-root default).
    - Resolves `fetch = opts.fetch ?? globalThis.fetch` (test seam: when supplied, overrides the global fetch — tests inject a stubbed fetch returning controlled fixtures; per OQ-13 below).
    - Resolves `timeoutMs = opts.timeoutMs ?? UPGRADE_FETCH_TIMEOUT_MS` (constant `10_000` ms = 10 seconds; test seam: tests inject `1` ms to assert the timeout path).
-   - Resolves `releasesUrl = opts.releasesUrl ?? RELEASES_URL_DEFAULT` (constant `"https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest"`; test seam: tests inject a stub URL or omit + rely on the fetch seam).
+   - Resolves `releasesUrl = opts.releasesUrl ?? RELEASES_URL_DEFAULT` (constant `"https://api.github.com/repos/tgorka/bmad-stepper/releases/latest"`; test seam: tests inject a stub URL or omit + rely on the fetch seam).
    - Step 1: Read the plugin manifest:
      - `try { const raw = await fs.readFile(pluginManifestPath, "utf8"); ... } catch (err) { throw new Error("upgrade: failed to read plugin manifest at <path>: <message>"); }`.
      - Parse JSON: `const obj = JSON.parse(raw);` — JSON.parse throws on malformed JSON; caller's outer try/catch surfaces.
@@ -231,7 +231,7 @@ The runner architecture is INDEPENDENT of `verify-and-advance.ts` and the dispat
      - `const response = await fetch(releasesUrl, { signal: ac.signal, headers: { "User-Agent": "bmad-stepper/" + manifest.version, "Accept": "application/vnd.github+json" } });`
      - On AbortError (timeout): the fetch promise rejects; caller surfaces the AC-2 hint.
      - On TypeError (network unreachable): caller surfaces AC-2.
-   - Step 4: Validate the response status: `if (!response.ok) throw new Error("upgrade: GitHub API responded " + response.status + " " + response.statusText);` — covers 403 rate limit, 404 (missing repo — should never happen for `Tgorka/bmad-stepper` but defended), 5xx server errors.
+   - Step 4: Validate the response status: `if (!response.ok) throw new Error("upgrade: GitHub API responded " + response.status + " " + response.statusText);` — covers 403 rate limit, 404 (missing repo — should never happen for `tgorka/bmad-stepper` but defended), 5xx server errors.
    - Step 5: Parse the response body: `const body = await response.json(); const release = GitHubReleaseSchema.parse(body);` — defence-in-depth at the network boundary.
    - Step 6: Strip leading `v` from `release.tag_name` per OQ-7 (GitHub releases conventionally use `v0.1.0`): `const latestVersion = release.tag_name.startsWith("v") ? release.tag_name.slice(1) : release.tag_name;`.
    - Step 7: Compare `manifest.version` vs `latestVersion` via `compareVersions()` helper (private to module): tokenize both into `[major, minor, patch]` integer arrays; return `-1` (current < latest) | `0` (equal) | `+1` (current > latest).
@@ -288,7 +288,7 @@ The runner architecture is INDEPENDENT of `verify-and-advance.ts` and the dispat
    - CHANGELOG: <changelogUrl>
    - BMAD compatibility (latest): <bmadCompat OR "(BMAD compat info not present in release notes)">
 
-   Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.
+   Run /plugin marketplace update tgorka/bmad-stepper to upgrade.
    ```
    Layout for `kind: "up-to-date"`:
    ```markdown
@@ -296,16 +296,16 @@ The runner architecture is INDEPENDENT of `verify-and-advance.ts` and the dispat
 
    You are on the latest version (<currentVersion>).
    ```
-   The hint string `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.` is BYTE-IDENTICAL to the AC-1 verbatim hint. The renderer ends with a single trailing `\n`.
+   The hint string `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.` is BYTE-IDENTICAL to the AC-1 verbatim hint. The renderer ends with a single trailing `\n`.
 
 4. **NEW file `src/upgrade/render.test.ts`** — Bun-test colocated tests:
    - **RENDER_69_LAYOUT_HEADERS_UPGRADE_AVAILABLE_1**: render an upgrade-available result → assert H1 present, "Current version", "Latest version", "CHANGELOG:", "BMAD compatibility" lines all present in canonical order.
    - **RENDER_69_LAYOUT_UP_TO_DATE_1**: render an up-to-date result → assert H1 present, "You are on the latest version" line present, hint NOT present (no upgrade action needed).
    - **RENDER_69_VERSION_DIFF_1**: input `{ currentVersion: "0.1.0", latestVersion: "0.2.0" }` → assert both versions appear in canonical positions.
-   - **RENDER_69_CHANGELOG_LINK_1**: input includes `changelogUrl: "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0"` → assert URL appears verbatim in output.
+   - **RENDER_69_CHANGELOG_LINK_1**: input includes `changelogUrl: "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0"` → assert URL appears verbatim in output.
    - **RENDER_69_BMAD_COMPAT_PRESENT_1**: input `bmadCompat: "v6.5.x"` → output contains `BMAD compatibility (latest): v6.5.x`.
    - **RENDER_69_BMAD_COMPAT_MISSING_1**: input `bmadCompat: undefined` → output contains `BMAD compatibility (latest): (BMAD compat info not present in release notes)`.
-   - **RENDER_69_HINT_BYTE_IDENTICAL_1**: render an upgrade-available result → assert output contains the AC-1 verbatim hint `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.` byte-identically (substring match).
+   - **RENDER_69_HINT_BYTE_IDENTICAL_1**: render an upgrade-available result → assert output contains the AC-1 verbatim hint `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.` byte-identically (substring match).
    - **RENDER_69_NO_PII_1**: render various synthetic inputs → assert output does NOT contain forbidden substrings (`password`, `apiKey`, `secret`, `email`, `token`); the renderer is closed-set so this is defence-in-depth.
    - **RENDER_69_DETERMINISTIC_1**: render the same input twice → byte-identical strings.
 
@@ -371,7 +371,7 @@ The runner architecture is INDEPENDENT of `verify-and-advance.ts` and the dispat
     ### --upgrade (Story 6.9)
 
     Checks the GitHub Releases API at
-    `https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest` for a
+    `https://api.github.com/repos/tgorka/bmad-stepper/releases/latest` for a
     newer Stepper version.
 
     - Reads `currentVersion` from `.claude-plugin/plugin.json`.
@@ -384,7 +384,7 @@ The runner architecture is INDEPENDENT of `verify-and-advance.ts` and the dispat
     emitted hint:
 
     ```text
-    Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.
+    Run /plugin marketplace update tgorka/bmad-stepper to upgrade.
     ```
 
     **Network discipline (NFR-S1):** this is the ONLY main-thread network
@@ -403,7 +403,7 @@ The runner architecture is INDEPENDENT of `verify-and-advance.ts` and the dispat
     `bun run upgrade`) checks the GitHub Releases API for a newer Stepper
     version.
 
-    - **Endpoint:** `https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest`
+    - **Endpoint:** `https://api.github.com/repos/tgorka/bmad-stepper/releases/latest`
     - **Permitted by NFR-S1:** the ONLY main-thread network I/O in the
       Stepper code path; all other paths are network-free.
     - **Current version source:** `.claude-plugin/plugin.json:version` —
@@ -413,7 +413,7 @@ The runner architecture is INDEPENDENT of `verify-and-advance.ts` and the dispat
       the captured version is rendered; when absent the report shows
       `(BMAD compat info not present in release notes)`.
     - **CHANGELOG link:** taken from the release's `html_url` field
-      (e.g., `https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0`).
+      (e.g., `https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0`).
     - **Failure semantics:** when the API call fails (offline, rate
       limit, timeout, malformed response), Stepper exits 1 with the
       hint `Could not reach GitHub Releases. Check your network or try
@@ -479,7 +479,7 @@ The runner architecture is INDEPENDENT of `verify-and-advance.ts` and the dispat
 - **GraphQL alternative** — DEFERRED. v0.1 uses the REST API endpoint. A future story could migrate to GraphQL if response sizes grow significantly.
 - **Authentication / GH token** — DEFERRED. v0.1 uses unauthenticated requests (60 requests/hour rate limit per IP). For the v0.1 dogfood scale this is comfortable; a future story could add `--upgrade --github-token <token>` to authenticate (5000 requests/hour limit).
 - **Configurable timeout / retry** — DEFERRED. v0.1 uses a fixed 10-second AbortController timeout with NO retry. A future story could add `--upgrade --timeout 30` and `--upgrade --retry 3` for slow networks.
-- **Multi-source upgrade check** — DEFERRED. v0.1 queries ONLY GitHub Releases for `Tgorka/bmad-stepper`. A future story could add npm registry or Anthropic marketplace API checks (would broaden NFR-S1's network exception surface).
+- **Multi-source upgrade check** — DEFERRED. v0.1 queries ONLY GitHub Releases for `tgorka/bmad-stepper`. A future story could add npm registry or Anthropic marketplace API checks (would broaden NFR-S1's network exception surface).
 
 ### Architectural challenges resolved here
 
@@ -545,7 +545,7 @@ The following are reproduced byte-identical from `_bmad-output/planning-artifact
 
 **Given** `src/upgrade/check.ts` invoked
 **When** `--upgrade` runs
-**Then** it calls `Bun.fetch("https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest")` (NFR-S1 exception — the only main-thread network I/O permitted), reads `currentVersion` from `.claude-plugin/plugin.json`, compares; if newer is available, prints version diff + CHANGELOG link + BMAD compat for latest + the hint `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.`
+**Then** it calls `Bun.fetch("https://api.github.com/repos/tgorka/bmad-stepper/releases/latest")` (NFR-S1 exception — the only main-thread network I/O permitted), reads `currentVersion` from `.claude-plugin/plugin.json`, compares; if newer is available, prints version diff + CHANGELOG link + BMAD compat for latest + the hint `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.`
 **And** Stepper never writes to `~/.claude/plugins/` from this code path (NFR-S2)
 **Given** the API call fails (offline, rate limit)
 **When** `--upgrade` runs
@@ -623,7 +623,7 @@ The following are reproduced byte-identical from `_bmad-output/planning-artifact
     ```ts
     /** Default GitHub Releases API endpoint per AC-1 + D14. */
     export const RELEASES_URL_DEFAULT =
-      "https://api.github.com/repos/Tgorka/bmad-stepper/releases/latest";
+      "https://api.github.com/repos/tgorka/bmad-stepper/releases/latest";
 
     /** Default fetch timeout per OQ-8 (10 seconds; not configurable in v0.1). */
     export const UPGRADE_FETCH_TIMEOUT_MS = 10_000;
@@ -766,7 +766,7 @@ The following are reproduced byte-identical from `_bmad-output/planning-artifact
     ```ts
     /** AC-1 verbatim hint — byte-identical per epics.md line 1288. */
     const UPGRADE_HINT =
-      "Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.";
+      "Run /plugin marketplace update tgorka/bmad-stepper to upgrade.";
 
     const BMAD_COMPAT_MISSING_TEXT =
       "(BMAD compat info not present in release notes)";
@@ -800,14 +800,14 @@ The following are reproduced byte-identical from `_bmad-output/planning-artifact
 
 - [x] 5. **NEW `src/upgrade/render.test.ts` test file — `renderUpgradeReport` coverage**
   - [x] 5.1 Create `src/upgrade/render.test.ts`. Imports: bun-test (`describe`, `expect`, `it`); `import { renderUpgradeReport } from "./render.ts"`; `import type { UpgradeCheckResult } from "./check.ts"`.
-  - [x] 5.2 Helpers: `function makeUpgradeAvailable(overrides?: Partial<...>): UpgradeCheckResult { return { kind: "upgrade-available", currentVersion: "0.1.0", latestVersion: "0.2.0", changelogUrl: "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0", bmadCompat: "v6.5.x", ...overrides }; }`; sibling for up-to-date.
+  - [x] 5.2 Helpers: `function makeUpgradeAvailable(overrides?: Partial<...>): UpgradeCheckResult { return { kind: "upgrade-available", currentVersion: "0.1.0", latestVersion: "0.2.0", changelogUrl: "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0", bmadCompat: "v6.5.x", ...overrides }; }`; sibling for up-to-date.
   - [x] 5.3 RENDER_69_LAYOUT_HEADERS_UPGRADE_AVAILABLE_1: render upgrade-available → assert H1, "Current version", "Latest version", "CHANGELOG:", "BMAD compatibility" all present in canonical order.
   - [x] 5.4 RENDER_69_LAYOUT_UP_TO_DATE_1: render up-to-date → assert H1 + "You are on the latest version" present; hint NOT present.
   - [x] 5.5 RENDER_69_VERSION_DIFF_1: input with current 0.1.0 / latest 0.2.0 → both versions appear.
   - [x] 5.6 RENDER_69_CHANGELOG_LINK_1: input includes `changelogUrl` → URL appears verbatim.
   - [x] 5.7 RENDER_69_BMAD_COMPAT_PRESENT_1: input `bmadCompat: "v6.5.x"` → output contains `BMAD compatibility (latest): v6.5.x`.
   - [x] 5.8 RENDER_69_BMAD_COMPAT_MISSING_1: input `bmadCompat: undefined` → output contains `BMAD compatibility (latest): (BMAD compat info not present in release notes)`.
-  - [x] 5.9 RENDER_69_HINT_BYTE_IDENTICAL_1: render upgrade-available → assert output contains `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.` byte-identically (substring match).
+  - [x] 5.9 RENDER_69_HINT_BYTE_IDENTICAL_1: render upgrade-available → assert output contains `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.` byte-identically (substring match).
   - [x] 5.10 RENDER_69_NO_PII_1: render various synthetic inputs → assert output does NOT contain forbidden substrings (`password`, `apiKey`, `secret`, `email`, `token`).
   - [x] 5.11 RENDER_69_DETERMINISTIC_1: render same input twice → byte-identical strings.
   - [x] 5.12 Run `bun test src/upgrade/render.test.ts` — confirm all tests pass.
@@ -845,7 +845,7 @@ The following are reproduced byte-identical from `_bmad-output/planning-artifact
   - [x] 8.2 Test setup: tmpdir-isolated fixture with `<tmpdir>/.claude-plugin/plugin.json` ("0.1.0"). Synthetic stubbed fetch returning a controlled GH release.
   - [x] 8.3 Test body 1 (write-API spy): spyOn fs.writeFile + fs.appendFile + fs.copyFile + fs.rename + fs.unlink; invoke `runUpgradeCheck({ pluginManifestPath: <tmpdir>/.claude-plugin/plugin.json, fetch: stub })`; assert ZERO writes attempted on any spy.
   - [x] 8.4 Test body 2 (path snapshot): snapshot a separate tmpdir representing `~/.claude/plugins/` BEFORE the call (mkdtemp + put a canary file inside); invoke `runUpgradeCheck`; snapshot AFTER; assert byte-identical inventory + the canary file untouched (NFR-S2 path-level enforcement).
-  - [x] 8.5 Test body 3 (AC-1 hint byte-identical): on the upgrade-available result, render via `renderUpgradeReport` and assert the rendered string contains `Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.` byte-identically.
+  - [x] 8.5 Test body 3 (AC-1 hint byte-identical): on the upgrade-available result, render via `renderUpgradeReport` and assert the rendered string contains `Run /plugin marketplace update tgorka/bmad-stepper to upgrade.` byte-identically.
   - [x] 8.6 Cross-link comments: `// AC-1 (epics.md line 1289 "never writes to ~/.claude/plugins/"); NFR-S2 (architecture line 1397; PRD line 765); AC-1 hint (epics.md line 1288).`
   - [x] 8.7 Run `bun test src/integration/upgrade-no-plugin-write.test.ts` — confirm all tests pass.
 
@@ -1196,7 +1196,7 @@ MODIFIED (6):
 - `src/upgrade/check.ts:341` — `compareVersions(manifest.version, latestVersion)` (numeric semver compare per OQ-3 — NOT lexicographic).
 - `src/upgrade/check.ts:345-358` — branch on cmp (`upgrade-available` if cmp<0; `up-to-date` for cmp>=0 covering local-ahead per OQ-3).
 - `src/upgrade/render.ts:87-100` — upgrade-available layout: H1 + 4 bullet lines (Current/Latest/CHANGELOG/BMAD compat) + AC-1 hint.
-- `src/upgrade/render.ts:45-46` — `UPGRADE_HINT = "Run /plugin marketplace update Tgorka/bmad-stepper to upgrade."` byte-identical to AC-1.
+- `src/upgrade/render.ts:45-46` — `UPGRADE_HINT = "Run /plugin marketplace update tgorka/bmad-stepper to upgrade."` byte-identical to AC-1.
 - `src/commands/next/run.ts:1594-1611` — Step 0a short-circuit invokes `runUpgradeCheck` + `renderUpgradeReport` + `reportWithMessage` on success / `haltWithHint(1, AC-2 hint)` on failure (BEFORE Step 4 staging cleanup, Step 4b archival trigger, Step 5 doctor — per OQ-1 + OQ-2).
 - `src/upgrade/check.test.ts:134-191` (UPGRADE_69_HAPPY_NEWER_1 / UP_TO_DATE_1 / LOCAL_AHEAD_1) + `src/commands/next/run.test.ts:640-661` (UPGRADE_69_RUN_SHORT_CIRCUIT_1 with AC-1 hint substring assertion).
 

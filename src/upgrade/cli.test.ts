@@ -90,7 +90,7 @@ const AC_2_HINT =
   "Could not reach GitHub Releases. Check your network or try again later.";
 
 const AC_1_HINT =
-  "Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.";
+  "Run /plugin marketplace update tgorka/bmad-stepper to upgrade.";
 
 // ─── CLI_69_HAPPY_NEWER_AVAILABLE ────────────────────────────────────────
 
@@ -99,7 +99,7 @@ describe("upgrade cli — AC-1 happy path", () => {
     globalThis.fetch = makeStubFetch({
       body: {
         tag_name: "v0.2.0",
-        html_url: "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+        html_url: "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
         body: SAMPLE_BODY_WITH_BMAD,
       },
     });
@@ -127,7 +127,7 @@ describe("upgrade cli — AC-1 happy path", () => {
     globalThis.fetch = makeStubFetch({
       body: {
         tag_name: "v0.1.0",
-        html_url: "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.1.0",
+        html_url: "https://github.com/tgorka/bmad-stepper/releases/tag/v0.1.0",
         body: "",
       },
     });
@@ -184,7 +184,7 @@ describe("upgrade cli — User-Agent header", () => {
       recordHeaders,
       body: {
         tag_name: "v0.1.0",
-        html_url: "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.1.0",
+        html_url: "https://github.com/tgorka/bmad-stepper/releases/tag/v0.1.0",
         body: "",
       },
     });
@@ -208,7 +208,7 @@ describe("upgrade cli — NFR-S2 no-write at CLI level", () => {
     globalThis.fetch = makeStubFetch({
       body: {
         tag_name: "v0.2.0",
-        html_url: "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+        html_url: "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
         body: SAMPLE_BODY_WITH_BMAD,
       },
     });

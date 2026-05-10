@@ -56,7 +56,7 @@ Status: done
 ## Story
 
 As a fresh Stepper user (Lena's first-install scenario per PRD persona deck),
-I want the `README.md` Quick Start to take me from `/plugin marketplace add Tgorka/bmad-stepper` to a successful `/bmad-next --doctor` invocation in under 10 minutes,
+I want the `README.md` Quick Start to take me from `/plugin marketplace add tgorka/bmad-stepper` to a successful `/bmad-next --doctor` invocation in under 10 minutes,
 So that the dogfood-validation NFR-M4 ("README quick-start ≤ 10 min to first `/bmad-next`") is real-world tested and I can confirm my install works end-to-end without typing any other command.
 
 ## Context Summary
@@ -111,7 +111,7 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
   - [x] 0.1 Confirm `src/commands/doctor/run.ts` ships the 5-line stderr output per Story 1.12 AC-1 verification (line 702 of `_bmad-output/implementation-artifacts/1-12-bmad-next-doctor-command.md`). The README Quick Start REPRODUCES the lines verbatim — any drift between the runner output and the README is a regression. Confirm `bun run src/commands/doctor/run.ts` from the repo root produces the expected stderr in a fixture environment (or document the local-env behaviour per Story 1.12 Debug Log line 628 — the dev's local install uses the cache layout per Story 1.9 R2 carry-over).
   - [x] 0.2 Confirm `src/errors.ts` registry stays at 16 codes after Story 1.12 (per Story 1.12 AC verification line 745). The `docs/exit-codes.md` catalog enumerates the error classes mapping to each exit code; if the registry changes, the catalog must update. Verify by reading `src/errors.ts` and counting the exported error classes.
   - [x] 0.3 Confirm `commands/bmad-next.md` and `commands/bmad-doctor.md` exist (per Story 1.1 + Story 1.12). The README references both slash commands; missing slash files would break the marketplace install path (FR47) and contradict AC-1.
-  - [x] 0.4 Confirm `.claude-plugin/plugin.json` exists per Story 1.1 + architecture line 1063 (FR47 — marketplace manifest). The README Quick Start install command (`/plugin marketplace add Tgorka/bmad-stepper`) depends on this manifest's `name`, `version`, and `commands[]` declaration.
+  - [x] 0.4 Confirm `.claude-plugin/plugin.json` exists per Story 1.1 + architecture line 1063 (FR47 — marketplace manifest). The README Quick Start install command (`/plugin marketplace add tgorka/bmad-stepper`) depends on this manifest's `name`, `version`, and `commands[]` declaration.
   - [x] 0.5 Confirm the project has NO existing `README.md` at repo root (per `ls /Users/tgorka/tg/bmad-stepper-cc/README.md` — file absent as of Story 1.12 done state). Story 1.13 CREATES the README from scratch; if a stub exists from a prior partial deliverable, document its content in Completion Notes and merge thoughtfully.
   - [x] 0.6 Confirm the project has an EMPTY `docs/` directory (per `ls /Users/tgorka/tg/bmad-stepper-cc/docs/`). Story 1.13 CREATES the first two `docs/*.md` files (`getting-started.md`, `exit-codes.md`); future docs (`configuration.md`, `bmad-compatibility.md`, `architecture.md`, `examples/*.md`) ship in Epic 6.
   - [x] 0.7 Read epics.md Story 1.13 §lines 559-572 verbatim. Confirm the AC text in §Acceptance Criteria above is character-identical.
@@ -126,7 +126,7 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
   - [x] 1.3 Section B — **Quick Start** (the canonical 10-minute walkthrough). Number the steps 1–8:
     1. **Install Bun ≥ 1.3** (AR2 dependency) — `curl -fsSL https://bun.sh/install | bash` OR `brew install oven-sh/bun/bun`. Verify with `bun --version`.
     2. **Install BMAD** — `npx bmad-method install --tools claude-code` (the canonical install per `BmadNotInstalledError` actionable hint in `src/errors.ts`). Per Story 1.9 R2, this lands the plugin under `~/.claude/plugins/cache/bmad-method/bmad/<version>/` (cache layout) OR `~/.claude/plugins/bmad-method-<version>/` (spec layout); both work.
-    3. **Add the Stepper plugin** — `/plugin marketplace add Tgorka/bmad-stepper` (FR47 — the marketplace install path). The plugin manifest at `.claude-plugin/plugin.json` declares the `bmad-next`, `bmad-doctor` slash commands.
+    3. **Add the Stepper plugin** — `/plugin marketplace add tgorka/bmad-stepper` (FR47 — the marketplace install path). The plugin manifest at `.claude-plugin/plugin.json` declares the `bmad-next`, `bmad-doctor` slash commands.
     4. **Run the diagnostic** — `/bmad-next --doctor` (the canonical first-run check per Story 1.12 AC-1; the `--doctor` flag dispatches to `src/commands/doctor/run.ts` per architecture lines 1590-1592 + 1678). The thin alias `/bmad-doctor` invokes the same Layer 2 runner.
     5. **Read the expected output** — show the verbatim 5-line stderr block from Story 1.12 AC-1 inside a fenced code block tagged `text` (NOT `bash` — these are stderr lines, not commands). The exact lines:
        ```text
@@ -164,7 +164,7 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
     - `CONTRIBUTING.md` — contribution guide (Epic 6 Story 6.10 — placeholder).
     - `LICENSE` — MIT (Epic 6 Story 6.10 — placeholder).
     - `SECURITY.md` — security policy (Epic 6 Story 6.10 — placeholder).
-    - GitHub Issues / Discussions URLs — `https://github.com/Tgorka/bmad-stepper/issues` (placeholder; the real org/repo URL ships when Tgorka publishes the v0.1.0 marketplace release).
+    - GitHub Issues / Discussions URLs — `https://github.com/tgorka/bmad-stepper/issues` (placeholder; the real org/repo URL ships when tgorka publishes the v0.1.0 marketplace release).
     All links are FORWARD-DEPS in Story 1.13 — Epic 6 Story 6.10 ships the placeholder files.
   - [x] 1.8 Format discipline: render every fenced code block with the correct language tag (`bash`, `text`, `yaml`, `typescript`, etc.). Markdown headings use `#` `##` `###` consistently — H1 is the document title only; section titles are H2; subsection titles are H3.
   - [x] 1.9 Length target: ~150–200 lines of Markdown for the README (excluding the fenced-block bodies). The README is the user's first impression; it must be scannable in under 60 seconds. The deeper exposition lives in `docs/getting-started.md`.
@@ -177,8 +177,8 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
     - BMAD installed via `npx bmad-method install --tools claude-code` (per the verbatim `BmadNotInstalledError` actionable hint in `src/errors.ts`). Per Story 1.9 R2 carry-over, this lands the plugin under `~/.claude/plugins/cache/bmad-method/bmad/<v>/` (cache layout) OR `~/.claude/plugins/bmad-method-<v>/` (spec layout); the Stepper detector handles both.
     - macOS or Linux (Windows via WSL2). Per architecture line 1419 NFR-I5 — Linux + macOS via Bun ≥ 1.3.
   - [x] 2.3 Section B — **Installing the plugin** (long-form install walkthrough):
-    - Long-form `/plugin marketplace add Tgorka/bmad-stepper` invocation explanation.
-    - What the marketplace install does internally (downloads `Tgorka/bmad-stepper` to `~/.claude/plugins/bmad-stepper/`, runs nothing — the plugin is invoked on demand via slash commands).
+    - Long-form `/plugin marketplace add tgorka/bmad-stepper` invocation explanation.
+    - What the marketplace install does internally (downloads `tgorka/bmad-stepper` to `~/.claude/plugins/bmad-stepper/`, runs nothing — the plugin is invoked on demand via slash commands).
     - Troubleshooting: `BMAD_NOT_INSTALLED` (you forgot to run `npx bmad-method install`), `MARKETPLACE_FETCH_FAILED` (Anthropic CLI couldn't reach the marketplace — check network), `PARSE_ERROR` (you typed an unknown flag — check `docs/exit-codes.md`).
     - First-run check: `/bmad-next --doctor` produces the AC-1 5-line stderr output. Reference the README Quick Start for the verbatim output block.
   - [x] 2.4 Section C — **Commands surface** (Markdown table):
@@ -247,7 +247,7 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
     - [x] Step 1 — Install Bun (target: ≤ 1 min)
     - [x] Step 2 — Verify Bun version `bun --version` returns ≥ 1.3 (target: ≤ 30 sec)
     - [x] Step 3 — Install BMAD `npx bmad-method install --tools claude-code` (target: ≤ 2 min depending on network)
-    - [x] Step 4 — Add Stepper marketplace `/plugin marketplace add Tgorka/bmad-stepper` (target: ≤ 1 min)
+    - [x] Step 4 — Add Stepper marketplace `/plugin marketplace add tgorka/bmad-stepper` (target: ≤ 1 min)
     - [x] Step 5 — Run `/bmad-next --doctor` (target: ≤ 10 sec — diagnostic is fast per architecture line 1672 read-only / lock-free)
     - [x] Step 6 — Verify exit code 0 (target: instant)
     - [x] Step 7 — Verify the 5-line stderr output matches Story 1.12 AC-1 verbatim (target: ≤ 30 sec — eyeball check; the lines are: `BMAD detected: v<version> (compatible)`, `Project: <name>`, `State file: not present (fresh project)`, `Step registry: built from <N> BMAD skills + <M> project overrides; DAG validated; no cycles`, `Suggestion: run /bmad-next to start the analysis phase.`)
@@ -286,7 +286,7 @@ The acceptance criteria below are reproduced **verbatim** from `_bmad-output/pla
 ### Architecture compliance
 
 - **§Directory tree (lines 1035-1098)** — the README + `docs/` placement matches the architecture's prescribed layout. Story 1.13 ships exactly 4 of the prescribed Markdown files; the remaining 5 (`docs/configuration.md`, `docs/bmad-compatibility.md`, `docs/architecture.md`, `docs/examples/*`, `tests/fixtures/README.md` + scenario subdirectories) are Epic 6 deliverables.
-- **§FR47 (line 1377)** — README is the FR47 marketplace install entry point. The README Quick Start step 3 (`/plugin marketplace add Tgorka/bmad-stepper`) is the user-facing surface; the `.claude-plugin/plugin.json` manifest is the machine-facing surface.
+- **§FR47 (line 1377)** — README is the FR47 marketplace install entry point. The README Quick Start step 3 (`/plugin marketplace add tgorka/bmad-stepper`) is the user-facing surface; the `.claude-plugin/plugin.json` manifest is the machine-facing surface.
 - **§FR49 (line 1379)** — "Uninstall preserves state | Documented in `README.md`; no code". Story 1.13 owns this canonical README ownership. The smoke test in `src/integration/doctor-marketplace.test.ts:150-194` (Story 1.12) provides a property-assertion regression guard for the same invariant.
 - **§FR50 (line 1380)** — "Detect BMAD version on first run | `src/bmad-detect/detect-version.ts` | `src/commands/doctor/checks.ts`". The user-visible surface for FR50 is the Story 1.12 doctor's first stderr line (`BMAD detected: v<version> (compatible)`). Story 1.13 reproduces this verbatim in the README Quick Start.
 - **§FR53 (line 1383)** — "Documented exit codes | `src/errors.ts` (mapping) | `docs/exit-codes.md`". Story 1.13 ships the canonical `docs/exit-codes.md`. `src/errors.ts` is the source-of-truth for the actionable-hint strings; the doc QUOTES verbatim.
@@ -386,7 +386,7 @@ This is the **last story of Epic 1** (iteration 13). Lessons learned from Storie
 
 - Bun 1.3.12 is the minimum supported runtime (AR2 / NFR-I5). The README Quick Start step 1 documents Bun ≥ 1.3 as a prerequisite. The `docs/getting-started.md` §Prerequisites cites the same minimum.
 - `commands/bmad-next.md` is the placeholder Layer 1 file shipped in Story 1.1; `commands/bmad-doctor.md` is the thin alias added in Story 1.12. The README §Commands surface table references both.
-- `.claude-plugin/plugin.json` is the marketplace manifest (Story 1.1). The README Quick Start step 3 (`/plugin marketplace add Tgorka/bmad-stepper`) depends on this manifest's `name` and `commands[]` declaration.
+- `.claude-plugin/plugin.json` is the marketplace manifest (Story 1.1). The README Quick Start step 3 (`/plugin marketplace add tgorka/bmad-stepper`) depends on this manifest's `name` and `commands[]` declaration.
 - `package.json` `scripts` block exposes `check`, `lint`, `typecheck`, `test`. Story 1.13 adds NO new scripts (documentation-only).
 
 ### Story 1.2 — Errors module + registry CI gate
@@ -626,7 +626,7 @@ Story 1.13 closes Epic 1 with a tight, documentation-only deliverable. Every art
 
 | Surface | Verdict | Evidence |
 |---------|---------|----------|
-| FR47 marketplace install | **PASS** | `README.md:23-26` (step 3 `/plugin marketplace add Tgorka/bmad-stepper` invocation, references `.claude-plugin/plugin.json`); `docs/getting-started.md:14-20` (long-form install walkthrough). |
+| FR47 marketplace install | **PASS** | `README.md:23-26` (step 3 `/plugin marketplace add tgorka/bmad-stepper` invocation, references `.claude-plugin/plugin.json`); `docs/getting-started.md:14-20` (long-form install walkthrough). |
 | FR49 uninstall preserves `_bmad-output/.stepper/` | **PASS** | `README.md:73-83` ("Uninstall preserves your data" section explicitly enumerates the preserved paths: `state.yaml`, `state.yaml.bak`, `runs/*.log`, `runs/*.json`, `staging/<run-id>/`); mirrors property-assertion at `src/integration/doctor-marketplace.test.ts:190` (per Story 1.12 carry-over line 749). |
 | FR50 BMAD detection visible on first run | **PASS** | `README.md:35` (1st stderr line `BMAD detected: v<version> (compatible)` — verbatim Story 1.12 AC-1 surface). |
 | FR53 documented exit codes 0–5 | **PASS** | `docs/exit-codes.md` enumerates all 6 codes with verbatim hints from `src/errors.ts` (16-entry registry, unchanged from Story 1.12). |

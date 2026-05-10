@@ -1,0 +1,15 @@
+{
+  "name": "bmad-stepper",
+  "description": "BMAD Stepper marketplace — stateful workflow orchestrator for BMAD Method projects in Claude Code.",
+  "owner": {
+    "name": "Tomasz Gorka",
+    "url": "https://github.com/tgorka"
+  },
+  "plugins": [
+    {
+      "name": "bmad-stepper",
+      "source": "./",
+      "description": "Stateful workflow orchestrator for BMAD Method projects in Claude Code."
+    }
+  ]
+}

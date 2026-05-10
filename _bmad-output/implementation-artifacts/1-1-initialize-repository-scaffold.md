@@ -125,7 +125,7 @@ The acceptance criteria below are reproduced verbatim from `_bmad-output/plannin
   - [x] 4.1 Run `bun add -D @changesets/cli` (latest stable, lockfile-pinned per AR2).
   - [x] 4.2 Run `bunx changeset init`. This creates `.changeset/config.json` and `.changeset/README.md`.
   - [x] 4.3 Edit `.changeset/config.json`:
-    - `changelog`: `["@changesets/changelog-github", { "repo": "Tgorka/bmad-stepper" }]` (later epics will add the GitHub repo URL — for this story the placeholder repo path is fine; if `@changesets/changelog-github` is not available, leave default `["@changesets/cli/changelog", null]`).
+    - `changelog`: `["@changesets/changelog-github", { "repo": "tgorka/bmad-stepper" }]` (later epics will add the GitHub repo URL — for this story the placeholder repo path is fine; if `@changesets/changelog-github` is not available, leave default `["@changesets/cli/changelog", null]`).
     - `access`: `"public"`
     - `baseBranch`: `"main"`
   - [x] 4.4 No initial Changeset entry is required for this story (the version stays at 0.0.0 — no published release yet).
@@ -137,8 +137,8 @@ The acceptance criteria below are reproduced verbatim from `_bmad-output/plannin
     - `name`: `"bmad-stepper"`
     - `version`: `"0.0.0"`
     - `description`: a single-sentence description of the plugin (e.g., `"Stateful workflow orchestrator for BMAD Method projects in Claude Code."`)
-    - `author`: object with at least `name` (e.g., `{ "name": "Tgorka" }`)
-    - `homepage`: a placeholder URL is acceptable for v0.0.0 (`"https://github.com/Tgorka/bmad-stepper"`)
+    - `author`: object with at least `name` (e.g., `{ "name": "tgorka" }`)
+    - `homepage`: a placeholder URL is acceptable for v0.0.0 (`"https://github.com/tgorka/bmad-stepper"`)
     - `repository`: same as `homepage`
     - `license`: `"MIT"` (exact)
     - `keywords`: **exactly** `["claude-code", "claude-code-plugin", "bmad", "bmad-method", "agile", "ai-development"]` — order does not matter but every keyword in this list must be present (AR3 + AC-1).
@@ -336,7 +336,7 @@ The module boundary graph (foundational → mid-level → higher-level → top-l
 - **`bun init -y` smoke `index.ts`:** `bun init -y` typically writes a smoke `index.ts` at the project root. This story DELETES it (Task 1.3). Going forward `src/index.ts` will be the entry barrel.
 - **`bun init -y` `tsconfig.json` defaults:** `bun init -y` produces a tsconfig with `target: "ESNext"` already, but it does NOT set `module: "Preserve"` or `verbatimModuleSyntax: true`. Task 1.4 explicitly overrides those.
 - **Biome `init` boilerplate vs canonical config:** `bunx @biomejs/biome init` writes a default `biome.json` that includes recommended rules but does NOT set `noConsoleLog: "error"` or `noImplicitAnyLet: "error"`. Task 3.4 explicitly replaces the boilerplate with the canonical config from architecture §P8.
-- **Changeset config `repo` field:** the GitHub repo URL `Tgorka/bmad-stepper` is the canonical PRD-stated location (FR47). Use it even though the repo may not yet exist on GitHub at the time the dev agent runs — the Changeset config is a forward-looking declaration.
+- **Changeset config `repo` field:** the GitHub repo URL `tgorka/bmad-stepper` is the canonical PRD-stated location (FR47). Use it even though the repo may not yet exist on GitHub at the time the dev agent runs — the Changeset config is a forward-looking declaration.
 - **`.changeset/config.json` `changelog` setting:** if `@changesets/changelog-github` is not installed by `changeset init`, leave the default `["@changesets/cli/changelog", null]`. Adding `@changesets/changelog-github` is optional in v0.0.0; Epic 6 Story 6.10 will finalize the release config.
 - **`commands/bmad-next.md` placeholder:** the placeholder file MUST have AR34's mandatory frontmatter (`description`, `argumentHint`, `allowedTools: ["Bash", "Task", "Read"]`) so that Epic 2 Story 2.7 can drop in the real orchestrator without restructuring the file.
 

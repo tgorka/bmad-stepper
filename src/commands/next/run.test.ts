@@ -646,7 +646,7 @@ describe("runNext — Story 6.9 --upgrade short-circuit", () => {
         body: {
           tag_name: "v0.2.0",
           html_url:
-            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.2.0",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
           body: "## BMAD Compatibility — v6.5.x\n\nNotes.",
         },
       }),
@@ -656,7 +656,7 @@ describe("runNext — Story 6.9 --upgrade short-circuit", () => {
     if (result.action.action !== "report") return;
     expect(result.action.message).toContain("# Stepper Upgrade Check");
     expect(result.action.message).toContain(
-      "Run /plugin marketplace update Tgorka/bmad-stepper to upgrade.",
+      "Run /plugin marketplace update tgorka/bmad-stepper to upgrade.",
     );
   });
 
@@ -686,7 +686,7 @@ describe("runNext — Story 6.9 --upgrade short-circuit", () => {
         body: {
           tag_name: "v0.0.0",
           html_url:
-            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.0.0",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.0.0",
           body: "",
         },
       }),
@@ -711,7 +711,7 @@ describe("runNext — Story 6.9 --upgrade short-circuit", () => {
         body: {
           tag_name: "v0.0.0",
           html_url:
-            "https://github.com/Tgorka/bmad-stepper/releases/tag/v0.0.0",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.0.0",
           body: "",
         },
       }),
