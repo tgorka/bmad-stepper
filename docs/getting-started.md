@@ -88,6 +88,8 @@ Run npx bmad-method install --tools claude-code first.
 
 BMAD is upstream of Stepper: BMAD ships the method library (skills, agents, workflows); Stepper is the runner that advances through them one verifiable step at a time. Without BMAD installed, Stepper has nothing to dispatch.
 
+The same hint surfaces from `/bmad-next --doctor` (the read-only diagnostic) **and** from any direct dispatch path — `/bmad-next`, `/bmad-loop`, `/bmad-next --dry-run`. The dispatch-path pre-check fires after the auto-bootstrap of `state.yaml` and before step selection, so you never see the older confusing fallback ("the current filter excludes all candidates"). For `/bmad-loop`, the loop-exit transcript at `_bmad-output/.stepper/runs/<ts>-loop-exit.json` captures the halted iteration's actionable hint under `stopReason.iterationMessage`, so you can diagnose a halted loop without re-running it.
+
 ### 2. Corrupt state (`CORRUPT_STATE`, exit 1)
 
 ```text

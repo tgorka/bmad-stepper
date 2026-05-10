@@ -154,7 +154,23 @@ export interface IterationRecord {
  */
 export type StopReason =
   | { code: "max-iters-reached"; maxIters: number; iterCount: number }
-  | { code: "halt-on-error"; iterCount: number; failureCode: string }
+  | {
+      code: "halt-on-error";
+      iterCount: number;
+      failureCode: string;
+      /**
+       * The halted iteration's `runNext` action message (typically the
+       * thrown StepperError's actionable hint, e.g. "Run npx bmad-method
+       * install --tools claude-code first."). Optional — only populated
+       * when the halted iteration's action is `"halt"` and carries a
+       * non-empty message; absent for non-halt action sources of an
+       * EXIT_N short-circuit. Captured for transcript transparency so
+       * post-hoc readers of `_bmad-output/.stepper/runs/<ts>-loop-exit
+       * .json` see the actionable hint without round-tripping through
+       * `state.lastFailureReason`.
+       */
+      iterationMessage?: string;
+    }
   | { code: "epic-end-reached"; epic: string; message: string }
   | {
       code: "until-story-reached";
@@ -1696,7 +1712,24 @@ export async function runLoop(
             message,
           };
         } else {
-          stopReason = { code: "halt-on-error", iterCount, failureCode };
+          // Capture the halted iteration's actionable hint message when
+          // the dispatch action variant carries one (the `halt` variant
+          // always does; `dispatch`/`report` carry messages too but only
+          // halt makes sense for halt-on-error short-circuits). Surfaces
+          // in the loop-exit transcript JSON for forensic visibility per
+          // the transparency fix — without this, the transcript only
+          // records the EXIT_N code and the user can't see why iteration 1
+          // failed without re-running.
+          const iterationMessage =
+            nextResult.action.action === "halt"
+              ? nextResult.action.message
+              : undefined;
+          stopReason = {
+            code: "halt-on-error",
+            iterCount,
+            failureCode,
+            ...(iterationMessage !== undefined ? { iterationMessage } : {}),
+          };
         }
         break;
       }

@@ -36,6 +36,15 @@ let tmp = "";
 
 beforeEach(async () => {
   tmp = await fs.mkdtemp(path.join(os.tmpdir(), "stepper-next-"));
+  // Auto-bootstrap a fake BMAD plugin so the dispatch-path BMAD pre-check
+  // (`detectBmadVersion(opts.homeDir)`) clears in tmpdir-rooted tests.
+  // Production runs read from the real `~/.claude/plugins/`.
+  const pluginDir = path.join(tmp, ".claude", "plugins", "bmad-method-6.5.0");
+  await fs.mkdir(path.join(pluginDir, ".claude-plugin"), { recursive: true });
+  await Bun.write(
+    path.join(pluginDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "bmad-method", version: "6.5.0" }),
+  );
 });
 
 afterEach(async () => {
@@ -70,6 +79,7 @@ async function writeMinimalState(stateText?: string): Promise<string> {
 function commonOpts(statePath: string): Parameters<typeof runNext>[0] {
   return {
     projectRoot: tmp,
+    homeDir: tmp,
     statePath,
     stagingRoot: path.join(tmp, "staging"),
     skillNames: [],

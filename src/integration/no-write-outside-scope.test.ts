@@ -71,6 +71,16 @@ beforeEach(async () => {
       checkpoints: [],
     }),
   );
+  // Set up a fake BMAD plugin under <tmp>/.claude/plugins/ so the
+  // dispatch-path BMAD pre-check (`detectBmadVersion`) clears under
+  // the spawnRunner `HOME=tmp` env. The plugin directory lives under
+  // `.claude/plugins/` — same root the no-write invariants permit.
+  const pluginDir = path.join(tmp, ".claude", "plugins", "bmad-method-6.5.0");
+  await fs.mkdir(path.join(pluginDir, ".claude-plugin"), { recursive: true });
+  await Bun.write(
+    path.join(pluginDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "bmad-method", version: "6.5.0" }),
+  );
 });
 
 afterEach(async () => {
@@ -169,10 +179,15 @@ function findOutOfScopeFiles(
     `${path.join(tmpdir, "staging")}${path.sep}`,
   ];
   // Bun spawn-time cache prefixes — see helper docstring above.
+  // `.claude/` is the test-fixture path for the fake BMAD plugin used
+  // to satisfy the dispatch-path BMAD pre-check under HOME=tmp; it is
+  // not a Stepper write surface, so it is filtered the same way as the
+  // Bun cache directories.
   const bunCachePrefixes = [
     `${path.join(tmpdir, "Library/Caches/bun")}${path.sep}`,
     `${path.join(tmpdir, ".bun")}${path.sep}`,
     `${path.join(tmpdir, ".cache")}${path.sep}`,
+    `${path.join(tmpdir, ".claude")}${path.sep}`,
   ];
   return files.filter((f) => {
     const parent = path.dirname(f);
