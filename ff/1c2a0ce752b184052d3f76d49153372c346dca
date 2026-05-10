@@ -1,0 +1,19 @@
+src/commands/loop/run.ts
+  s_aaa05a6d0e662d::t_29466077082574 1232-1239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "ff1c2a0ce752b184052d3f76d49153372c346dca",
+  "prompts": {},
+  "sessions": {
+    "s_aaa05a6d0e662d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "412b5501-990b-4537-b1b3-0d93d93f1b11",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
