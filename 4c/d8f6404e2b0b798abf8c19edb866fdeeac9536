@@ -1,0 +1,37 @@
+src/commands/next/run.test.ts
+  s_abf5a9026b1135::t_33cc1f25273a23 584-590,593
+  s_abf5a9026b1135::t_b3a6e24746b594 94-102
+  s_abf5a9026b1135::t_eb545adc65de75 301-393
+src/commands/loop/run.ts
+  s_abf5a9026b1135::t_98f578398e36bf 1919-1925
+  s_abf5a9026b1135::t_2069d13e03a5e5 1673-1681,1687-1689,1691-1694
+  s_abf5a9026b1135::t_1a9b895b5893c9 246-261
+  s_abf5a9026b1135::t_62921adf92775d 1683-1686,1690
+  s_abf5a9026b1135::t_459036d2026e66 1682
+src/commands/loop/run.test.ts
+  s_abf5a9026b1135::t_e861a75f5ed389 203-205,219-259,261-262
+  s_abf5a9026b1135::t_3caf1f1981f5f4 260,263-274,276-281
+  s_abf5a9026b1135::t_459036d2026e66 275
+src/commands/next/run.ts
+  s_abf5a9026b1135::t_e67f0cdbb405af 935-945
+  s_abf5a9026b1135::t_17fe32f2cd95fc 1343-1348,1363
+  s_abf5a9026b1135::t_bea0a1f261e8c3 2111-2125
+src/commands/loop/plan.ts
+  s_abf5a9026b1135::t_8aa3fb90ca34d5 327-333
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "4cd8f6404e2b0b798abf8c19edb866fdeeac9536",
+  "prompts": {},
+  "sessions": {
+    "s_abf5a9026b1135": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2b7575d7-573f-4d51-9b2d-ddb9fffb55d5",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
