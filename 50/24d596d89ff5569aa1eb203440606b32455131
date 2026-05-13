@@ -1,0 +1,23 @@
+.claude-plugin/plugin.json
+  s_18a289a788ec61::t_2a32f81e3c49f4 3
+src/commands/next/run.test.ts
+  s_18a289a788ec61::t_cd7798d0de7814 782-784,787,789
+package.json
+  s_18a289a788ec61::t_cf46ccb26c70c0 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "5024d596d89ff5569aa1eb203440606b32455131",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
