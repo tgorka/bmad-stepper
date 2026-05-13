@@ -1,10 +1,12 @@
 name: CI
 
 on:
+  # Push-only: every push to any branch runs the check. Pull-request
+  # triggers were dropped to avoid duplicate runs (a PR's commits
+  # already trigger via push:**). Merges to main are covered by the
+  # same push:** trigger when the merge commit lands.
   push:
     branches: ["**"]
-  pull_request:
-    branches: [main]
 
 jobs:
   check:

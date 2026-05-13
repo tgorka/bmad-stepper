@@ -30,13 +30,63 @@ jobs:
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
 
-      - name: Install latest BMAD-METHOD
+      - name: Install latest BMAD (deterministic — clones tgorka/bmad-plugin)
+        # The original step shelled out to `npx bmad-method install --tools
+        # claude-code` and silenced stderr. That command's install path
+        # changed upstream and stopped landing BMAD where the Stepper
+        # detector looks — issue #70 ("BMAD upstream changed") was a
+        # false alarm caused by a broken fixture install, not a real
+        # upstream compat regression.
+        #
+        # Replaced with a deterministic clone of tgorka/bmad-plugin (the
+        # marketplace-style BMAD distribution this Stepper officially
+        # supports per docs/bmad-compatibility.md v0.2.0 row). The
+        # `.plugin-version` file at the root of the clone provides the
+        # version string; we then seed `installed_plugins.json` so the
+        # detector's marketplace-layout path (Story v0.2.0
+        # resolveMarketplacePluginDir at src/bmad-detect/detect-version.ts)
+        # resolves the install. No npx, no silent fallback.
         run: |
-          # The fixture project uses the latest BMAD upstream.
-          # If `npx bmad-method install` is available, use it; otherwise
-          # fall back to git-clone of the BMAD-METHOD repository.
-          npx bmad-method install --tools claude-code 2>/dev/null || \
-            git clone --depth 1 https://github.com/bmad-code-org/BMAD-METHOD.git /tmp/bmad-latest
+          set -euo pipefail
+          PLUGIN_REPO_URL="https://github.com/tgorka/bmad-plugin.git"
+          PLUGIN_CACHE_ROOT="$HOME/.claude/plugins/cache/bmad-method/bmad"
+          INSTALLED_PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
+          mkdir -p "$HOME/.claude/plugins"
+
+          # Clone into a tmpdir to read .plugin-version, then copy the
+          # plugin payload to the cache-layout path.
+          TMP_CLONE=$(mktemp -d)
+          git clone --depth 1 "$PLUGIN_REPO_URL" "$TMP_CLONE"
+          VERSION=$(cat "$TMP_CLONE/.plugin-version" | sed 's/^v//')
+          DEST="$PLUGIN_CACHE_ROOT/$VERSION"
+          mkdir -p "$(dirname "$DEST")"
+          # The marketplace declares `source: ./plugins/bmad` — copy that
+          # subdirectory as the plugin root (it contains .claude-plugin
+          # and skills/).
+          cp -R "$TMP_CLONE/plugins/bmad" "$DEST"
+          rm -rf "$TMP_CLONE"
+
+          # Write installed_plugins.json so the detector finds the install.
+          cat > "$INSTALLED_PLUGINS_JSON" <<EOF
+          {
+            "version": 2,
+            "plugins": {
+              "bmad@bmad-method": [
+                {
+                  "scope": "user",
+                  "installPath": "$DEST",
+                  "version": "$VERSION",
+                  "installedAt": "2026-01-01T00:00:00.000Z",
+                  "lastUpdated": "2026-01-01T00:00:00.000Z",
+                  "gitCommitSha": "ci"
+                }
+              ]
+            }
+          }
+          EOF
+
+          echo "Installed BMAD v$VERSION at $DEST"
+          ls "$DEST" || true
 
       - name: Run /bmad-next --doctor against latest BMAD
         id: doctor
@@ -72,8 +122,8 @@ jobs:
           script: |
             const doctorExit = `${{ steps.doctor.outputs.DOCTOR_EXIT }}`;
             const planFirstExit = `${{ steps.planfirst.outputs.PLANFIRST_EXIT }}`;
-            const title = `[BMAD-COMPAT] BMAD upstream changed; weekly compat check failed`;
-            const body = `The weekly BMAD compatibility check at \`.github/workflows/bmad-compat.yml\` detected an incompatibility with the latest BMAD upstream.
+            const title = `[BMAD-COMPAT] BMAD upstream changed; compat check failed`;
+            const body = `The BMAD compatibility check at \`.github/workflows/bmad-compat.yml\` (runs on merge to main) detected an incompatibility with the latest BMAD upstream installed via tgorka/bmad-plugin.
 
             Detected exit codes:
             - \`/bmad-next --doctor\`: ${doctorExit || "0 (passed)"}
