@@ -1,0 +1,31 @@
+.claude-plugin/marketplace.json
+  s_18a289a788ec61::t_6b86635bc8c19d 10
+.claude-plugin/plugin.json
+  s_18a289a788ec61::t_e14a767ca285d6 2-3
+README.md
+  s_18a289a788ec61::t_dfb26e8bfed798 44,50,57,61,117
+  s_18a289a788ec61::t_101e31993c123c 64-66
+package.json
+  s_18a289a788ec61::t_cb86f6b1b6fccd 3
+docs/getting-started.md
+  s_18a289a788ec61::t_21b026853ea873 19,25
+  s_18a289a788ec61::t_96acce2f4a6296 28
+CHANGELOG.md
+  s_18a289a788ec61::t_51963a485b1cd0 5-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "f701402cfc90eeea93ffdbaa5173dc17b2c9e7a0",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
