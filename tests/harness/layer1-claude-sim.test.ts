@@ -46,7 +46,13 @@ import * as path from "node:path";
 
 const REPO_ROOT = process.cwd();
 const SKILLS_DIR = path.join(REPO_ROOT, "skills");
-const HAS_API_KEY = process.env.ANTHROPIC_API_KEY !== undefined;
+// GitHub Actions sets env vars referencing missing secrets to the EMPTY
+// STRING (not undefined). So `=== undefined` is not enough — we must
+// treat an empty string as "absent" too. Without this, the harness
+// thought a missing secret was present, tried to call the API with an
+// empty Authorization header, and got HTTP 401 → issue #71 false alarm.
+const RAW_API_KEY = process.env.ANTHROPIC_API_KEY;
+const HAS_API_KEY = RAW_API_KEY !== undefined && RAW_API_KEY.length > 0;
 const MODEL =
   process.env.ANTHROPIC_HARNESS_MODEL ?? "claude-haiku-4-5-20251001";
 const ENDPOINT = "https://api.anthropic.com/v1/messages";
@@ -63,7 +69,7 @@ async function askClaude(
   userMessage: string,
 ): Promise<{ text: string; usage: { in: number; out: number } }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (apiKey === undefined) {
+  if (apiKey === undefined || apiKey.length === 0) {
     throw new Error("ANTHROPIC_API_KEY not set");
   }
   const response = await fetch(ENDPOINT, {

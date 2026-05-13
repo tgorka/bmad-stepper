@@ -701,9 +701,20 @@ async function tier3FrontmatterParse(
     }
   }
 
-  if (parsed === null || parsed.phase === undefined) {
+  // Throw only when NEITHER file exists — there's nothing to read.
+  // When the file exists but lacks `phase`, default to "implementation"
+  // (catch-all bucket) + `optional: true` instead of failing. The
+  // upstream bmad plugin's SKILL.md files declare only `{ name,
+  // description }` — they don't carry phase metadata — so requiring
+  // `phase` would force every plugin-shipped skill not in the seed to
+  // fail loud (issue #72). Defaulting keeps the doctor green while
+  // preserving the architecture's "seed is the curated source of
+  // phase truth" principle: the auto-defaulted node ends up in the
+  // implementation bucket flagged optional so it doesn't interfere
+  // with the natural DAG ordering of seeded skills.
+  if (parsed === null) {
     throw new UnknownBmadSkillError(
-      `Unknown BMAD skill: ${skillName} — could not resolve via seed, overrides, or frontmatter parse`,
+      `Unknown BMAD skill: ${skillName} — no SKILL.md or skill.yaml found`,
       JSON.stringify({ skill: skillName, attemptedPaths }),
       ac3UnknownSkillHint(skillName),
     );
@@ -711,10 +722,10 @@ async function tier3FrontmatterParse(
 
   return {
     name: skillName,
-    phase: parsed.phase,
+    phase: parsed.phase ?? "implementation",
     after: parsed.after ?? [],
     before: [], // Computed by build() step 5.
-    optional: parsed.optional ?? false,
+    optional: parsed.optional ?? (parsed.phase === undefined ? true : false),
     persona: parsed.persona ?? null,
     ...(parsed.idempotent !== undefined
       ? { idempotent: parsed.idempotent }

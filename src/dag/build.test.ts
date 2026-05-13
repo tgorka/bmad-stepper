@@ -289,6 +289,29 @@ persona: analyst
     }
   });
 
+  it("defaults phase to 'implementation' + optional=true when SKILL.md frontmatter lacks phase (issue #72)", async () => {
+    // The bmad-code-org/BMAD-METHOD plugin's SKILL.md files declare
+    // only `{ name, description }` — no `phase` metadata. Without
+    // this default, every plugin-shipped skill not in the seed would
+    // throw UnknownBmadSkillError. With it, Tier 3 falls through
+    // gracefully into the implementation bucket.
+    const skillDir = path.join(tmp, "plugins", "skills", "no-phase-skill");
+    await fs.mkdir(skillDir, { recursive: true });
+    await Bun.write(
+      path.join(skillDir, "SKILL.md"),
+      `---\nname: no-phase-skill\ndescription: A skill that does not declare phase metadata.\n---\n\n# Body\n`,
+    );
+    const dag = await build({
+      skillNames: ["no-phase-skill"],
+      projectRoot: tmp,
+      pluginDir: path.join(tmp, "plugins"),
+    });
+    const node = dag.nodes.get("no-phase-skill");
+    expect(node).toBeDefined();
+    expect(node?.phase).toBe("implementation");
+    expect(node?.optional).toBe(true);
+  });
+
   it("throws UnknownBmadSkillError when SKILL.md frontmatter is malformed (AC-3 throw)", async () => {
     const skillDir = path.join(tmp, "plugins", "skills", "malformed-skill");
     await fs.mkdir(skillDir, { recursive: true });

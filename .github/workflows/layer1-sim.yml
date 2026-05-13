@@ -60,8 +60,17 @@ jobs:
           bun test tests/harness/layer1-claude-sim.test.ts
 
       - name: Open issue on Layer 1 sim failure
-        if: failure()
-        uses: actions/github-script@v7
+        # Gated on BOTH the step failure AND a non-empty
+        # ANTHROPIC_API_KEY. Without this guard, every run on a repo
+        # without the secret configured fired an issue (the harness
+        # ran with an empty-string API key, got HTTP 401, exited
+        # non-zero). The harness's own skip-when-empty logic was
+        # already correct in the test file post-issue-#71-fix; this
+        # guard keeps the workflow consistent.
+        if: failure() && env.ANTHROPIC_API_KEY != ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        uses: actions/github-script@v9
         with:
           script: |
             const title = `[LAYER1-SIM] SKILL.md regression detected by Claude simulation`;
