@@ -1,9 +1,9 @@
 name: Layer 1 Claude Simulation (opt-in)
 
-# Triggered manually OR by a bi-weekly cron. Sends each SKILL.md to
-# the Claude API and asserts Claude's intended bash invocation matches
-# the prescribed Layer-2 entry point. Costs ~$0.05 per run (3 skills
-# × Haiku rates) — not gated on PRs.
+# Triggered on every merge to main AND by manual workflow_dispatch.
+# Sends each SKILL.md to the Claude API and asserts Claude's intended
+# bash invocation matches the prescribed Layer-2 entry point. Costs
+# ~$0.05 per run (3 skills × Haiku rates) — not gated on PRs.
 #
 # Setup: set the repository secret `ANTHROPIC_API_KEY` (Settings →
 # Secrets and variables → Actions → New repository secret). Without
@@ -14,11 +14,16 @@ name: Layer 1 Claude Simulation (opt-in)
 # does NOT mention the expected `bun run src/commands/<group>/run.ts`
 # shape — indicates a SKILL.md regression where the body is no longer
 # unambiguous to a faithful reader.
+#
+# Trigger rationale: only on merge to main + manual. NOT on a cron
+# schedule (the previous "0 6 2-31/14 * 2" expression did not actually
+# fire bi-weekly under GitHub cron OR-semantics for DOM + DOW; the
+# user opted to drop scheduled runs entirely and accept the per-merge
+# cost in exchange for deterministic triggering).
 
 on:
-  schedule:
-    # Run every other Tuesday at 06:00 UTC.
-    - cron: "0 6 2-31/14 * 2"
+  push:
+    branches: [main]
   workflow_dispatch: {}
 
 permissions:

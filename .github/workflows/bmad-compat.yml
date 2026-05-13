@@ -1,9 +1,13 @@
 name: BMAD Compatibility
 
 on:
-  schedule:
-    # Run every Monday at 06:00 UTC
-    - cron: "0 6 * * 1"
+  # Run on every merge to main. Catches BMAD upstream changes whenever
+  # a release lands (e.g., the v0.2.0 release commit on main triggers
+  # a full --doctor + --plan-first + frontmatter sweep against the
+  # latest BMAD upstream installed at that point). Plus manual
+  # workflow_dispatch for ad-hoc verification.
+  push:
+    branches: [main]
   workflow_dispatch: {}
 
 permissions:
