@@ -1,0 +1,26 @@
+.github/workflows/layer1-sim.yml
+  s_18a289a788ec61::t_a861d3b0c74647 63-73
+tests/harness/layer1-claude-sim.test.ts
+  s_18a289a788ec61::t_f4331a93f08a3d 72
+  s_18a289a788ec61::t_6c77e73a2e6230 49-55
+src/dag/build.ts
+  s_18a289a788ec61::t_684ba18f8f2a1c 704-715,717,725,728
+src/dag/build.test.ts
+  s_18a289a788ec61::t_02cf4a6a82c1a6 292-314
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "def0ed14046739d633aa499fc27a804e8fe04e25",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
