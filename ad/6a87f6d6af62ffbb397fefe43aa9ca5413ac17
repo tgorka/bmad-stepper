@@ -1,0 +1,20 @@
+src/smoke/multi-iter-pipeline.test.ts
+  s_18a289a788ec61::t_dfbe5dea8a8b1c 1-169,177-179,185-216,221-324
+  s_18a289a788ec61::t_39d7a41ed71203 170-176,180-184,217-220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "ad6a87f6d6af62ffbb397fefe43aa9ca5413ac17",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}

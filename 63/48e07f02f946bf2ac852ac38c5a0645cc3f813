@@ -1,0 +1,31 @@
+.github/workflows/layer1-sim.yml
+  s_18a289a788ec61::t_ee11965cd8ab5e 1-2,7-16,23-24,27-82
+  s_18a289a788ec61::t_bc281c840a0c07 3-6,17-22,25-26
+docs/testing-roadmap.md
+  s_18a289a788ec61::t_1b819077e37ae2 1-4,6-8,10-12,17,19-21,23-25,27,30,38-40,42,47,51-53,58,60,63,66-77,87-88
+  s_18a289a788ec61::t_651503e4ce016c 5,9,13-14
+  s_18a289a788ec61::t_3c1ad478411f79 22,26,28-29,31-37,41,43-46,48-50,54-57,59,61-62,64-65
+  s_18a289a788ec61::t_ec9069bb30d384 78-80,83-86
+  s_18a289a788ec61::t_d65e300754fc1b 15-16
+  s_18a289a788ec61::t_d713e15663401a 18
+  s_18a289a788ec61::t_e9158b95f8adfc 81-82
+.github/workflows/bmad-compat.yml
+  s_18a289a788ec61::t_a89bb8f5afd1e3 48-67,69,73-74,77-88
+  s_18a289a788ec61::t_afda067c6dc704 4-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "6348e07f02f946bf2ac852ac38c5a0645cc3f813",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
