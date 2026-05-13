@@ -1,0 +1,25 @@
+.github/workflows/bmad-compat.yml
+  s_18a289a788ec61::t_afda067c6dc704 4-10
+.github/workflows/layer1-sim.yml
+  s_18a289a788ec61::t_bc281c840a0c07 3-6,17-22,25-26
+docs/testing-roadmap.md
+  s_18a289a788ec61::t_e9158b95f8adfc 81-82
+  s_18a289a788ec61::t_d713e15663401a 18
+  s_18a289a788ec61::t_d65e300754fc1b 15-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "db88649f15862a1f1835e7904f5975d6ede7b425",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
