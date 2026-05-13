@@ -23,10 +23,9 @@ Compute and execute the next BMAD step. Layer 1 orchestrator: Bash → AR9 JSON 
 ```
 
 Capture the flag string the user typed after `/bmad-next` (verbatim) and
-forward it as `<captured-flags>` to the Bash invocations below. Claude Code
-no longer performs `$ARGUMENTS` substitution for skills (v0.1 slash-command
-era only); the skill body owns the forwarding. Flags reach
-`src/commands/next/run.ts`'s argv (Story 1.7 `parseNextArgs` consumes them).
+forward it as `<captured-flags>` to the Bash invocations below. Flags
+reach `src/commands/next/run.ts`'s argv (Story 1.7 `parseNextArgs`
+consumes them).
 
 ## Behavior
 

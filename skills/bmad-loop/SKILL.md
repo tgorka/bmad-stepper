@@ -39,10 +39,9 @@ structured JSON transcript under `runs/`).
 ```
 
 Capture the flag string the user typed after `/bmad-loop` (verbatim) and
-forward it as `<captured-flags>` to the Bash invocations below. Claude Code
-no longer performs `$ARGUMENTS` substitution for skills (v0.1 slash-command
-era only); the skill body owns the forwarding. Flags reach
-`src/commands/loop/run.ts`'s argv (Story 4.1 `parseLoopArgs` consumes them).
+forward it as `<captured-flags>` to the Bash invocations below. Flags
+reach `src/commands/loop/run.ts`'s argv (Story 4.1 `parseLoopArgs`
+consumes them).
 
 ## Behavior
 
