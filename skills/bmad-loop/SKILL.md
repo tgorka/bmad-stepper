@@ -982,7 +982,7 @@ which may include explicit `escalate` policy declarations alongside
   Story 5.3) will be declared in the same directory.
 - **No file edits outside `staging/<run-id>/` and `_bmad-output/.stepper/`.**
   The `Read` tool may inspect any project file (read-only); `Write` and
-  `Edit` are NOT in `allowedTools` (per the frontmatter declaration).
+  `Edit` are NOT permitted from this skill body.
 
 These restrictions are documented in the markdown body for human readers
 + Claude (Layer 1) as prompt-layer enforcement. The architectural

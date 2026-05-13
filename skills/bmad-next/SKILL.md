@@ -550,17 +550,16 @@ via the `shutdownRequested` poll).
   Story 5.3) will be declared in the same directory.
 - **No file edits outside `staging/<run-id>/` and `_bmad-output/.stepper/`.**
   The `Read` tool may inspect any project file (read-only); `Write` and
-  `Edit` are NOT in `allowedTools` (per the frontmatter declaration).
+  `Edit` are NOT permitted from this skill body.
 
 These restrictions are documented in the markdown body for human readers +
 Claude (Layer 1) as prompt-layer enforcement. The architectural enforcement
 lives at Layer 2 (verifier scope check, `assertWithinScope` per Story 1.3) —
 but the markdown declaration is the FIRST line of defence.
 
-Claude Code's runtime restricts the slash command to the three tools in
-`allowedTools: ["Bash", "Task", "Read"]`. The body's tool-restriction section
-narrows the Bash and Task surfaces further (per the verbiage above) — these
-are PROMPT-LAYER constraints Claude honors at the orchestration layer.
+The body's tool-restriction section narrows the Bash and Task surfaces
+(per the verbiage above) — these are PROMPT-LAYER constraints Claude
+honors at the orchestration layer.
 
 ## Error handling
 
