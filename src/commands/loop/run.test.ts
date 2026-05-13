@@ -285,7 +285,7 @@ describe("runLoop — all-steps-complete short-circuit (Issue B)", () => {
 describe("runLoop — no-progress detector (dispatch without state advance)", () => {
   // The detector fires when `runNext` returns a `dispatch` action but
   // `state.lastSuccessfulStep` does not advance pre→post — the v0.1
-  // SKELETON limitation per commands/bmad-loop.md §4 (the loop runner
+  // SKELETON limitation per skills/bmad-loop/SKILL.md §4 (the loop runner
   // is a single Bun process and cannot invoke the Task tool, which is
   // a Layer 1 capability). Without this short-circuit, the loop spins
   // to `--max-iters` producing N wasted staging dirs for the same step.

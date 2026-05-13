@@ -351,7 +351,7 @@ Per-step failure-mode policy. Values are the closed enum:
 When no policy is set for a step, the resolver falls back to
 `escalate` per architecture line 499.
 
-See `commands/bmad-loop.md` for the canonical reference (Story 5.6
+See `skills/bmad-loop/SKILL.md` for the canonical reference (Story 5.6
 single-source-of-truth pattern).
 
 ```yaml
@@ -392,7 +392,7 @@ models:
 
 #### Task tool `model` parameter (where supported)
 
-Per AC-2, the slash-command markdown (`commands/bmad-next.md` step 3)
+Per AC-2, the slash-command markdown (`skills/bmad-next/SKILL.md` step 3)
 forwards the configured model to the Task tool's `model` parameter:
 
 ```
@@ -460,7 +460,7 @@ fail validation; existing fixtures are non-breaking.
   in the dispatch-spec.json + transcript markdown + JSON run log for
   audit purposes — the configured cap is the user's INTENT; runtime
   enforcement is best-effort. (Same stance as Story 6.3 OQ-2 for the
-  `model` parameter — see `commands/bmad-{loop,next}.md` for the
+  `model` parameter — see `skills/bmad-{loop,next}/SKILL.md` for the
   caveat language.)
 - When the runtime exceeds the cap, the slash-command markdown
   forwards `--error-code TIMEOUT` to `verify-and-advance.ts` which
@@ -820,7 +820,7 @@ notice is SUPPRESSED to avoid spam.
 - `src/config/load.ts` — the three-layer file loader.
 - `src/config/defaults.ts` — the plugin-default constant.
 - `src/migrations/config/index.ts` — the per-family migration registry.
-- `commands/bmad-loop.md` and `commands/bmad-next.md` — slash-command
+- `skills/bmad-loop/SKILL.md` and `skills/bmad-next/SKILL.md` — skill
   reference (Story 5.6 + Story 6.1 cross-link).
 - `_bmad-output/planning-artifacts/architecture.md` §P3 (lines 773-790)
   — architectural source for the schema shape.
@@ -897,5 +897,5 @@ failure path PRESERVES AR9 — the halt action is emitted normally so the
 user sees the structured halt message in addition to the stderr error.
 
 See `docs/exit-codes.md` for the verbatim exit-1 hint and the
-`commands/bmad-next.md` `### --upgrade (Story 6.9)` section for the
+`skills/bmad-next/SKILL.md` `### --upgrade (Story 6.9)` section for the
 slash-command surface.

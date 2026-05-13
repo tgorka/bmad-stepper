@@ -1,7 +1,6 @@
 ---
-description: Compute and execute the next BMAD step (zero-config orchestrator).
-argumentHint: "[--doctor | --upgrade | --resume | --dry-run | --skip <step> | --auto-fix | ...]"
-allowedTools: ["Bash", "Task", "Read"]
+name: bmad-next
+description: 'Compute and execute the next BMAD step (zero-config orchestrator). Invoke when user types /bmad-next with optional flags like --doctor, --upgrade, --resume, --dry-run, --explain, --list, --diff-state, --export-state, --watch, --recompute-state, --skip <step>, --auto-fix, --no-overrides, --plan-first.'
 ---
 
 # /bmad-next
@@ -23,9 +22,9 @@ Compute and execute the next BMAD step. Layer 1 orchestrator: Bash → AR9 JSON 
 /bmad-next --auto-fix
 ```
 
-The `$ARGUMENTS` token below expands to the user's text after `/bmad-next` per
-Claude Code's standard slash-command tail-string expansion. Flags are forwarded
-verbatim to `src/commands/next/run.ts`'s argv (Story 1.7 `parseNextArgs`
+Capture the flag string the user typed after `/bmad-next` (verbatim) and
+forward it as `<captured-flags>` to the Bash invocations below. Flags
+reach `src/commands/next/run.ts`'s argv (Story 1.7 `parseNextArgs`
 consumes them).
 
 ## Behavior
@@ -33,7 +32,7 @@ consumes them).
 ### 1. Bash: invoke the lock-free pre-dispatch composer.
 
 ```bash
-bun run src/commands/next/run.ts -- $ARGUMENTS
+bun run src/commands/next/run.ts -- <captured-flags>
 ```
 
 This invocation reads `state.yaml` (lock-free), computes the next step via the
@@ -342,8 +341,8 @@ flag (skip is a per-step state mutation, NOT a loop stop condition).
 Story 5.6 will wire per-step skip policy auto-resolution at the loop
 runner-tier via the `failurePolicies: { <step>: skip }` config block.
 
-When Layer 1 detects `--skip <step>` in `$ARGUMENTS` AND `--resume` in
-`$ARGUMENTS`, it threads `--skip-step <step>` to verify-and-advance.ts
+When Layer 1 detects `--skip <step>` in the captured flags AND `--resume` in
+the captured flags, it threads `--skip-step <step>` to verify-and-advance.ts
 in Step 5 above (positional argv flag, mirroring the Story 3.1
 `--last-attempted-json` threading pattern).
 
@@ -425,7 +424,7 @@ aggregation report; independent from retry-event counts via
 across ALL iterations of the loop run via
 `RunNextOptions.failurePolicyOverride`.
 
-When Layer 1 detects `--auto-fix` in `$ARGUMENTS`, it threads
+When Layer 1 detects `--auto-fix` in the captured flags, it threads
 `--auto-fix` to verify-and-advance.ts in Step 5 above (positional argv
 flag, mirroring the Story 5.2 `--skip-step` threading pattern).
 
@@ -436,10 +435,10 @@ applies to `/bmad-next` invocations the same way it applies to
 `/bmad-loop` iterations. The four valid policies (retry / skip /
 route-to-fixer / escalate) and the resolver semantics (priority order,
 absent-step fallback, case-sensitive lookup, invalid-value handling)
-are CANONICAL in `commands/bmad-loop.md` (single source of truth per
+are CANONICAL in `skills/bmad-loop/SKILL.md` (single source of truth per
 OQ-8 — mirrors the Story 5.3 `--auto-fix` docs pattern).
 
-See `commands/bmad-loop.md` § `failurePolicies: config block (Story 5.6
+See `skills/bmad-loop/SKILL.md` § `failurePolicies: config block (Story 5.6
 — per-step policy)` for the full reference: schema shape, valid values
 (retry / skip / route-to-fixer / escalate), absent-step fallback
 (escalate plugin default), `--auto-fix` priority override, example
@@ -551,17 +550,16 @@ via the `shutdownRequested` poll).
   Story 5.3) will be declared in the same directory.
 - **No file edits outside `staging/<run-id>/` and `_bmad-output/.stepper/`.**
   The `Read` tool may inspect any project file (read-only); `Write` and
-  `Edit` are NOT in `allowedTools` (per the frontmatter declaration).
+  `Edit` are NOT permitted from this skill body.
 
 These restrictions are documented in the markdown body for human readers +
 Claude (Layer 1) as prompt-layer enforcement. The architectural enforcement
 lives at Layer 2 (verifier scope check, `assertWithinScope` per Story 1.3) —
 but the markdown declaration is the FIRST line of defence.
 
-Claude Code's runtime restricts the slash command to the three tools in
-`allowedTools: ["Bash", "Task", "Read"]`. The body's tool-restriction section
-narrows the Bash and Task surfaces further (per the verbiage above) — these
-are PROMPT-LAYER constraints Claude honors at the orchestration layer.
+The body's tool-restriction section narrows the Bash and Task surfaces
+(per the verbiage above) — these are PROMPT-LAYER constraints Claude
+honors at the orchestration layer.
 
 ## Error handling
 

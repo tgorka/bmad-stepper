@@ -55,8 +55,8 @@
  *   - architecture.md §G CLI Surface (lines 553-629) — exit-code
  *     mapping (FR53) + stderr discipline (FR54).
  *   - architecture.md §1672 — `run.ts` is read-only / lock-free.
- *   - architecture.md §1671-1678 — thin-alias `commands/bmad-doctor.md`
- *     delegates to `bun run src/commands/doctor/run.ts -- $ARGUMENTS`.
+ *   - architecture.md §1671-1678 — thin-alias `skills/bmad-doctor/SKILL.md`
+ *     delegates to `bun run src/commands/doctor/run.ts -- <captured-flags>`.
  *   - architecture.md §FR41 — `--doctor` diagnostic.
  *   - architecture.md §FR53 — exit codes.
  *   - architecture.md §FR54 — stdout/stderr discipline.

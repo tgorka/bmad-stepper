@@ -24,7 +24,8 @@ Stepper compatibility review.
 
 | Stepper version | Supported BMAD version range | Notes |
 |-----------------|------------------------------|-------|
-| v0.1.0          | v6.4+ (tested through v6.5)  | Plugin detection at `~/.claude/plugins/bmad-method-*/`. Cache layout (`~/.claude/plugins/cache/bmad-method/bmad/<version>/`) also detected automatically. Seed targets BMAD v6.5 (`SEED_BMAD_VERSION = "6.5"` in `src/dag/seed-v6.x.ts`). |
+| v0.1.0          | v6.4+ (tested through v6.5)  | Plugin detection at `~/.claude/plugins/bmad-method-*/`. Cache layout claim was aspirational — only the spec layout was actually detected at v0.1.0; the cache layout fix landed unreleased on `main` and ships in v0.2.0. Seed targets BMAD v6.5 (`SEED_BMAD_VERSION = "6.5"` in `src/dag/seed-v6.x.ts`). |
+| v0.2.0          | v6.4+ (tested against v6.5.0.1 and v6.6.0.0) | Marketplace-installed BMAD detected via `~/.claude/plugins/installed_plugins.json` → cache layout `~/.claude/plugins/cache/bmad-method/bmad/<version>/`. Both `bmad@bmad-method` (PabloLION) and `tgorka/bmad-plugin` (which republishes the same marketplace name `bmad-method`) install to the same on-disk path; the detector picks the lex-max `installPath` across all entries. Legacy `~/.claude/plugins/bmad-method-*` spec layout still supported. The 6.5.0.1 and 6.6.0.0 skill catalogs are byte-identical (102 skills each); seed bumped to `SEED_BMAD_VERSION = "6.6"` to reflect the verification. |
 
 Each GitHub Release includes a `## BMAD Compatibility — vX.Y.x` section in the release
 notes. The `--upgrade` flow reads this section and surfaces it in the version-check
@@ -37,18 +38,21 @@ two public functions:
 
 ### `detectBmadVersion(opts?)`
 
-Resolves `~/.claude/plugins/` for directories matching `bmad-method-*`:
+Tries the modern marketplace install first, then the legacy npx layout:
 
-1. Lists `<homeDir>/.claude/plugins/` for entries starting with `"bmad-method-"`.
-   - Both layout conventions are covered:
-     - **Spec layout:** `~/.claude/plugins/bmad-method-<version>/`
-     - **Cache layout:** `~/.claude/plugins/cache/bmad-method/bmad/<version>/`
-   - `ENOENT` on the plugins root → empty candidate list.
-2. If no candidates are found → throws `BmadNotInstalledError` (exit code 3).
-3. Sorts candidates descending (lexicographic) and picks the highest-named entry.
+1. **Marketplace layout** (preferred): reads `~/.claude/plugins/installed_plugins.json`
+   (v2 schema). Picks the lex-max `installPath` across all entries keyed `bmad@*` —
+   matches both `bmad@bmad-method` (PabloLION) and `bmad@tgorka/bmad-plugin` (since
+   `tgorka/bmad-plugin` republishes marketplace name `bmad-method`). Resolves to
+   `~/.claude/plugins/cache/bmad-method/bmad/<version>/`. Missing or unparseable
+   manifest falls through silently to step 2.
+2. **Legacy layout** (fallback): lists `~/.claude/plugins/` for entries starting with
+   `"bmad-method-"`, picks the lex-max. Resolves to
+   `~/.claude/plugins/bmad-method-<version>/`.
+3. If neither layout has a candidate → throws `BmadNotInstalledError` (exit code 3).
 4. Reads `<pluginDir>/.claude-plugin/plugin.json` and validates that `plugin.json`
    contains a string `version` field.
-5. Returns the version string (e.g., `"6.5.0.1"`).
+5. Returns the version string (e.g., `"6.5.0.1"` or `"6.6.0.0"`).
 
 ### `detectBmadSkills(opts?)`
 
@@ -72,7 +76,7 @@ paths. Exit code 3 covers every BMAD-compat failure.
 
 | Error class | Code | Trigger | Actionable hint |
 |-------------|------|---------|-----------------|
-| `BmadNotInstalledError` | `BMAD_NOT_INSTALLED` | No `bmad-method-*` directory in `~/.claude/plugins/` | `Run npx bmad-method install --tools claude-code first.` |
+| `BmadNotInstalledError` | `BMAD_NOT_INSTALLED` | No marketplace install (under `cache/<marketplace>/bmad/<version>/` via `installed_plugins.json`) AND no legacy `bmad-method-*` directory under `~/.claude/plugins/` | `Run npx bmad-method install --tools claude-code first.` (the verbatim AC-2 hint; also satisfied by `/plugin install bmad@bmad-method`) |
 | `BmadIncompatibleError` | `BMAD_INCOMPATIBLE` | Installed BMAD version is outside the supported range | `Run /bmad-next --upgrade to see a Stepper version compatible with your BMAD installation.` |
 | `UnknownBmadSkillError` | `UNKNOWN_BMAD_SKILL` | A required skill is absent from the BMAD install | `Run /bmad-next --list to see the candidate skills your BMAD installation registers.` |
 | `DagCycleError` | `DAG_CYCLE` | A DAG cycle was introduced (e.g., by `overrides:`) | `See _bmad-output/.stepper/runs/<latest>/log.md for the cycle path; check the bmad-stepper.config.yaml dag.overrides block for circular edges.` |
