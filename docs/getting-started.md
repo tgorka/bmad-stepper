@@ -16,16 +16,16 @@ Deeper onboarding companion to the [README Quick Start](../README.md#quick-start
 In-session (inside Claude Code):
 ```text
 /plugin marketplace add tgorka/bmad-stepper
-/plugin install bmad-stepper@bmad-stepper
+/plugin install bmad@bmad-stepper
 ```
 
 External CLI (outside Claude Code) — same flow via the `claude` terminal command:
 ```bash
 claude plugin marketplace add tgorka/bmad-stepper
-claude plugin install bmad-stepper@bmad-stepper
+claude plugin install bmad@bmad-stepper
 ```
 
-For unreleased revisions, swap `tgorka/bmad-stepper` for the path to your local clone (e.g. `/path/to/bmad-stepper`). The marketplace install fetches `tgorka/bmad-stepper` to `~/.claude/plugins/cache/bmad-stepper/bmad-stepper/<version>/`. No code runs at install time — the plugin is invoked on demand via the skills declared in `.claude-plugin/plugin.json` (under `skills/<name>/SKILL.md`).
+For unreleased revisions, swap `tgorka/bmad-stepper` for the path to your local clone (e.g. `/path/to/bmad-stepper`). The marketplace install fetches `tgorka/bmad-stepper` to `~/.claude/plugins/cache/bmad-stepper/bmad/<version>/` (v0.2.0+; previously `cache/bmad-stepper/bmad-stepper/<version>/`). No code runs at install time — the plugin is invoked on demand via the skills declared in `.claude-plugin/plugin.json` (under `skills/<name>/SKILL.md`).
 
 In the slash-command picker, type any of the bare names — `/bmad-next`, `/bmad-loop`, `/bmad-doctor` — and Claude Code resolves them since no other plugin defines those names. (v0.1.0 used `commands/*.md` which forced the `/bmad-stepper:bmad-loop` form; v0.2.0 migrated to `skills/` for picker UX parity with the bmad plugin.)
 

@@ -779,9 +779,10 @@ describe("runNext — Story 6.9 --upgrade short-circuit", () => {
     const result = await runNext({
       ...commonOpts(statePath),
       argv: ["--upgrade"],
-      // Stub a "newer than current" tag. Bumped from v0.2.0 → v0.3.0
-      // when the local plugin.json bumped to 0.2.0; the test asserts
-      // the "upgrade available" branch, which requires latest > current.
+      // Stub a "newer than current" tag. Must stay one minor ahead
+      // of the plugin.json version so the "upgrade available" branch
+      // triggers (latest > current). Current plugin.json version is
+      // 0.2.0; stub is v0.3.0 (one minor ahead).
       upgradeFetchOverride: makeStubFetch({
         body: {
           tag_name: "v0.3.0",

@@ -7,7 +7,7 @@
   },
   "plugins": [
     {
-      "name": "bmad-stepper",
+      "name": "bmad",
       "source": "./",
       "description": "Stateful workflow orchestrator for BMAD Method projects in Claude Code."
     }

@@ -41,27 +41,29 @@ BMAD Stepper is a Claude Code plugin that runs the [BMAD method](https://github.
    In-session (inside Claude Code), from a published GitHub release:
    ```text
    /plugin marketplace add tgorka/bmad-stepper
-   /plugin install bmad-stepper@bmad-stepper
+   /plugin install bmad@bmad-stepper
    ```
 
    Or from a local clone (development / unreleased revisions):
    ```text
    /plugin marketplace add /path/to/bmad-stepper
-   /plugin install bmad-stepper@bmad-stepper
+   /plugin install bmad@bmad-stepper
    ```
 
    External CLI (outside Claude Code) — same flow via the `claude` terminal command:
    ```bash
    # Published GitHub release
    claude plugin marketplace add tgorka/bmad-stepper
-   claude plugin install bmad-stepper@bmad-stepper
+   claude plugin install bmad@bmad-stepper
 
    # Local clone
    claude plugin marketplace add /path/to/bmad-stepper
-   claude plugin install bmad-stepper@bmad-stepper
+   claude plugin install bmad@bmad-stepper
    ```
 
-   The marketplace manifest at `.claude-plugin/marketplace.json` lists the `bmad-stepper` plugin; the plugin manifest at `.claude-plugin/plugin.json` declares the `/bmad-next`, `/bmad-doctor`, and `/bmad-loop` skills (under `skills/<name>/SKILL.md`). Type any of the bare names in the Claude Code slash-command picker — Claude Code auto-resolves them since no other plugin defines those names. v0.2.0 migrated from the v0.1.0 `commands/*.md` layout to the `skills/` layout to match the bmad plugin's UX (no visible namespace prefix).
+   The marketplace manifest at `.claude-plugin/marketplace.json` is named `bmad-stepper`; the plugin inside it is named `bmad` (v0.2.0+ — previously `bmad-stepper`). The plugin manifest at `.claude-plugin/plugin.json` declares the `/bmad-next`, `/bmad-doctor`, and `/bmad-loop` skills (under `skills/<name>/SKILL.md`). Type any of the bare names in the Claude Code slash-command picker — Claude Code shows them bare (e.g., `/bmad-loop`) instead of the namespaced form (`/bmad:bmad-loop`) because the plugin name `bmad` is a prefix of each command name.
+
+   > **Coexistence note**: if you also have `bmad@bmad-method` (the BMAD method plugin from PabloLION or `tgorka/bmad-plugin`) installed, both plugins are named `bmad`. The marketplace name (`bmad-method` vs `bmad-stepper`) should disambiguate them in Claude Code's registry, but slash-command picker behavior with same-name plugins is environment-dependent. If you see ambiguity, uninstall one or use the canonical `bmad@<marketplace>:<command>` form.
 
 4. **Run the diagnostic.**
    ```text
@@ -112,7 +114,7 @@ The seven worked example bodies ship with the v0.1.0 marketplace release.
 
 ## Uninstall preserves your data
 
-Removing the Stepper plugin **never touches your project state**. `/plugin uninstall bmad-stepper@bmad-stepper` (or `/plugin marketplace remove bmad-stepper` to remove the marketplace entirely) only deletes the cached plugin under `~/.claude/plugins/cache/`. Your `_bmad-output/.stepper/state.yaml`, `_bmad-output/.stepper/state.yaml.bak`, `_bmad-output/.stepper/runs/*.log`, `_bmad-output/.stepper/runs/*.json`, and `staging/<run-id>/` directories are untouched. You can reinstall Stepper later and resume exactly where you left off (FR49).
+Removing the Stepper plugin **never touches your project state**. `/plugin uninstall bmad@bmad-stepper` (or `/plugin marketplace remove bmad-stepper` to remove the marketplace entirely) only deletes the cached plugin under `~/.claude/plugins/cache/`. Your `_bmad-output/.stepper/state.yaml`, `_bmad-output/.stepper/state.yaml.bak`, `_bmad-output/.stepper/runs/*.log`, `_bmad-output/.stepper/runs/*.json`, and `staging/<run-id>/` directories are untouched. You can reinstall Stepper later and resume exactly where you left off (FR49).
 
 To wipe project state explicitly, run:
 
