@@ -1,0 +1,82 @@
+name: Layer 1 Claude Simulation (opt-in)
+
+# Triggered on every merge to main AND by manual workflow_dispatch.
+# Sends each SKILL.md to the Claude API and asserts Claude's intended
+# bash invocation matches the prescribed Layer-2 entry point. Costs
+# ~$0.05 per run (3 skills × Haiku rates) — not gated on PRs.
+#
+# Setup: set the repository secret `ANTHROPIC_API_KEY` (Settings →
+# Secrets and variables → Actions → New repository secret). Without
+# the secret, every run will skip cleanly (the harness no-ops when
+# the key is absent).
+#
+# Failure surface: the harness exits non-zero when Claude's response
+# does NOT mention the expected `bun run src/commands/<group>/run.ts`
+# shape — indicates a SKILL.md regression where the body is no longer
+# unambiguous to a faithful reader.
+#
+# Trigger rationale: only on merge to main + manual. NOT on a cron
+# schedule (the previous "0 6 2-31/14 * 2" expression did not actually
+# fire bi-weekly under GitHub cron OR-semantics for DOM + DOW; the
+# user opted to drop scheduled runs entirely and accept the per-merge
+# cost in exchange for deterministic triggering).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  layer1-sim:
+    name: Layer 1 Claude Simulation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+
+      - name: Run Layer 1 Claude simulation harness
+        id: layer1
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Pin the model so re-runs are comparable; Haiku 4.5 is the
+          # cheapest Claude 4.x at compatible quality for this prompt.
+          ANTHROPIC_HARNESS_MODEL: claude-haiku-4-5-20251001
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "ANTHROPIC_API_KEY not set; harness will skip cleanly."
+          fi
+          bun test tests/harness/layer1-claude-sim.test.ts
+
+      - name: Open issue on Layer 1 sim failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `[LAYER1-SIM] SKILL.md regression detected by Claude simulation`;
+            const body = `The Layer 1 Claude simulation harness at \`tests/harness/layer1-claude-sim.test.ts\` detected a SKILL.md regression: Claude's response did NOT mention the expected \`bun run\` shape one of the three skills prescribes.
+
+            Possible causes:
+            - SKILL.md prose became ambiguous (a refactor stripped the explicit Bash invocation example).
+            - Claude model behavior drift on the pinned ANTHROPIC_HARNESS_MODEL.
+            - Skill body referencing a script path that no longer matches the runner.
+
+            Next steps: rerun the workflow with \`workflow_dispatch\` to confirm reproducibility; review the failing SKILL.md against the captured response in the workflow log; ship a SKILL.md prose fix.`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ["layer1-sim", "automated"],
+            });

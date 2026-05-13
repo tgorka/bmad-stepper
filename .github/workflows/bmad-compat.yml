@@ -1,9 +1,13 @@
 name: BMAD Compatibility
 
 on:
-  schedule:
-    # Run every Monday at 06:00 UTC
-    - cron: "0 6 * * 1"
+  # Run on every merge to main. Catches BMAD upstream changes whenever
+  # a release lands (e.g., the v0.2.0 release commit on main triggers
+  # a full --doctor + --plan-first + frontmatter sweep against the
+  # latest BMAD upstream installed at that point). Plus manual
+  # workflow_dispatch for ad-hoc verification.
+  push:
+    branches: [main]
   workflow_dispatch: {}
 
 permissions:
@@ -26,13 +30,63 @@ jobs:
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
 
-      - name: Install latest BMAD-METHOD
+      - name: Install latest BMAD (deterministic — clones tgorka/bmad-plugin)
+        # The original step shelled out to `npx bmad-method install --tools
+        # claude-code` and silenced stderr. That command's install path
+        # changed upstream and stopped landing BMAD where the Stepper
+        # detector looks — issue #70 ("BMAD upstream changed") was a
+        # false alarm caused by a broken fixture install, not a real
+        # upstream compat regression.
+        #
+        # Replaced with a deterministic clone of tgorka/bmad-plugin (the
+        # marketplace-style BMAD distribution this Stepper officially
+        # supports per docs/bmad-compatibility.md v0.2.0 row). The
+        # `.plugin-version` file at the root of the clone provides the
+        # version string; we then seed `installed_plugins.json` so the
+        # detector's marketplace-layout path (Story v0.2.0
+        # resolveMarketplacePluginDir at src/bmad-detect/detect-version.ts)
+        # resolves the install. No npx, no silent fallback.
         run: |
-          # The fixture project uses the latest BMAD upstream.
-          # If `npx bmad-method install` is available, use it; otherwise
-          # fall back to git-clone of the BMAD-METHOD repository.
-          npx bmad-method install --tools claude-code 2>/dev/null || \
-            git clone --depth 1 https://github.com/bmad-code-org/BMAD-METHOD.git /tmp/bmad-latest
+          set -euo pipefail
+          PLUGIN_REPO_URL="https://github.com/tgorka/bmad-plugin.git"
+          PLUGIN_CACHE_ROOT="$HOME/.claude/plugins/cache/bmad-method/bmad"
+          INSTALLED_PLUGINS_JSON="$HOME/.claude/plugins/installed_plugins.json"
+          mkdir -p "$HOME/.claude/plugins"
+
+          # Clone into a tmpdir to read .plugin-version, then copy the
+          # plugin payload to the cache-layout path.
+          TMP_CLONE=$(mktemp -d)
+          git clone --depth 1 "$PLUGIN_REPO_URL" "$TMP_CLONE"
+          VERSION=$(cat "$TMP_CLONE/.plugin-version" | sed 's/^v//')
+          DEST="$PLUGIN_CACHE_ROOT/$VERSION"
+          mkdir -p "$(dirname "$DEST")"
+          # The marketplace declares `source: ./plugins/bmad` — copy that
+          # subdirectory as the plugin root (it contains .claude-plugin
+          # and skills/).
+          cp -R "$TMP_CLONE/plugins/bmad" "$DEST"
+          rm -rf "$TMP_CLONE"
+
+          # Write installed_plugins.json so the detector finds the install.
+          cat > "$INSTALLED_PLUGINS_JSON" <<EOF
+          {
+            "version": 2,
+            "plugins": {
+              "bmad@bmad-method": [
+                {
+                  "scope": "user",
+                  "installPath": "$DEST",
+                  "version": "$VERSION",
+                  "installedAt": "2026-01-01T00:00:00.000Z",
+                  "lastUpdated": "2026-01-01T00:00:00.000Z",
+                  "gitCommitSha": "ci"
+                }
+              ]
+            }
+          }
+          EOF
+
+          echo "Installed BMAD v$VERSION at $DEST"
+          ls "$DEST" || true
 
       - name: Run /bmad-next --doctor against latest BMAD
         id: doctor
@@ -41,13 +95,47 @@ jobs:
           # Exit code 0 = compatible; exit code 3 = BMAD compat error.
           bun run src/commands/next/run.ts -- --doctor || echo "DOCTOR_EXIT=$?" >> $GITHUB_OUTPUT
 
+      - name: Run /bmad-loop --plan-first against latest BMAD (dispatch-free smoke)
+        id: planfirst
+        # Read-only path: --plan-first computes the planned step sequence
+        # via the DAG resolver but does NOT dispatch any sub-agent (no
+        # Claude API tokens spent). Catches Tier 3 frontmatter parse
+        # regressions for new BMAD skills that aren't in the seed.
+        # Best-effort: failure here adds context to the issue but does
+        # NOT independently fail the workflow (the doctor step is the
+        # primary gate).
+        if: steps.doctor.outputs.DOCTOR_EXIT == ''
+        run: |
+          bun run src/commands/loop/run.ts -- --plan-first --max-iters 1 || echo "PLANFIRST_EXIT=$?" >> $GITHUB_OUTPUT
+
+      - name: Run skill-frontmatter sanity sweep against the real plugin's skills
+        # Asserts the SKILL.md files under tgorka/bmad-stepper itself
+        # still parse correctly — guards against an upstream `Bun.YAML`
+        # API change breaking the v0.2.0 frontmatter contract.
+        if: steps.doctor.outputs.DOCTOR_EXIT == ''
+        run: bun test tests/skills/skill-frontmatter.test.ts
+
       - name: Open issue on incompatibility
-        if: failure() || steps.doctor.outputs.DOCTOR_EXIT != ''
+        if: failure() || steps.doctor.outputs.DOCTOR_EXIT != '' || steps.planfirst.outputs.PLANFIRST_EXIT != ''
         uses: actions/github-script@v9
         with:
           script: |
-            const title = `[BMAD-COMPAT] BMAD upstream changed; weekly compat check failed`;
-            const body = `The weekly BMAD compatibility check at \`.github/workflows/bmad-compat.yml\` detected an incompatibility with the latest BMAD upstream.\n\nCheck the workflow logs and the doctor diagnostic output. Possible causes:\n- New BMAD skill added (file an [BMAD-COMPAT] issue per template).\n- Existing BMAD skill removed or renamed.\n- BMAD upstream version-detection contract changed.\n\nNext steps: review the workflow run, identify the failing skill, add an \`overrides:\` config example to \`examples/\`, ship a CHANGELOG entry under \`## BMAD Compatibility — vX.Y.x\`.`;
+            const doctorExit = `${{ steps.doctor.outputs.DOCTOR_EXIT }}`;
+            const planFirstExit = `${{ steps.planfirst.outputs.PLANFIRST_EXIT }}`;
+            const title = `[BMAD-COMPAT] BMAD upstream changed; compat check failed`;
+            const body = `The BMAD compatibility check at \`.github/workflows/bmad-compat.yml\` (runs on merge to main) detected an incompatibility with the latest BMAD upstream installed via tgorka/bmad-plugin.
+
+            Detected exit codes:
+            - \`/bmad-next --doctor\`: ${doctorExit || "0 (passed)"}
+            - \`/bmad-loop --plan-first\`: ${planFirstExit || "0 (passed)"}
+
+            Check the workflow logs and the doctor + plan-first diagnostic output. Possible causes:
+            - New BMAD skill added → seed update needed (Tier 1 \`src/dag/seed-v6.x.ts\`) OR override (\`bmad-stepper.config.yaml\`).
+            - Existing BMAD skill removed or renamed → seed update needed.
+            - BMAD upstream version-detection contract changed → \`src/bmad-detect/\` update.
+            - Frontmatter parse regression on a real BMAD skill → \`src/dag/build.ts\` Tier 3 frontmatter parser update.
+
+            Next steps: review the workflow run, identify the failing skill, add an \`overrides:\` config example to \`examples/\`, ship a CHANGELOG entry under \`## BMAD Compatibility — vX.Y.x\`.`;
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
