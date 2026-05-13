@@ -1,0 +1,33 @@
+.claude-plugin/plugin.json
+  s_18a289a788ec61::t_e14a767ca285d6 2
+docs/getting-started.md
+  s_18a289a788ec61::t_e12f9a371f2dd4 28
+  s_18a289a788ec61::t_21b026853ea873 19,25
+src/commands/next/run.test.ts
+  s_18a289a788ec61::t_f0309e8304f66c 784-785
+.claude-plugin/marketplace.json
+  s_18a289a788ec61::t_6b86635bc8c19d 10
+CHANGELOG.md
+  s_18a289a788ec61::t_30577138371722 7,9,11,19,21,23,35
+  s_18a289a788ec61::t_51963a485b1cd0 8,10,12-18,20,22,24-31
+README.md
+  s_18a289a788ec61::t_f69a4003ab4de6 64
+  s_18a289a788ec61::t_dfb26e8bfed798 44,50,57,61,117
+  s_18a289a788ec61::t_101e31993c123c 65-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "6f493346527d2e7fa44e4de582c0258207ba17f6",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": null
+    }
+  }
+}
