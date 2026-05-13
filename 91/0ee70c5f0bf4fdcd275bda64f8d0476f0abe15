@@ -1,0 +1,36 @@
+src/smoke/doctor.test.ts
+  s_18a289a788ec61::t_22cbec6bd88a9b 180-182
+  s_18a289a788ec61::t_effe591bd84bb4 175-179,183-252
+src/smoke/skill-executable-contract.test.ts
+  s_18a289a788ec61::t_6e7081e1fcc950 1-86,90,98-102,107-110,113-146,156-164,166-171,175-179,181-194,196-197,199-243
+  s_18a289a788ec61::t_9a5db5b0ebc824 112
+  s_18a289a788ec61::t_adbb979969720c 111
+  s_18a289a788ec61::t_452a55a489bb1b 147-155,165,172-174,180
+  s_18a289a788ec61::t_5b26ec152e5a68 195,198
+  s_18a289a788ec61::t_37e52b5e98ebbb 87-89,91-97,103-106
+docs/testing-roadmap.md
+  s_18a289a788ec61::t_1b819077e37ae2 1-79
+src/smoke/loop-matrix.test.ts
+  s_18a289a788ec61::t_adbb979969720c 51,83-84,173-175,186-187
+  s_18a289a788ec61::t_dd863345de27fc 1-50,52-82,85-172,176-185,188-226
+src/smoke/next.test.ts
+  s_18a289a788ec61::t_7d54ce59fa3ba8 366-376,378-381,416-421
+README.md
+  s_18a289a788ec61::t_fb9d335a382ee9 135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "910ee70c5f0bf4fdcd275bda64f8d0476f0abe15",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
