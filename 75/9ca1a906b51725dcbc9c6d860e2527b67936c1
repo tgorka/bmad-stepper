@@ -1,0 +1,22 @@
+.github/workflows/bmad-compat.yml
+  s_18a289a788ec61::t_03a0af939b1387 33-48,50-89
+  s_18a289a788ec61::t_3bec1b7e8c7bbc 125-126
+.github/workflows/ci.yml
+  s_18a289a788ec61::t_73f7a506c92147 4-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "759ca1a906b51725dcbc9c6d860e2527b67936c1",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
