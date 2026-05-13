@@ -28,3 +28,36 @@ export function error(message: string): void {
 export function json(payload: unknown): void {
   process.stdout.write(`${JSON.stringify(payload)}\n`);
 }
+
+/**
+ * Env-gated diagnostic trace. Writes to stderr ONLY when `STEPPER_TRACE`
+ * is set to a truthy value (`1`, `true`, anything non-empty other than
+ * `0` / `false`). Callers prepend their own subsystem tag.
+ *
+ * Zero overhead when disabled: the env check short-circuits before any
+ * string interpolation. Use freely on hot paths to expose lock
+ * acquisition timestamps, BMAD detection cache vs spec layout, DAG
+ * resolution tier (seed / override / frontmatter), persona resolution,
+ * scope-check decisions — anything a user might want to see when
+ * diagnosing a stuck or surprising loop.
+ *
+ * stdout discipline (FR54) is preserved: trace lines route to stderr
+ * exactly like `info` / `warn` / `error`.
+ */
+export function traceLog(message: string): void {
+  const flag = process.env.STEPPER_TRACE;
+  if (flag === undefined || flag === "" || flag === "0" || flag === "false") {
+    return;
+  }
+  process.stderr.write(`[trace] ${message}\n`);
+}
+
+/**
+ * Returns true when STEPPER_TRACE is enabled. Useful for guarding
+ * expensive trace-only computations (e.g., serialising a large state
+ * snapshot) at the call site so the work is also skipped when off.
+ */
+export function isTraceEnabled(): boolean {
+  const flag = process.env.STEPPER_TRACE;
+  return flag !== undefined && flag !== "" && flag !== "0" && flag !== "false";
+}

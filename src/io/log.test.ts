@@ -6,8 +6,8 @@
  * other (the load-bearing FR54 invariant).
  */
 
-import { afterEach, describe, expect, it, spyOn } from "bun:test";
-import { error, info, json, warn } from "./log.ts";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { error, info, isTraceEnabled, json, traceLog, warn } from "./log.ts";
 
 describe("log.info", () => {
   afterEach(() => {
@@ -126,5 +126,88 @@ describe("log.json", () => {
       stdoutSpy.mockRestore();
       stderrSpy.mockRestore();
     }
+  });
+});
+
+describe("log.traceLog", () => {
+  const original = process.env.STEPPER_TRACE;
+
+  beforeEach(() => {
+    delete process.env.STEPPER_TRACE;
+  });
+
+  afterEach(() => {
+    if (original === undefined) {
+      delete process.env.STEPPER_TRACE;
+    } else {
+      process.env.STEPPER_TRACE = original;
+    }
+  });
+
+  it("emits nothing when STEPPER_TRACE is unset", () => {
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true,
+    );
+    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    try {
+      traceLog("subsystem: hello");
+      expect(stdoutSpy).not.toHaveBeenCalled();
+      expect(stderrSpy).not.toHaveBeenCalled();
+    } finally {
+      stdoutSpy.mockRestore();
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("emits to stderr with [trace] prefix when STEPPER_TRACE=1", () => {
+    process.env.STEPPER_TRACE = "1";
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true,
+    );
+    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    try {
+      traceLog("dag: tier=seed step=bmad-brainstorming");
+      expect(stderrSpy).toHaveBeenCalledTimes(1);
+      expect(stderrSpy).toHaveBeenCalledWith(
+        "[trace] dag: tier=seed step=bmad-brainstorming\n",
+      );
+      expect(stdoutSpy).not.toHaveBeenCalled();
+    } finally {
+      stdoutSpy.mockRestore();
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("treats STEPPER_TRACE=0 / false / empty as off", () => {
+    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(
+      () => true,
+    );
+    try {
+      for (const off of ["0", "false", ""]) {
+        process.env.STEPPER_TRACE = off;
+        traceLog("should be silent");
+        expect(stderrSpy).not.toHaveBeenCalled();
+      }
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("isTraceEnabled mirrors traceLog's gate", () => {
+    expect(isTraceEnabled()).toBe(false);
+    process.env.STEPPER_TRACE = "1";
+    expect(isTraceEnabled()).toBe(true);
+    process.env.STEPPER_TRACE = "true";
+    expect(isTraceEnabled()).toBe(true);
+    process.env.STEPPER_TRACE = "0";
+    expect(isTraceEnabled()).toBe(false);
+    process.env.STEPPER_TRACE = "false";
+    expect(isTraceEnabled()).toBe(false);
+    process.env.STEPPER_TRACE = "";
+    expect(isTraceEnabled()).toBe(false);
   });
 });

@@ -131,6 +131,7 @@ To re-create from scratch after a wipe, just run `/bmad-next` again — the stat
 | [`docs/configuration.md`](docs/configuration.md) | `bmad-stepper.config.yaml` schema reference |
 | [`docs/bmad-compatibility.md`](docs/bmad-compatibility.md) | Per-Stepper-release BMAD compat history |
 | [`docs/architecture.md`](docs/architecture.md) | Mirror of the planning architecture |
+| [`docs/debugging.md`](docs/debugging.md) | Forensic surfaces: transcripts, state, `STEPPER_TRACE`, `--verbose`, recipes |
 | [`docs/examples/`](docs/examples/) | Seven worked examples (cold-start return, single-step, overnight loop, halt recovery, skip-on-failure, doctor diagnostic, state export for CI) |
 
 ## Repo links

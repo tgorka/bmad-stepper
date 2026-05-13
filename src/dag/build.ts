@@ -72,7 +72,7 @@ import {
   DagCycleError,
   UnknownBmadSkillError,
 } from "../errors.ts";
-import { warn } from "../io/log.ts";
+import { traceLog, warn } from "../io/log.ts";
 import { seedV6_x } from "./seed-v6.x.ts";
 import { tarjanScc } from "./tarjan.ts";
 import type {
@@ -817,6 +817,7 @@ export async function build(input: BuildInput): Promise<DagAdjacency> {
   // Tier 3: frontmatter parse for unknown skillNames.
   for (const skillName of input.skillNames) {
     if (resolved.has(skillName)) {
+      traceLog(`dag: tier=seed/override skill=${skillName}`);
       continue;
     }
     if (input.pluginDir === undefined) {
@@ -826,6 +827,9 @@ export async function build(input: BuildInput): Promise<DagAdjacency> {
         ac3UnknownSkillHint(skillName),
       );
     }
+    traceLog(
+      `dag: tier=frontmatter skill=${skillName} pluginDir=${input.pluginDir}`,
+    );
     const node = await tier3FrontmatterParse(skillName, input.pluginDir);
     resolved.set(skillName, node);
   }
