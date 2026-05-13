@@ -1,0 +1,22 @@
+src/smoke/skill-invocation.test.ts
+  s_18a289a788ec61::t_6b9579d95d8e5e 50-54,57,64-67
+src/commands/doctor/run.ts
+  s_18a289a788ec61::t_f55ef45b318b2d 159-170,172-186,202-209,215-222,226-241
+  s_18a289a788ec61::t_023c731ccbac5a 246-256,258-264,268,271-276
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "cd03b7f211e4abef83a43286c7697d1b95ebcecc",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
