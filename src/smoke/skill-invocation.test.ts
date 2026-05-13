@@ -47,17 +47,24 @@ describe("skill-invocation body shape", () => {
     expect(body).toMatch(
       /bun run.*src\/commands\/next\/verify-and-advance\.ts/,
     );
-    expect(body).toContain("Task");
+    // Tighter than `body.contains("Task")`: assert the body documents
+    // a concrete Task dispatch step ("Task(...)" call shape OR the
+    // canonical "Task tool" phrase). A bare word "Task" anywhere in
+    // prose was too lenient (cubic PR #67).
+    expect(body).toMatch(/Task\(|Task tool|Task dispatch/);
   });
 
-  it("bmad-loop body references both Layer-2 entry points + Task tool", async () => {
+  it("bmad-loop body references both Layer-2 entry points + Task tool + verify-and-advance.ts", async () => {
     const body = await readSkillBody("bmad-loop");
     // Loop's per-iteration body delegates to next/run.ts + next/verify-
     // and-advance.ts (driver loop) AND has a plan-first delegation to
     // src/commands/loop/run.ts.
     expect(body).toMatch(/bun run.*src\/commands\/next\/run\.ts/);
     expect(body).toMatch(/bun run.*src\/commands\/loop\/run\.ts/);
-    expect(body).toContain("Task");
+    // Cubic PR #67: the loop's required post-dispatch step is verify-
+    // and-advance.ts — assert the body references it explicitly.
+    expect(body).toMatch(/verify-and-advance\.ts/);
+    expect(body).toMatch(/Task\(|Task tool|Task dispatch/);
   });
 
   it("bmad-doctor body references its Layer-2 entry point", async () => {

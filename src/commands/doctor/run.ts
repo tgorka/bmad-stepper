@@ -156,21 +156,34 @@ async function collectVerboseDiagnostics(
     "bmad-method",
     "bmad",
   );
-  const cacheVersions = await safeReaddir(cachePath);
-  lines.push(
-    cacheVersions.length > 0
-      ? `BMAD cache layout: ${cachePath}/{${cacheVersions.join(", ")}}`
-      : `BMAD cache layout: (no installs at ${cachePath})`,
-  );
+  const cacheProbe = await probeReaddir(cachePath);
+  if (cacheProbe.kind === "present") {
+    lines.push(
+      cacheProbe.entries.length > 0
+        ? `BMAD cache layout: ${cachePath}/{${cacheProbe.entries.join(", ")}}`
+        : `BMAD cache layout: (empty directory at ${cachePath})`,
+    );
+  } else if (cacheProbe.kind === "absent") {
+    lines.push(`BMAD cache layout: (no installs at ${cachePath})`);
+  } else {
+    lines.push(`BMAD cache layout: (unreadable: ${cacheProbe.reason})`);
+  }
   const pluginsRoot = path.join(homeDir, ".claude", "plugins");
-  const legacyEntries = (await safeReaddir(pluginsRoot)).filter((e) =>
-    e.startsWith("bmad-method-"),
-  );
-  lines.push(
-    legacyEntries.length > 0
-      ? `BMAD legacy layout: ${pluginsRoot}/{${legacyEntries.join(", ")}}`
-      : `BMAD legacy layout: (no bmad-method-* directories)`,
-  );
+  const legacyProbe = await probeReaddir(pluginsRoot);
+  if (legacyProbe.kind === "present") {
+    const legacyEntries = legacyProbe.entries.filter((e) =>
+      e.startsWith("bmad-method-"),
+    );
+    lines.push(
+      legacyEntries.length > 0
+        ? `BMAD legacy layout: ${pluginsRoot}/{${legacyEntries.join(", ")}}`
+        : `BMAD legacy layout: (no bmad-method-* directories)`,
+    );
+  } else if (legacyProbe.kind === "absent") {
+    lines.push(`BMAD legacy layout: (no ${pluginsRoot} directory)`);
+  } else {
+    lines.push(`BMAD legacy layout: (unreadable: ${legacyProbe.reason})`);
+  }
 
   // Seed version + DAG node count.
   lines.push(`Seed BMAD version: ${SEED_BMAD_VERSION}`);
@@ -186,47 +199,81 @@ async function collectVerboseDiagnostics(
   const statePath =
     ctx.statePath ??
     path.join(projectRoot, STEPPER_INTERNAL_ROOT, "state.yaml");
-  const stateExists = await safeStat(statePath);
-  lines.push(
-    `State file: ${statePath} ${stateExists ? "(present)" : "(not present)"}`,
-  );
+  const stateProbe = await probeStat(statePath);
+  const stateSuffix =
+    stateProbe.kind === "present"
+      ? "(present)"
+      : stateProbe.kind === "absent"
+        ? "(not present)"
+        : `(unreadable: ${stateProbe.reason})`;
+  lines.push(`State file: ${statePath} ${stateSuffix}`);
   const lockDir = path.join(
     projectRoot,
     STEPPER_INTERNAL_ROOT,
     "state.yaml.lock",
   );
-  const lockExists = await safeStat(lockDir);
-  lines.push(`Lock dir: ${lockDir} ${lockExists ? "(held)" : "(free)"}`);
+  const lockProbe = await probeStat(lockDir);
+  const lockSuffix =
+    lockProbe.kind === "present"
+      ? "(held)"
+      : lockProbe.kind === "absent"
+        ? "(free)"
+        : `(unreadable: ${lockProbe.reason})`;
+  lines.push(`Lock dir: ${lockDir} ${lockSuffix}`);
 
   // Last 3 run-log entries.
   const runsDir = path.join(projectRoot, STEPPER_INTERNAL_ROOT, "runs");
-  const runEntries = (await safeReaddir(runsDir))
-    .filter((e) => e.endsWith(".log"))
-    .sort()
-    .slice(-3);
-  lines.push(
-    runEntries.length > 0
-      ? `Last 3 run logs: ${runEntries.join(", ")}`
-      : `Last 3 run logs: (none under ${runsDir})`,
-  );
+  const runsProbe = await probeReaddir(runsDir);
+  if (runsProbe.kind === "present") {
+    const runEntries = runsProbe.entries
+      .filter((e) => e.endsWith(".log"))
+      .sort()
+      .slice(-3);
+    lines.push(
+      runEntries.length > 0
+        ? `Last 3 run logs: ${runEntries.join(", ")}`
+        : `Last 3 run logs: (none under ${runsDir})`,
+    );
+  } else if (runsProbe.kind === "absent") {
+    lines.push(`Last 3 run logs: (no ${runsDir} directory)`);
+  } else {
+    lines.push(`Last 3 run logs: (unreadable: ${runsProbe.reason})`);
+  }
 
   return lines;
 }
 
-async function safeReaddir(dir: string): Promise<readonly string[]> {
+type DirProbe =
+  | { readonly kind: "present"; readonly entries: readonly string[] }
+  | { readonly kind: "absent" }
+  | { readonly kind: "unreadable"; readonly reason: string };
+
+type StatProbe =
+  | { readonly kind: "present" }
+  | { readonly kind: "absent" }
+  | { readonly kind: "unreadable"; readonly reason: string };
+
+async function probeReaddir(dir: string): Promise<DirProbe> {
   try {
-    return await fs.readdir(dir);
-  } catch {
-    return [];
+    const entries = await fs.readdir(dir);
+    return { kind: "present", entries };
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return { kind: "absent" };
+    const reason = err instanceof Error ? err.message : String(err);
+    return { kind: "unreadable", reason };
   }
 }
 
-async function safeStat(p: string): Promise<boolean> {
+async function probeStat(p: string): Promise<StatProbe> {
   try {
     await fs.stat(p);
-    return true;
-  } catch {
-    return false;
+    return { kind: "present" };
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return { kind: "absent" };
+    const reason = err instanceof Error ? err.message : String(err);
+    return { kind: "unreadable", reason };
   }
 }
 
