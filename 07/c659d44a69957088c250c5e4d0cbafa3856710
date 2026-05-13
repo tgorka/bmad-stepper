@@ -1,0 +1,59 @@
+src/dag/build.ts
+  s_18a289a788ec61::t_4272da79208adc 75
+  s_18a289a788ec61::t_01f3b7862fec21 830-832
+  s_18a289a788ec61::t_93e47a684999eb 820
+docs/debugging.md
+  s_18a289a788ec61::t_5ebc2dd43d80ed 1-132
+src/commands/doctor/args.ts
+  s_18a289a788ec61::t_c5f807aa943021 149
+  s_18a289a788ec61::t_175a1d0abbaebc 132
+  s_18a289a788ec61::t_bdd7aa09b1a97c 61,63-69,71-72,74-78
+src/smoke/skill-invocation.test.ts
+  s_18a289a788ec61::t_01f3b7862fec21 33,47-49
+  s_18a289a788ec61::t_88231dac1afb8a 1-32,34-46,50-88
+src/io/log.ts
+  s_18a289a788ec61::t_b9109d405f55b6 31-61,63
+  s_18a289a788ec61::t_01f3b7862fec21 62
+src/bmad-detect/detect-version.ts
+  s_18a289a788ec61::t_bf484cdc87c64a 143-146,149-152,154
+  s_18a289a788ec61::t_1cb1ec882298cb 82
+src/commands/doctor/run.ts
+  s_18a289a788ec61::t_e6143901c1680a 137-150,159-185,189-191,197-232
+  s_18a289a788ec61::t_5332f252dcefb8 66-68,72
+  s_18a289a788ec61::t_729b7b975ef9c3 118-124
+  s_18a289a788ec61::t_0728424254b0ed 300-320
+  s_18a289a788ec61::t_09992413a2880c 376
+  s_18a289a788ec61::t_b7f0ad3defabf1 69,151-158,186-188,192-196
+src/io/log.test.ts
+  s_18a289a788ec61::t_3b93fb6d5a7a7a 9-10
+  s_18a289a788ec61::t_a1a8c8ffff30e2 131-213
+src/smoke/doctor.test.ts
+  s_18a289a788ec61::t_0aeab8fe866fdf 161-166
+  s_18a289a788ec61::t_acee1e198b6f9a 1-76,81-108,125-151,175
+  s_18a289a788ec61::t_480a52cb9bdeb9 152-160,167-174
+  s_18a289a788ec61::t_01f3b7862fec21 77-80
+  s_18a289a788ec61::t_047b6dfbb0b126 109-124
+README.md
+  s_18a289a788ec61::t_0ba27550e07855 134
+src/smoke/loop-stop-conditions.test.ts
+  s_18a289a788ec61::t_01f3b7862fec21 112
+  s_18a289a788ec61::t_cb4ca350c45c3b 1-111,113-125
+src/smoke/loop.test.ts
+  s_18a289a788ec61::t_3d461be58fad61 1-140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "07c659d44a69957088c250c5e4d0cbafa3856710",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "unknown"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
