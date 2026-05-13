@@ -4,9 +4,35 @@ This file is auto-managed by [Changesets](https://github.com/changesets/changese
 
 ## 0.2.0 — 2026-05-13
 
+### BREAKING — plugin name `bmad-stepper` → `bmad`; commands appear bare in the slash picker
+
+The plugin's `name` field in `.claude-plugin/plugin.json` (and the matching entry in `.claude-plugin/marketplace.json`) is `bmad`. The **marketplace** name remains `bmad-stepper`.
+
+| Surface | Before (v0.1.0) | After (v0.2.0) |
+|---|---|---|
+| Install command (in Claude Code) | `/plugin install bmad-stepper@bmad-stepper` | `/plugin install bmad@bmad-stepper` |
+| Install command (external CLI) | `claude plugin install bmad-stepper@bmad-stepper` | `claude plugin install bmad@bmad-stepper` |
+| Uninstall | `/plugin uninstall bmad-stepper@bmad-stepper` | `/plugin uninstall bmad@bmad-stepper` |
+| Slash-command picker | `/bmad-stepper:bmad-loop`, etc. | `/bmad-loop`, `/bmad-next`, `/bmad-doctor` (bare) |
+| On-disk cache layout | `~/.claude/plugins/cache/bmad-stepper/bmad-stepper/<v>/` | `~/.claude/plugins/cache/bmad-stepper/bmad/<v>/` |
+
+The slash-command picker shows commands bare (no prefix) because the plugin name `bmad` is a prefix of each command name (`bmad-loop`, `bmad-next`, `bmad-doctor`) — Claude Code's picker collapses the redundant namespace prefix in this case (same convention as the `bmad` plugin from `bmad-method`).
+
+**Coexistence with `bmad@bmad-method`**: if you have both `bmad@bmad-method` (the BMAD method plugin from `bmad-code-org/bmad-method` or `tgorka/bmad-plugin`) and `bmad@bmad-stepper` (this) installed, both plugins are named `bmad`. The marketplace name distinguishes them in `~/.claude/plugins/installed_plugins.json` (the key is `<plugin>@<marketplace>`), but slash-command picker behavior with same-name plugins is environment-dependent. The Stepper detector itself reads `installed_plugins.json` and resolves `bmad@bmad-method` (the BMAD method skills) independently — the rename does not change BMAD detection. If you observe ambiguity in the slash-command picker, use the canonical `<plugin>@<marketplace>:<command>` form (e.g., `/bmad@bmad-stepper:bmad-loop`).
+
+**Migration from v0.1.0**:
+
+```text
+/plugin uninstall bmad-stepper@bmad-stepper
+/plugin marketplace update tgorka/bmad-stepper
+/plugin install bmad@bmad-stepper
+```
+
+State (`_bmad-output/.stepper/`) is preserved across plugin uninstall/reinstall per the FR49 invariant — no data loss.
+
 ### BREAKING — skills migration (UX)
 
-The three Layer-1 markdown files moved from `commands/<name>.md` (slash-command layout) to `skills/<name>/SKILL.md` (skill layout). The Claude Code slash-command picker now shows bare `/bmad-loop`, `/bmad-next`, `/bmad-doctor` with a `(bmad-stepper)` source hint instead of the prefixed `/bmad-stepper:bmad-loop` form. Matches the bmad plugin's UX.
+The three Layer-1 markdown files moved from `commands/<name>.md` (slash-command layout) to `skills/<name>/SKILL.md` (skill layout). The Claude Code slash-command picker now shows bare `/bmad-loop`, `/bmad-next`, `/bmad-doctor` with a `(bmad)` source hint instead of the prefixed `/bmad-stepper:bmad-loop` form. Matches the bmad plugin's UX.
 
 - `/bmad-stepper:bmad-loop` no longer resolves; type `/bmad-loop`.
 - Same for `/bmad-stepper:bmad-next` → `/bmad-next` and `/bmad-stepper:bmad-doctor` → `/bmad-doctor`.
