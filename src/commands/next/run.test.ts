@@ -779,11 +779,14 @@ describe("runNext — Story 6.9 --upgrade short-circuit", () => {
     const result = await runNext({
       ...commonOpts(statePath),
       argv: ["--upgrade"],
+      // Stub a "newer than current" tag. Bumped from v0.2.0 → v0.3.0
+      // when the local plugin.json bumped to 0.2.0; the test asserts
+      // the "upgrade available" branch, which requires latest > current.
       upgradeFetchOverride: makeStubFetch({
         body: {
-          tag_name: "v0.2.0",
+          tag_name: "v0.3.0",
           html_url:
-            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.2.0",
+            "https://github.com/tgorka/bmad-stepper/releases/tag/v0.3.0",
           body: "## BMAD Compatibility — v6.5.x\n\nNotes.",
         },
       }),
