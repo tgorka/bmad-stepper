@@ -1,0 +1,75 @@
+skills/bmad-next/SKILL.md
+  s_18a289a788ec61::t_c65033fb584ccf 36
+  s_18a289a788ec61::t_ef972bc8f8a7dc 439,442
+  s_18a289a788ec61::t_0654ac9b50d02e 428
+  s_18a289a788ec61::t_deeac357f7df80 2-3,25-29
+  s_18a289a788ec61::t_80297cd549dac1 345-346
+  s_18a289a788ec61::t_4d7a943d46fad8 1,4-24,30-35,37-344,347-427,429-438,440-441,443-659
+docs/bmad-compatibility.md
+  s_18a289a788ec61::t_3491b5982d90eb 27-28
+  s_18a289a788ec61::t_2e29b7165a143e 79
+  s_18a289a788ec61::t_d38693bde9d9fc 41-52,55
+skills/bmad-loop/SKILL.md
+  s_18a289a788ec61::t_8ac7d5f9af1a82 103
+  s_18a289a788ec61::t_7c0becf7f06230 107,115,120,357,968,1059,1301
+  s_18a289a788ec61::t_fa7af8f49f9f3f 2-3
+  s_18a289a788ec61::t_88e333f523b622 185,190,193
+  s_18a289a788ec61::t_faedb9e0c869cf 1,4-40,46-49,51-71,73-78,80-87,89,91-102,104-106,108-114,116-119,121-184,186-189,191-192,194-356,358-967,969-1058,1060-1300,1302-1341
+  s_18a289a788ec61::t_9e55050bfff735 72,79,88,90
+  s_18a289a788ec61::t_30653bd610cd64 41-45,50
+docs/getting-started.md
+  s_18a289a788ec61::t_4a3a0bcfcc24f6 9-11
+  s_18a289a788ec61::t_b806fc00a5d0ee 28-30
+.changeset/v0-2-0-skills-and-bundled-fixes.md
+  s_18a289a788ec61::t_d24c128f0f35fc 1-35
+.claude-plugin/plugin.json
+  s_18a289a788ec61::t_2c4754cbc26176 11
+skills/bmad-doctor/SKILL.md
+  s_18a289a788ec61::t_564c4f5d1d4ddf 1-38
+README.md
+  s_18a289a788ec61::t_7317dbf9650602 16-29,33-37
+  s_18a289a788ec61::t_7d68777f00fc5d 64
+src/dag/seed-v6.x.ts
+  s_18a289a788ec61::t_71e3efe721c950 2,5-8
+  s_18a289a788ec61::t_2ce1cbdd53931d 51
+tests/skills/skill-frontmatter.test.ts
+  s_18a289a788ec61::t_fbc14b392697e2 1-64,69-82,87-93,98-100
+  s_18a289a788ec61::t_f1a1db31b4cccc 65-68,83-86,94-97
+docs/architecture.md
+  s_18a289a788ec61::t_b15c2c15941e32 126-129
+  s_18a289a788ec61::t_23073c75a15d70 205
+  s_18a289a788ec61::t_804e94b940fb70 116
+  s_18a289a788ec61::t_d9e0639b6c168b 17-21
+src/commands/loop/run.ts
+  s_18a289a788ec61::t_04d4593310fe31 268,1478,1787
+AGENTS.md
+  s_18a289a788ec61::t_80f0a89b240a1e 7
+  s_18a289a788ec61::t_409087c116c482 66,68,70-75,77-79
+src/commands/loop/run.test.ts
+  s_18a289a788ec61::t_59b90056b582eb 288
+src/commands/doctor/run.ts
+  s_18a289a788ec61::t_6736c050ff39d9 58-59
+docs/configuration.md
+  s_18a289a788ec61::t_eba517e95069b5 395,900
+  s_18a289a788ec61::t_e039604bfe9e8e 823
+  s_18a289a788ec61::t_7645a14fe8ed62 354
+  s_18a289a788ec61::t_1287a1b0e728ed 463
+docs/examples/overnight-loop.md
+  s_18a289a788ec61::t_585aa62822f440 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "0c7bf242de6e9ceb6c579995fcc9453e8031ce1e",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}

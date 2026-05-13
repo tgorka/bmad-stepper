@@ -1,0 +1,21 @@
+skills/bmad-next/SKILL.md
+  s_18a289a788ec61::t_0a57f2bcb8e716 553,560-562
+skills/bmad-loop/SKILL.md
+  s_18a289a788ec61::t_8f26a4761ce670 985
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "eb84e7be59c3d086f4fca0cd737933d2f4ae6625",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}

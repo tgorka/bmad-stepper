@@ -1,0 +1,28 @@
+skills/bmad-doctor/SKILL.md
+  s_18a289a788ec61::t_a8fcea1749f4d1 15-16
+  s_18a289a788ec61::t_738efe976cfea9 3
+  s_18a289a788ec61::t_05276d837bfe38 35-36
+skills/bmad-next/SKILL.md
+  s_18a289a788ec61::t_d6d8b424bd7622 26-28
+skills/bmad-loop/SKILL.md
+  s_18a289a788ec61::t_67df1c22b8fbe4 42-44
+AGENTS.md
+  s_18a289a788ec61::t_7a4b77117486bb 77,79
+  s_18a289a788ec61::t_de7b5cbf036001 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "8cc268b48b947e011c81a9b897567b4823033000",
+  "prompts": {},
+  "sessions": {
+    "s_18a289a788ec61": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c35b9b97-0b5d-4725-85b5-bf07352df3e9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
