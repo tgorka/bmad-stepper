@@ -1,0 +1,79 @@
+src/commands/next/verify-and-advance.test.ts
+  s_b41afce893f436::t_d6b9d7e0de6322 4081
+  s_b41afce893f436::t_edb6bc713eaa64 4083-4084,4158,4197
+  s_b41afce893f436::t_7316a68d94c9f4 4200-4202,4211-4212,4225-4226
+  s_b41afce893f436::t_246a23e646e578 4080,4082,4085-4157,4159-4196,4198-4199,4203-4210,4213-4224,4227-4251
+src/commands/next/args.ts
+  s_b41afce893f436::t_fe5784aff1fa56 395,458,600
+  s_b41afce893f436::t_adcd913831b077 709
+  s_b41afce893f436::t_fa8db7593a781e 459-463
+  s_b41afce893f436::t_365b906f143a7a 394,396-406
+  s_b41afce893f436::t_c0747553f2818d 601-608
+.changeset/v0-2-1-invoke-skill-gate.md
+  s_b41afce893f436::t_39d6d787156a40 2
+src/dispatch/emit.ts
+  s_b41afce893f436::t_ccff4b89086ae3 48
+  s_b41afce893f436::t_f8923101fd951d 47,49-53
+src/schemas/dispatch-protocol.ts
+  s_b41afce893f436::t_f236281d606227 23
+  s_b41afce893f436::t_3880657d375bfc 14,22,24-31
+  s_b41afce893f436::t_b810159dbfbbbb 71-87
+src/dispatch/emit.test.ts
+  s_b41afce893f436::t_c446f9d1617ed3 99
+  s_b41afce893f436::t_6f25f5e4195b70 190-210
+skills/bmad-next/SKILL.md
+  s_b41afce893f436::t_918edbbdea8691 57,69-75,78
+  s_b41afce893f436::t_8ef34ef2c753fd 10,68,114,223
+  s_b41afce893f436::t_b84d3a8bd90b3b 8-9
+  s_b41afce893f436::t_e0cfb4261c0efc 113,115-128
+  s_b41afce893f436::t_542be646e7affe 224-237
+.claude-plugin/plugin.json
+  s_b41afce893f436::t_da164e45268af0 3
+src/schemas/dispatch-protocol.test.ts
+  s_b41afce893f436::t_c40a5c222b48cb 277,279
+  s_b41afce893f436::t_ebb07301d91a6e 276,278,280-290,292-369
+  s_b41afce893f436::t_96e3598550212a 291
+src/commands/loop/run.ts
+  s_b41afce893f436::t_465af336a62605 100,851
+  s_b41afce893f436::t_9cdb264b358e98 1813-1814
+  s_b41afce893f436::t_94858aa354d6a7 99,101-103,105
+  s_b41afce893f436::t_014d04ac017e5f 850,852,855
+src/commands/next/args.test.ts
+  s_b41afce893f436::t_cbdbf5dffabb54 792,794-846
+  s_b41afce893f436::t_c0d6991a72c895 793
+package.json
+  s_b41afce893f436::t_44b8beeae55b54 3
+skills/bmad-loop/SKILL.md
+  s_b41afce893f436::t_720866f2213334 114,148
+  s_b41afce893f436::t_9df53303d79c17 113,115,149-185
+src/commands/next/run.test.ts
+  s_b41afce893f436::t_3353a1046ec067 785
+  s_b41afce893f436::t_710cb91533279b 1025,1027-1106
+  s_b41afce893f436::t_c3f32ed84e2977 1024,1026
+  s_b41afce893f436::t_2fcfdafed94287 782-783
+src/commands/next/run.ts
+  s_b41afce893f436::t_8e54fbd3749eb4 109
+  s_b41afce893f436::t_96e3598550212a 111-114,2345
+  s_b41afce893f436::t_430820d197611f 291,2323
+  s_b41afce893f436::t_c88bf9de535ca7 290,292-298
+  s_b41afce893f436::t_3a3d82ce4793e6 2324-2344,2346-2400
+src/commands/next/verify-and-advance.ts
+  s_b41afce893f436::t_2673b6f7622d83 1049-1129
+  s_b41afce893f436::t_e14d1b6a073a82 1048
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "d0054d3d4f1c5285f9af3c9121e8c6555298737e",
+  "prompts": {},
+  "sessions": {
+    "s_b41afce893f436": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2b314949-892b-4f27-8389-418319c1ddad",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
