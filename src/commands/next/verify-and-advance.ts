@@ -1045,6 +1045,88 @@ export async function runVerifyAndAdvance(
       return { exitCode, action: actionResult, transcriptPaths, promotedTo };
     }
 
+    // v0.2.1 INVOKE-SKILL PATH: when args.invokeSkillMode is true (the
+    // --invoke-skill-mode argv flag forwarded by Layer 1's slash-command
+    // markdown), the BMad plugin skill — invoked in-thread by Layer 1
+    // via the Skill tool — already wrote its canonical artifact directly.
+    // Skip the dispatch-spec read, the verifier invocation, AND the
+    // promote step (there is no staging source to copy); just advance
+    // state and append a success-marked runHistory entry.
+    //
+    // Required upstream invariant: `args.lastAttempted` MUST be populated
+    // (forwarded via --last-attempted-json from the AR9 invoke-skill
+    // action that `run.ts` emitted). Without it we cannot derive the
+    // (step, epic, story) tuple for the lastSuccessfulStep advance.
+    //
+    // The verifier is BYPASSED on this path because the existing
+    // per-step verifier configs (defaultVerifiers — glob `**/*.md` +
+    // `<stepName>.md` filename convention) target the staging-outputs
+    // layout that this path never produces. The BMad plugin skill is
+    // the source of truth for its own artifact quality; a future story
+    // may add per-step canonical-path verifier overrides via project
+    // config.
+    if (args.invokeSkillMode === true) {
+      if (args.lastAttempted === undefined || args.lastAttempted === null) {
+        throw new ConfigError(
+          `--invoke-skill-mode requires --last-attempted-json '<JSON>'`,
+          JSON.stringify({ invokeSkillMode: true, lastAttempted: null }),
+          `Pass --last-attempted-json '<JSON>' alongside --invoke-skill-mode; Layer 1 forwards this from the AR9 invoke-skill line.`,
+        );
+      }
+      const nowIso = opts?.nowIso ?? new Date().toISOString();
+      const durationMs = Math.round(performance.now() - startMs);
+      const successEntry: RunHistoryEntry = {
+        runId: args.runId,
+        step: args.lastAttempted.step,
+        epic: args.lastAttempted.epic,
+        story: args.lastAttempted.story,
+        attemptNumber: 1,
+        outcome: "pass",
+        failureCode: null,
+        completedAt: nowIso,
+        // verifierStatus: "skip" reflects the verifier-bypass on this
+        // path (the BMad plugin skill owns artifact quality; the
+        // per-step verifier was not invoked).
+        verifierStatus: "skip",
+        promotedTo: null,
+        durationMs,
+        tokensIn: args.tokensIn,
+        tokensOut: args.tokensOut,
+        ts: nowIso,
+      };
+      stateAfter = {
+        ...stateBefore,
+        lastSuccessfulStep: {
+          step: args.lastAttempted.step,
+          epic: args.lastAttempted.epic,
+          story: args.lastAttempted.story,
+          completedAt: nowIso,
+        },
+        lastAttempted: null,
+        // Symmetric with the dispatch-path success branch: clear the
+        // failure context on success per Story 3.1 AC line 735.
+        lastFailureReason: null,
+        runHistory: trimRunHistory([
+          ...(stateBefore.runHistory ?? []),
+          successEntry,
+        ]),
+        // checkpoints UNCHANGED — invoke-skill mode does NOT trigger
+        // checkpoint append on this path (no DAG-resolved phase here;
+        // a future story may extend if --checkpoint-each is to apply).
+      };
+      await saveState(stateAfter, handle, { statePath: opts?.statePath });
+      actionResult = {
+        action: "report",
+        message: `✓ ${args.lastAttempted.step} → invoke-skill (tokens: in=${args.tokensIn} out=${args.tokensOut}, ${durationMs}ms)`,
+        exitCode: 0,
+      };
+      exitCode = 0;
+      // Return EARLY — the invoke-skill branch BYPASSES the dispatch-
+      // spec read + verifier invocation + promote step entirely. The
+      // lock release happens in the finally block per AR8 contract.
+      return { exitCode, action: actionResult, transcriptPaths, promotedTo };
+    }
+
     // Step 4: read dispatch-spec.
     dispatchSpec = await readDispatchSpec(stagingRoot, args.runId);
 

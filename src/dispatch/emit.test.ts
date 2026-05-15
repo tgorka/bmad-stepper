@@ -95,6 +95,43 @@ describe.skipIf(SKIP_ON_LINUX)(
         '{"action":"halt","message":"halted with actionable hint","exitCode":1}\n',
       );
     });
+
+    it("writes exactly ONE JSON line to stdout for an invoke-skill action (v0.2.1)", () => {
+      const { stdout, stderr } = spyChannels();
+      emitDispatchAction({
+        action: "invoke-skill",
+        runId: "test-run-id",
+        skillName: "bmad:bmad-brainstorming",
+        exitCode: 0,
+      });
+      expect(stdout).toHaveBeenCalledTimes(1);
+      expect(stderr).not.toHaveBeenCalled();
+      const written = stdout.mock.calls[0]?.[0] as string;
+      expect(written).toBe(
+        '{"action":"invoke-skill","runId":"test-run-id","skillName":"bmad:bmad-brainstorming","exitCode":0}\n',
+      );
+    });
+
+    it("preserves lastAttempted on invoke-skill action", () => {
+      const { stdout } = spyChannels();
+      emitDispatchAction({
+        action: "invoke-skill",
+        runId: "rid",
+        skillName: "bmad:bmad-create-prd",
+        lastAttempted: {
+          step: "bmad-create-prd",
+          epic: 1,
+          story: "1.1",
+          attemptedAt: "2026-05-14T10:00:00Z",
+        },
+        exitCode: 0,
+      });
+      const written = stdout.mock.calls[0]?.[0] as string;
+      expect(written).toContain('"action":"invoke-skill"');
+      expect(written).toContain('"skillName":"bmad:bmad-create-prd"');
+      expect(written).toContain('"lastAttempted"');
+      expect(written).toContain('"step":"bmad-create-prd"');
+    });
   },
 );
 
@@ -149,5 +186,26 @@ describe("emitDispatchAction — AC-5 schema validation pre-emit", () => {
     } as unknown as DispatchActionV1;
     expect(() => emitDispatchAction(bogus)).toThrow();
     expect(stdout).not.toHaveBeenCalled();
+  });
+
+  it("throws when invoke-skill is missing the skillName field", () => {
+    spyChannels();
+    const bogus = {
+      action: "invoke-skill",
+      runId: "test",
+      exitCode: 0,
+    } as unknown as DispatchActionV1;
+    expect(() => emitDispatchAction(bogus)).toThrow();
+  });
+
+  it("throws when invoke-skill has non-zero exitCode (caller bug)", () => {
+    spyChannels();
+    const bogus = {
+      action: "invoke-skill",
+      runId: "test",
+      skillName: "bmad:x",
+      exitCode: 1,
+    } as unknown as DispatchActionV1;
+    expect(() => emitDispatchAction(bogus)).toThrow();
   });
 });

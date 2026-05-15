@@ -11,7 +11,7 @@
  * and branches via `action`. Other modes (`--dry-run`, `--explain`,
  * `--list`) use `action: "report"` and pass content via `message`.
  *
- * The discriminated union over `action` carries three variants:
+ * The discriminated union over `action` carries four variants:
  *   - dispatch: `{ runId, agent, exitCode: 0, lastAttempted? }` — Layer 1
  *     invokes Task against `agent` with the spec at
  *     `staging/<runId>/dispatch-spec.json`. Story 3.1: the OPTIONAL
@@ -19,6 +19,16 @@
  *     attemptedAt }` payload that Layer 1 forwards to
  *     `verify-and-advance.ts` via `--last-attempted-json`. The field is
  *     OPTIONAL so existing callers that emit without it continue to validate.
+ *   - invoke-skill: `{ runId, skillName, exitCode: 0, lastAttempted? }` —
+ *     v0.2.1 path for steps that map to a matching plugin skill
+ *     (`<bmadPluginDir>/skills/<stepName>/SKILL.md` exists). Layer 1
+ *     invokes the Skill tool against `skillName` (the fully qualified
+ *     `bmad:<stepName>` form) and the rich BMad skill body produces the
+ *     canonical artifact directly. The generic `bmad-step-runner`
+ *     sub-agent is bypassed, so artifacts carry the BMad skill's own
+ *     title/structure/depth instead of the generic dispatch-spec body.
+ *     Layer 1 still forwards `lastAttempted` to verify-and-advance via
+ *     `--last-attempted-json` for state-mutation symmetry with `dispatch`.
  *   - report:   `{ message, exitCode >= 0 }` — Layer 1 prints `message` to
  *     the user (used by --dry-run / --explain / --list).
  *   - halt:     `{ message, exitCode >= 1 }` — Layer 1 prints `message`
@@ -53,6 +63,24 @@ export const DispatchActionV1Schema = z.discriminatedUnion("action", [
      * BEFORE the AR9 emit. Layer 1 captures the field and forwards via
      * `--last-attempted-json '<JSON>'` to `verify-and-advance.ts`.
      * Additive — existing callers that emit without it continue to validate.
+     */
+    lastAttempted: LastAttemptedSchema.optional(),
+    exitCode: z.literal(0),
+  }),
+  z.object({
+    action: z.literal("invoke-skill"),
+    runId: z.string(),
+    /**
+     * Fully qualified Skill tool name for the matching plugin skill,
+     * e.g., `bmad:bmad-brainstorming`. Layer 1 invokes the Skill tool
+     * against this name so the BMad skill body runs in-thread with full
+     * user interaction; the generic `bmad-step-runner` sub-agent is
+     * bypassed for this variant.
+     */
+    skillName: z.string(),
+    /**
+     * Symmetric with the `dispatch` variant — same payload, same forward
+     * path through `--last-attempted-json` to `verify-and-advance.ts`.
      */
     lastAttempted: LastAttemptedSchema.optional(),
     exitCode: z.literal(0),

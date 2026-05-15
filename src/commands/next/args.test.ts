@@ -789,3 +789,58 @@ describe("parseNextArgs — Story 5.3 --auto-fix flag (RTF_53_ARGS_*)", () => {
     expect(result.error.code).toBe("PARSE_ERROR");
   });
 });
+
+describe("parseVerifyAndAdvanceArgs — v0.2.1 --invoke-skill-mode", () => {
+  it("parses --invoke-skill-mode as a boolean (no value follows)", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "rid",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+      "--invoke-skill-mode",
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.invokeSkillMode).toBe(true);
+  });
+
+  it("omits invokeSkillMode (undefined) when flag is absent", () => {
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "rid",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.invokeSkillMode).toBeUndefined();
+  });
+
+  it("--invoke-skill-mode coexists with --last-attempted-json", () => {
+    const lastAttempted = {
+      step: "bmad-brainstorming",
+      epic: 0,
+      story: "0.0",
+      attemptedAt: "2026-05-14T12:00:00Z",
+    };
+    const result = parseVerifyAndAdvanceArgs([
+      "--run-id",
+      "rid",
+      "--tokens-in",
+      "0",
+      "--tokens-out",
+      "0",
+      "--invoke-skill-mode",
+      "--last-attempted-json",
+      JSON.stringify(lastAttempted),
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.invokeSkillMode).toBe(true);
+    expect(result.value.lastAttempted?.step).toBe("bmad-brainstorming");
+  });
+});

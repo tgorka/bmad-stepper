@@ -106,8 +106,12 @@
  *   - epics.md §Story 2.4 lines 627-645 (AC verbatim source).
  */
 
+import { randomUUID } from "node:crypto";
 import * as path from "node:path";
-import { detectBmadVersion } from "../../bmad-detect/index.ts";
+import {
+  detectBmadSkills,
+  detectBmadVersion,
+} from "../../bmad-detect/index.ts";
 import { getStepConfig } from "../../config/step-config.ts";
 import { build, type DagAdjacency, type DagNode } from "../../dag/index.ts";
 import type { Phase } from "../../dag/types.ts";
@@ -283,6 +287,15 @@ export interface RunNextOptions {
    * degradation.
    */
   readonly skillNames?: readonly string[];
+  /**
+   * v0.2.1 — test seam for the invoke-skill gate. When supplied, the
+   * runner skips the `detectBmadSkills()` filesystem call and uses
+   * this list to decide whether the resolved next-step has a matching
+   * BMad plugin skill (emit `invoke-skill` instead of the generic
+   * `dispatch` action). Production callers leave this undefined and
+   * the runner calls `detectBmadSkills(opts.homeDir)` directly.
+   */
+  readonly installedBmadSkills?: readonly string[];
   /** Forwarded to `buildDispatchSpec` (deterministic runId). */
   readonly nowIso?: string;
   /** Logger override; defaults to `{ info, warn, error, json }` from `src/io/log.ts`. */
@@ -2305,6 +2318,84 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         `${persona} (${resolvedModel}, ${contextTokensK}k context, ${timeoutMins}min timeout). ` +
         `Expected output: ${expectedOutput}`;
       return reportWithMessage(message);
+    }
+
+    // v0.2.1 — invoke-skill gate. When the BMad plugin has a matching
+    // skill for this step name (e.g., `bmad-brainstorming` resolves to
+    // `<bmadPluginDir>/skills/bmad-brainstorming/SKILL.md`), bypass the
+    // generic `bmad-step-runner` sub-agent: Layer 1 invokes the Skill
+    // tool against `bmad:<stepName>` instead, so the BMad skill body
+    // runs in-thread with full user interaction and writes its canonical
+    // artifact directly. The interactive-step pre-flight below
+    // (pending-input stub) is also bypassed on this path — the BMad
+    // skill handles its own user interaction.
+    //
+    // Resolution: detectBmadSkills() lists `<pluginDir>/skills/` entries.
+    // BMAD installation was asserted upstream by detectBmadVersion (line
+    // ~2114), so this call returns either the full plugin skill list or
+    // [] (a valid plugin layout with no `skills/` subdir). Test injection
+    // via opts.installedBmadSkills skips the FS call entirely.
+    const installedBmadSkills =
+      opts?.installedBmadSkills ??
+      (await detectBmadSkills(
+        opts?.homeDir !== undefined ? { homeDir: opts.homeDir } : undefined,
+      ));
+    if (installedBmadSkills.includes(nextStep.name)) {
+      const nowIsoForSkill = opts?.nowIso ?? new Date().toISOString();
+      const tsPart = nowIsoForSkill.replace(/\.\d{3}Z$/, "").replace(/:/g, "-");
+      const entropy = randomUUID().replace(/-/g, "").slice(0, 5);
+      const runId = `${tsPart}-${nextStep.name}-${entropy}`;
+
+      // Resolve epic/story symmetric with generate-spec.ts:198-204 (the
+      // dispatch-path resolver). Honors --resume overrides when supplied.
+      const epicFromState =
+        state.lastAttempted?.epic ?? state.lastSuccessfulStep?.epic;
+      const storyFromState =
+        state.lastAttempted?.story ?? state.lastSuccessfulStep?.story;
+      const epic =
+        (args.resume && resumeEpicOverride !== undefined
+          ? resumeEpicOverride
+          : undefined) ??
+        epicFromState ??
+        0;
+      const story =
+        (args.resume && resumeStoryOverride !== undefined
+          ? resumeStoryOverride
+          : undefined) ??
+        storyFromState ??
+        "0.0";
+
+      const action: DispatchActionV1 = {
+        action: "invoke-skill",
+        runId,
+        skillName: `bmad:${nextStep.name}`,
+        lastAttempted: {
+          step: nextStep.name,
+          epic,
+          story,
+          attemptedAt: nowIsoForSkill,
+        },
+        exitCode: 0,
+      };
+
+      // Symmetric with the dispatch-path failure-policy resolution
+      // (auto-fix override → opts.failurePolicyOverride →
+      // resolveFailurePolicy → plugin default). Threaded through
+      // NextResult so the loop runner can forward it to
+      // verify-and-advance.ts.
+      const resolvedFailurePolicy:
+        | import("../../failure-ux/index.ts").FailurePolicy
+        | undefined =
+        args.autoFix === true
+          ? "route-to-fixer"
+          : (opts?.failurePolicyOverride ??
+            resolveFailurePolicy(nextStep.name, effectiveConfig));
+
+      info(
+        `dispatch: matched plugin skill bmad:${nextStep.name}; invoke-skill mode (runId ${runId})`,
+      );
+
+      return { exitCode: 0, action, resolvedFailurePolicy };
     }
 
     // Pre-flight: interactive-step halt-and-collect-input.

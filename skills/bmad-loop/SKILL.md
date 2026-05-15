@@ -110,9 +110,9 @@ and emits exactly ONE AR9 JSON line on stdout.
 #### 2b. Parse the single stdout JSON line as `jsonLine`.
 
 Per `src/schemas/dispatch-protocol.ts` (`DispatchActionV1Schema`), the
-shape is one of three discriminated variants — `dispatch`, `report`,
-or `halt`. See `skills/bmad-next/SKILL.md` Step 2 for the full schema
-reference. Increment `iter_count`.
+shape is one of four discriminated variants — `dispatch`, `invoke-skill`,
+`report`, or `halt`. See `skills/bmad-next/SKILL.md` Step 2 for the
+full schema reference. Increment `iter_count`.
 
 #### 2c. `jsonLine.action == "dispatch"` — execute the step end-to-end.
 
@@ -144,6 +144,45 @@ Mirrors `skills/bmad-next/SKILL.md` Steps 3-6 verbatim:
 5. **Print the FR18 one-line summary** (the second AR9 line's
    `message` field) verbatim. Then continue to the next iteration
    (back to sub-step 2a) — do NOT exit.
+
+#### 2c-bis. `jsonLine.action == "invoke-skill"` — invoke the BMad skill in-thread.
+
+Layer 1 has detected that the BMad plugin has a matching skill for
+this step. Invoke the Skill tool against `jsonLine.skillName` so the
+rich BMad skill body runs in-thread with full user interaction (no
+sub-agent isolation; faithful BMad title/structure/depth). The
+generic `bmad-step-runner` sub-agent is bypassed for this variant.
+
+1. **Skill** — invoke the matching BMad plugin skill:
+   ```
+   Skill(skill = <jsonLine.skillName>)   # e.g., "bmad:bmad-brainstorming"
+   ```
+   The BMad skill writes its canonical artifact (e.g.,
+   `_bmad-output/planning-artifacts/<file>.md`) directly. There is no
+   staging round-trip and no generic dispatch-spec body.
+2. **Token-count capture is SKIPPED.** The Skill tool's response
+   object does not surface token counts. Forward `--tokens-in 0
+   --tokens-out 0` to `verify-and-advance.ts` in the next sub-step.
+3. **Bash verify-and-advance with `--invoke-skill-mode`** — the
+   lock-acquiring runner skips the dispatch-spec read, the verifier
+   invocation, and the staging→canonical promote; it just advances
+   `state.lastSuccessfulStep` from the forwarded `--last-attempted-json`
+   payload and appends a success-marked `runHistory[]` entry:
+   ```bash
+   bun run src/commands/next/verify-and-advance.ts -- \
+     --run-id <jsonLine.runId> \
+     --tokens-in 0 \
+     --tokens-out 0 \
+     --invoke-skill-mode \
+     --last-attempted-json '<JSON.stringify(jsonLine.lastAttempted)>'
+   ```
+   The `--last-attempted-json` flag is REQUIRED on this path (the
+   runner throws `ConfigError` if it is omitted — the (step, epic,
+   story) tuple is the only source for the `lastSuccessfulStep`
+   advance since the dispatch-spec is not read on this path).
+4. **Parse the second AR9 JSON line + handle as in 2c step 4-5.**
+   `halt` → exit; `report` → print summary line and continue to the
+   next iteration.
 
 #### 2d. `jsonLine.action == "report"` — graceful exit.
 

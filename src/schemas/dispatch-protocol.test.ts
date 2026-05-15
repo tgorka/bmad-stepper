@@ -273,3 +273,97 @@ describe("DispatchActionV1Schema — Story 3.1 lastAttempted on dispatch variant
     expect(reparsed).toEqual(parsed);
   });
 });
+
+// ─── v0.2.1 — invoke-skill variant ─────────────────────────────────────────
+
+describe("DispatchActionV1Schema — invoke-skill variant (v0.2.1)", () => {
+  const invokeSkillFixture = {
+    action: "invoke-skill" as const,
+    runId: "2026-05-14T12-00-00-bmad-brainstorming-abc12",
+    skillName: "bmad:bmad-brainstorming",
+    exitCode: 0 as const,
+  };
+
+  it("parses the canonical invoke-skill fixture (no lastAttempted)", () => {
+    const parsed = DispatchActionV1Schema.parse(invokeSkillFixture);
+    expect(parsed.action).toBe("invoke-skill");
+    if (parsed.action === "invoke-skill") {
+      expect(parsed.runId).toBe("2026-05-14T12-00-00-bmad-brainstorming-abc12");
+      expect(parsed.skillName).toBe("bmad:bmad-brainstorming");
+      expect(parsed.exitCode).toBe(0);
+      expect(parsed.lastAttempted).toBeUndefined();
+    }
+  });
+
+  it("parses invoke-skill fixture WITH lastAttempted", () => {
+    const parsed = DispatchActionV1Schema.parse({
+      ...invokeSkillFixture,
+      lastAttempted: {
+        step: "bmad-brainstorming",
+        epic: 0,
+        story: "0.0",
+        attemptedAt: "2026-05-14T12:00:00Z",
+      },
+    });
+    expect(parsed.action).toBe("invoke-skill");
+    if (parsed.action === "invoke-skill") {
+      expect(parsed.lastAttempted?.step).toBe("bmad-brainstorming");
+    }
+  });
+
+  it("rejects when skillName is missing", () => {
+    const result = DispatchActionV1Schema.safeParse({
+      action: "invoke-skill",
+      runId: "abc",
+      exitCode: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects when runId is missing", () => {
+    const result = DispatchActionV1Schema.safeParse({
+      action: "invoke-skill",
+      skillName: "bmad:x",
+      exitCode: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects when exitCode is non-zero (invoke-skill must be 0)", () => {
+    const result = DispatchActionV1Schema.safeParse({
+      action: "invoke-skill",
+      runId: "abc",
+      skillName: "bmad:x",
+      exitCode: 1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects malformed lastAttempted (missing required fields)", () => {
+    const result = DispatchActionV1Schema.safeParse({
+      action: "invoke-skill",
+      runId: "abc",
+      skillName: "bmad:x",
+      lastAttempted: { step: "x" },
+      exitCode: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("round-trips invoke-skill fixture via JSON", () => {
+    const fixture = {
+      ...invokeSkillFixture,
+      lastAttempted: {
+        step: "bmad-brainstorming",
+        epic: 0,
+        story: "0.0",
+        attemptedAt: "2026-05-14T12:00:00Z",
+      },
+    };
+    const parsed = DispatchActionV1Schema.parse(fixture);
+    const reparsed = DispatchActionV1Schema.parse(
+      JSON.parse(JSON.stringify(parsed)),
+    );
+    expect(reparsed).toEqual(parsed);
+  });
+});
