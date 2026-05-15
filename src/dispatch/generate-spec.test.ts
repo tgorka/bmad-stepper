@@ -739,3 +739,85 @@ describe.skipIf(SKIP_ON_LINUX)(
     });
   },
 );
+
+// ─── v0.2.1 — skillReference + personaReference enrichment ────────────────
+
+describe("buildDispatchSpec — v0.2.1 skillReference + personaReference", () => {
+  it("includes taskSpec.skillReference when supplied (non-null)", async () => {
+    const result = await buildDispatchSpec({
+      stepName: "dev-story",
+      state: minimalState,
+      persona: "dev",
+      stagingRoot: tmp,
+      skillReference: "/abs/path/to/skills/dev-story/SKILL.md",
+    });
+    const onDisk = JSON.parse(
+      await Bun.file(result.dispatchSpecPath).text(),
+    ) as { taskSpec: Record<string, unknown> };
+    expect(onDisk.taskSpec.skillReference).toBe(
+      "/abs/path/to/skills/dev-story/SKILL.md",
+    );
+  });
+
+  it("includes taskSpec.personaReference when supplied (non-null)", async () => {
+    const result = await buildDispatchSpec({
+      stepName: "dev-story",
+      state: minimalState,
+      persona: "dev",
+      stagingRoot: tmp,
+      personaReference: "/abs/path/to/skills/bmad-agent-dev/SKILL.md",
+    });
+    const onDisk = JSON.parse(
+      await Bun.file(result.dispatchSpecPath).text(),
+    ) as { taskSpec: Record<string, unknown> };
+    expect(onDisk.taskSpec.personaReference).toBe(
+      "/abs/path/to/skills/bmad-agent-dev/SKILL.md",
+    );
+  });
+
+  it("includes BOTH references when both supplied", async () => {
+    const result = await buildDispatchSpec({
+      stepName: "dev-story",
+      state: minimalState,
+      persona: "dev",
+      stagingRoot: tmp,
+      skillReference: "/abs/skill.md",
+      personaReference: "/abs/persona.md",
+    });
+    const onDisk = JSON.parse(
+      await Bun.file(result.dispatchSpecPath).text(),
+    ) as { taskSpec: Record<string, unknown> };
+    expect(onDisk.taskSpec.skillReference).toBe("/abs/skill.md");
+    expect(onDisk.taskSpec.personaReference).toBe("/abs/persona.md");
+  });
+
+  it("omits taskSpec.skillReference + personaReference when absent (default)", async () => {
+    const result = await buildDispatchSpec({
+      stepName: "dev-story",
+      state: minimalState,
+      persona: "dev",
+      stagingRoot: tmp,
+    });
+    const onDisk = JSON.parse(
+      await Bun.file(result.dispatchSpecPath).text(),
+    ) as { taskSpec: Record<string, unknown> };
+    expect("skillReference" in onDisk.taskSpec).toBe(false);
+    expect("personaReference" in onDisk.taskSpec).toBe(false);
+  });
+
+  it("omits the fields when supplied as null (graceful — resolveBmadSkillReferences returns null)", async () => {
+    const result = await buildDispatchSpec({
+      stepName: "dev-story",
+      state: minimalState,
+      persona: "dev",
+      stagingRoot: tmp,
+      skillReference: null,
+      personaReference: null,
+    });
+    const onDisk = JSON.parse(
+      await Bun.file(result.dispatchSpecPath).text(),
+    ) as { taskSpec: Record<string, unknown> };
+    expect("skillReference" in onDisk.taskSpec).toBe(false);
+    expect("personaReference" in onDisk.taskSpec).toBe(false);
+  });
+});

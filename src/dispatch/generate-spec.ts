@@ -140,6 +140,29 @@ export interface BuildDispatchSpecInput extends DispatchSpecInput {
    * `getVerifierConfig(stepName).requiredFrontmatterSections`.
    */
   readonly requiredSections?: readonly string[];
+  /**
+   * v0.2.1 — optional absolute path to the matching BMad plugin skill's
+   * SKILL.md (e.g., `<pluginDir>/skills/bmad-brainstorming/SKILL.md`).
+   * When supplied, threaded into `taskSpec.skillReference` so the
+   * `bmad-step-runner` sub-agent reads + follows that file as its
+   * primary instructions (preserving the BMad framework, title
+   * conventions, output structure). Resolved upstream by
+   * `resolveBmadSkillReferences()` in the runner (Story v0.2.1 dispatch
+   * enrichment). When `null` / `undefined`, the field is omitted from
+   * the dispatch-spec and the sub-agent falls back to the generic
+   * `task` text.
+   */
+  readonly skillReference?: string | null;
+  /**
+   * v0.2.1 — optional absolute path to the matching BMad persona skill's
+   * SKILL.md (e.g., `<pluginDir>/skills/bmad-agent-analyst/SKILL.md`).
+   * Persona resolution follows the `bmad-agent-<persona>` BMad
+   * convention. When supplied, threaded into `taskSpec.personaReference`
+   * so the sub-agent reads + adopts the persona's voice + expertise
+   * instead of inferring from the bare persona name. When `null` /
+   * `undefined`, omitted.
+   */
+  readonly personaReference?: string | null;
 }
 
 export interface BuildDispatchSpecResult {
@@ -243,6 +266,17 @@ export async function buildDispatchSpec(
         allowedTools: ["Read", "Write", "Edit", "Grep", "Bash"],
         scopeLimits: `Only files inside staging/${runId}/ may be written.`,
       },
+      // v0.2.1 — optional BMad-context references. Threaded by the
+      // runner (resolveBmadSkillReferences) when the BMad plugin has
+      // matching files; omitted from the JSON when null/undefined so
+      // existing callers + dispatch-spec consumers that ignore the
+      // fields keep working unchanged.
+      ...(input.skillReference != null
+        ? { skillReference: input.skillReference }
+        : {}),
+      ...(input.personaReference != null
+        ? { personaReference: input.personaReference }
+        : {}),
     },
   };
 

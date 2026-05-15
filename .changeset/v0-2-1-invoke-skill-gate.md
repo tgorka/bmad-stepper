@@ -49,3 +49,36 @@ project config.
 **Interactive steps**: the `interactive: true` pre-flight (pending-input
 stub) is bypassed on the invoke-skill path — the BMad skill handles its
 own user interaction in-thread.
+
+### feat: dispatch-path enrichment — BMad skill + persona references threaded into dispatch-spec
+
+For the fallback path (sub-agent dispatch via Task), the dispatch-spec
+now carries optional absolute paths to the matching BMad plugin skill
+and persona SKILL.md files so the `bmad-step-runner` sub-agent reads +
+follows the real BMad framework instead of inventing from the generic
+`task` template prompt. This makes the dispatch path also faithful when
+it does fire (older Claude Code runtimes that lack the Skill tool, env
+where BMad detection is bypassed, or any future opt-out).
+
+**Surface**:
+
+- `src/bmad-detect/detect-skills.ts`: new exported helper
+  `resolveBmadSkillReferences(stepName, persona, opts?)` returning
+  `{ skillPath: string | null, personaPath: string | null }`. Persona
+  resolution uses the BMad `bmad-agent-<persona>` skill-folder
+  convention; either field is `null` when its source file is absent or
+  BMad is not installed (no throw).
+- `src/schemas/dispatch-spec.ts`: `taskSpec` gains optional
+  `skillReference?: string` and `personaReference?: string`.
+- `src/dispatch/generate-spec.ts`: passes through new optional input
+  fields `skillReference` + `personaReference`; emits them in the
+  dispatch-spec.json only when supplied (back-compat preserved for
+  existing consumers).
+- `src/commands/next/run.ts`: dispatch path calls
+  `resolveBmadSkillReferences()` after persona resolution and threads
+  the result into `buildDispatchSpec`.
+- `agents/bmad-step-runner.md`: 6-section AR7 contract gains a
+  "v0.2.1 — optional BMad context references" subsection;
+  execution-sequence steps 3 + 6 updated to read+follow
+  `personaReference` + `skillReference` when present, with the
+  generic `taskSpec.persona` + `taskSpec.task` text as fallback.

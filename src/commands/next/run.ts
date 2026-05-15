@@ -111,6 +111,7 @@ import * as path from "node:path";
 import {
   detectBmadSkills,
   detectBmadVersion,
+  resolveBmadSkillReferences,
 } from "../../bmad-detect/index.ts";
 import { getStepConfig } from "../../config/step-config.ts";
 import { build, type DagAdjacency, type DagNode } from "../../dag/index.ts";
@@ -2492,6 +2493,25 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       "budgets",
       nextStep.name,
     );
+
+    // v0.2.1 — resolve absolute paths to the matching BMad skill +
+    // persona SKILL.md so the dispatch-spec carries forward enough
+    // BMad context for the `bmad-step-runner` sub-agent to follow the
+    // real BMad framework instead of inventing from the generic
+    // `task` text. Either path is `null` when the matching file is
+    // absent (BMad not installed, step has no matching skill, persona
+    // has no `bmad-agent-<persona>` skill); the dispatch spec omits
+    // the field accordingly and the sub-agent falls back to the
+    // generic task. The invoke-skill gate above intercepts the
+    // common case where a matching skill exists, so this enrichment
+    // is primarily a defensive belt-and-suspenders for environments
+    // where invoke-skill is bypassed (older runtimes, opt-out, test).
+    const bmadRefs = await resolveBmadSkillReferences(
+      nextStep.name,
+      persona,
+      opts?.homeDir !== undefined ? { homeDir: opts.homeDir } : undefined,
+    );
+
     const result = await buildDispatchSpec({
       stepName: nextStep.name,
       state,
@@ -2506,6 +2526,12 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
         : {}),
       ...(configuredBudget !== undefined
         ? { budgetOverride: configuredBudget }
+        : {}),
+      ...(bmadRefs.skillPath !== null
+        ? { skillReference: bmadRefs.skillPath }
+        : {}),
+      ...(bmadRefs.personaPath !== null
+        ? { personaReference: bmadRefs.personaPath }
         : {}),
       ...(args.resume && resumeEpicOverride !== undefined
         ? { epic: resumeEpicOverride }
