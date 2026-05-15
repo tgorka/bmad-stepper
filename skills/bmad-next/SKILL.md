@@ -7,7 +7,7 @@ description: 'Compute and execute the next BMAD step (zero-config orchestrator).
 
 Compute and execute the next BMAD step. Layer 1 orchestrator: Bash → AR9 JSON line → (Task | Skill) → Bash → summary.
 
-v0.2.1 — the AR9 emit now also yields an `invoke-skill` action variant alongside `dispatch` / `report` / `halt`. When the BMad plugin has a matching skill for the resolved step, Layer 1 calls the Skill tool against `bmad:<stepName>` so the rich BMad skill body runs in-thread (full user interaction, faithful BMad title/structure/depth) instead of dispatching the generic `bmad-step-runner` sub-agent.
+The AR9 emit yields an `invoke-skill` action variant alongside `dispatch` / `report` / `halt`. When the BMad plugin has a matching skill for the resolved step, Layer 1 calls the Skill tool against `bmad:<stepName>` so the rich BMad skill body runs in-thread (full user interaction, faithful BMad title/structure/depth) instead of dispatching the generic `bmad-step-runner` sub-agent.
 
 ## Usage examples
 
@@ -65,7 +65,7 @@ Variant 1 — dispatch:
       "attemptedAt": "<iso>" }?,
     "exitCode": 0 }
 
-Variant 2 — invoke-skill (v0.2.1):
+Variant 2 — invoke-skill:
   { "action": "invoke-skill", "runId": "<id>",
     "skillName": "bmad:<stepName>",
     "lastAttempted": { "step": "<name>", "epic": <n>, "story": "<key>",
@@ -111,7 +111,7 @@ Case action == "dispatch":
   Then proceed to Step 4 (capture token counts).
 
 Case action == "invoke-skill":
-  v0.2.1 path — the BMad plugin has a matching skill for this step
+  The BMad plugin has a matching skill for this step
   (e.g., `bmad:bmad-brainstorming` for step `bmad-brainstorming`).
   Invoke the Skill tool against `jsonLine.skillName` so the BMad
   skill body runs in-thread with full user interaction (no sub-agent
@@ -220,7 +220,7 @@ bun run src/commands/next/verify-and-advance.ts -- --run-id <runId> --tokens-in 
 where `<runId>` is the value from Step 2's parsed JSON line (`jsonLine.runId`),
 and `<tokensIn>` / `<tokensOut>` are from Step 4's Task response object.
 
-For the `invoke-skill` variant (v0.2.1), append the `--invoke-skill-mode`
+For the `invoke-skill` variant, append the `--invoke-skill-mode`
 flag and forward `--tokens-in 0 --tokens-out 0` (the Skill tool does not
 surface token counts):
 

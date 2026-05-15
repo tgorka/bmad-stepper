@@ -110,9 +110,9 @@ and emits exactly ONE AR9 JSON line on stdout.
 #### 2b. Parse the single stdout JSON line as `jsonLine`.
 
 Per `src/schemas/dispatch-protocol.ts` (`DispatchActionV1Schema`), the
-shape is one of four discriminated variants — `dispatch`, `invoke-skill`
-(v0.2.1), `report`, or `halt`. See `skills/bmad-next/SKILL.md` Step 2
-for the full schema reference. Increment `iter_count`.
+shape is one of four discriminated variants — `dispatch`, `invoke-skill`,
+`report`, or `halt`. See `skills/bmad-next/SKILL.md` Step 2 for the
+full schema reference. Increment `iter_count`.
 
 #### 2c. `jsonLine.action == "dispatch"` — execute the step end-to-end.
 
@@ -145,7 +145,7 @@ Mirrors `skills/bmad-next/SKILL.md` Steps 3-6 verbatim:
    `message` field) verbatim. Then continue to the next iteration
    (back to sub-step 2a) — do NOT exit.
 
-#### 2c-bis. `jsonLine.action == "invoke-skill"` (v0.2.1) — invoke the BMad skill in-thread.
+#### 2c-bis. `jsonLine.action == "invoke-skill"` — invoke the BMad skill in-thread.
 
 Layer 1 has detected that the BMad plugin has a matching skill for
 this step. Invoke the Skill tool against `jsonLine.skillName` so the
