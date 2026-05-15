@@ -1,0 +1,42 @@
+src/bmad-detect/detect-skills.ts
+  s_b41afce893f436::t_6a9c40dd24f7d8 105-171
+src/bmad-detect/detect-skills.test.ts
+  s_b41afce893f436::t_e83aad7a85f144 338-341
+  s_b41afce893f436::t_83e361d6fe57e5 22-25
+  s_b41afce893f436::t_02223c1174c383 244-337,342-356
+src/schemas/dispatch-spec.test.ts
+  s_b41afce893f436::t_839017d805e4de 68-112
+src/dispatch/generate-spec.ts
+  s_b41afce893f436::t_3fcfa29ea1b7c0 269-279
+  s_b41afce893f436::t_8747e1d9dcfc8a 143-165
+src/commands/next/run.ts
+  s_b41afce893f436::t_801027a1d44c34 114
+  s_b41afce893f436::t_69d73267862bcf 2496-2514,2530-2534
+src/bmad-detect/index.ts
+  s_b41afce893f436::t_c1c90f1b023f35 19-23
+.changeset/v0-2-1-invoke-skill-gate.md
+  ai_agent 52-84
+src/schemas/dispatch-spec.ts
+  s_b41afce893f436::t_7e0aa9b23bccba 55-73
+agents/bmad-step-runner.md
+  s_b41afce893f436::t_0b319633769602 34-66
+  s_b41afce893f436::t_d5a29fa8227015 101-106,112-118
+src/dispatch/generate-spec.test.ts
+  s_b41afce893f436::t_815508ce79acb2 742-823
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "b767f7e337cb13dbe4608d87702f9a22c822036e",
+  "prompts": {},
+  "sessions": {
+    "s_b41afce893f436": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2b314949-892b-4f27-8389-418319c1ddad",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
