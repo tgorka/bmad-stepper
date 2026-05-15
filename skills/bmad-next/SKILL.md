@@ -5,7 +5,9 @@ description: 'Compute and execute the next BMAD step (zero-config orchestrator).
 
 # /bmad-next
 
-Compute and execute the next BMAD step. Layer 1 orchestrator: Bash → AR9 JSON line → Task → Bash → summary.
+Compute and execute the next BMAD step. Layer 1 orchestrator: Bash → AR9 JSON line → (Task | Skill) → Bash → summary.
+
+v0.2.1 — the AR9 emit now also yields an `invoke-skill` action variant alongside `dispatch` / `report` / `halt`. When the BMad plugin has a matching skill for the resolved step, Layer 1 calls the Skill tool against `bmad:<stepName>` so the rich BMad skill body runs in-thread (full user interaction, faithful BMad title/structure/depth) instead of dispatching the generic `bmad-step-runner` sub-agent.
 
 ## Usage examples
 
@@ -52,7 +54,7 @@ Exit-code mapping for this Bash invoke per FR53 + Story 2.4:
 
 ### 2. Parse the single stdout JSON line.
 
-The script emits EXACTLY ONE JSON line on stdout. The shape is one of three
+The script emits EXACTLY ONE JSON line on stdout. The shape is one of four
 discriminated variants per `src/schemas/dispatch-protocol.ts`
 (`DispatchActionV1Schema`):
 
@@ -63,10 +65,17 @@ Variant 1 — dispatch:
       "attemptedAt": "<iso>" }?,
     "exitCode": 0 }
 
-Variant 2 — report:
+Variant 2 — invoke-skill (v0.2.1):
+  { "action": "invoke-skill", "runId": "<id>",
+    "skillName": "bmad:<stepName>",
+    "lastAttempted": { "step": "<name>", "epic": <n>, "story": "<key>",
+      "attemptedAt": "<iso>" }?,
+    "exitCode": 0 }
+
+Variant 3 — report:
   { "action": "report", "message": "<human-readable text>", "exitCode": >= 0 }
 
-Variant 3 — halt:
+Variant 4 — halt:
   { "action": "halt", "message": "<actionable hint>", "exitCode": >= 1 }
 ```
 
@@ -100,6 +109,22 @@ Case action == "dispatch":
       model  = <dispatchSpec.model>     # read from staging/<runId>/dispatch-spec.json's `model` field; "sonnet" default per Story 6.3
     )
   Then proceed to Step 4 (capture token counts).
+
+Case action == "invoke-skill":
+  v0.2.1 path — the BMad plugin has a matching skill for this step
+  (e.g., `bmad:bmad-brainstorming` for step `bmad-brainstorming`).
+  Invoke the Skill tool against `jsonLine.skillName` so the BMad
+  skill body runs in-thread with full user interaction (no sub-agent
+  isolation; the rich BMad skill prompts, frameworks, and persona
+  conventions are applied directly):
+    Skill(skill = <jsonLine.skillName>)   # e.g., "bmad:bmad-brainstorming"
+  The BMad skill writes its canonical artifact (e.g.,
+  `_bmad-output/planning-artifacts/<file>.md`) directly — no staging
+  round-trip, no generic dispatch-spec body. Then proceed to Step 5
+  (verify-and-advance with `--invoke-skill-mode`); Step 4 (token-count
+  capture) is SKIPPED because the Skill tool's response object does
+  not expose token counts — Layer 1 forwards `--tokens-in 0
+  --tokens-out 0` instead.
 
   Note (Story 6.3 AC-2 — `where supported`): If the Claude Code Task tool
   runtime does not honour the `model` parameter (e.g., on a future
@@ -194,6 +219,21 @@ bun run src/commands/next/verify-and-advance.ts -- --run-id <runId> --tokens-in 
 
 where `<runId>` is the value from Step 2's parsed JSON line (`jsonLine.runId`),
 and `<tokensIn>` / `<tokensOut>` are from Step 4's Task response object.
+
+For the `invoke-skill` variant (v0.2.1), append the `--invoke-skill-mode`
+flag and forward `--tokens-in 0 --tokens-out 0` (the Skill tool does not
+surface token counts):
+
+```bash
+bun run src/commands/next/verify-and-advance.ts -- --run-id <runId> --tokens-in 0 --tokens-out 0 --invoke-skill-mode --last-attempted-json '<lastAttemptedJson>'
+```
+
+In this mode `verify-and-advance.ts` skips the dispatch-spec read, the
+verifier invocation, and the staging→canonical promote step; it just
+advances `state.lastSuccessfulStep` from the forwarded `--last-attempted-json`
+payload and appends a success-marked `runHistory[]` entry. The
+`--last-attempted-json` flag is REQUIRED on this path (the runner throws
+`ConfigError` if it is omitted).
 
 Story 3.1: `<lastAttemptedJson>` is the JSON-encoded `lastAttempted` object
 captured from Step 2's parsed dispatch line (`JSON.stringify(jsonLine

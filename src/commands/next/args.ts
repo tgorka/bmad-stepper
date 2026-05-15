@@ -391,6 +391,19 @@ export const VerifyAndAdvanceArgsSchema = z
      * dispatch-spec).
      */
     autoFix: z.boolean().optional(),
+    /**
+     * v0.2.1 — optional `--invoke-skill-mode` boolean shorthand. When
+     * `true`, runVerifyAndAdvance enters the INVOKE-SKILL path BEFORE
+     * the dispatch-spec read + verifier invocation: it trusts that the
+     * BMad plugin skill (invoked in-thread by Layer 1 via the Skill
+     * tool) wrote the canonical artifact directly, advances
+     * `state.lastSuccessfulStep` from `args.lastAttempted` (REQUIRED
+     * for this path), appends a success-marked runHistory entry, and
+     * returns. The staging-dir promote step is bypassed (no source to
+     * copy from). Mirrors the Story 5.3 `--auto-fix` boolean-shorthand
+     * threading pattern.
+     */
+    invokeSkillMode: z.boolean().optional(),
   })
   .strict();
 
@@ -442,6 +455,12 @@ export function parseVerifyAndAdvanceArgs(
   // or `/bmad-loop --auto-fix`. Forces failurePolicyOverride =
   // "route-to-fixer" per architecture line 499.
   let autoFix: boolean | undefined;
+  // v0.2.1: optional --invoke-skill-mode boolean shorthand threading from
+  // the slash-command markdown when Layer 1 invoked the BMad skill via
+  // the Skill tool (instead of dispatching the generic bmad-step-runner
+  // sub-agent via Task). When true, runVerifyAndAdvance skips the
+  // dispatch-spec read + verifier + promote and just advances state.
+  let invokeSkillMode: boolean | undefined;
 
   // Skip a leading `--` separator if present (may appear when Layer 1
   // passes the args through `bun run -- <argv>`). After Bun's own `--`
@@ -578,6 +597,15 @@ export function parseVerifyAndAdvanceArgs(
       continue;
     }
 
+    // v0.2.1: optional --invoke-skill-mode boolean shorthand. The flag
+    // is a pure boolean (no value follows); it routes runVerifyAndAdvance
+    // through the INVOKE-SKILL early-return path that trusts the BMad
+    // skill's canonical-artifact write and just advances state.
+    if (tok === "--invoke-skill-mode") {
+      invokeSkillMode = true;
+      continue;
+    }
+
     // Story 3.1: optional --last-attempted-json '<JSON>' flag.
     if (tok === "--last-attempted-json") {
       const value = argv[i + 1];
@@ -678,6 +706,7 @@ export function parseVerifyAndAdvanceArgs(
     lastAttempted,
     skipStep,
     autoFix,
+    invokeSkillMode,
   });
   if (!parsed.success) {
     const firstIssue = parsed.error.issues[0];

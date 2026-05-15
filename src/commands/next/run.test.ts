@@ -779,10 +779,10 @@ describe("runNext — Story 6.9 --upgrade short-circuit", () => {
     const result = await runNext({
       ...commonOpts(statePath),
       argv: ["--upgrade"],
-      // Stub a "newer than current" tag. Must stay one minor ahead
-      // of the plugin.json version so the "upgrade available" branch
+      // Stub a "newer than current" tag. Must stay strictly newer
+      // than the plugin.json version so the "upgrade available" branch
       // triggers (latest > current). Current plugin.json version is
-      // 0.2.0; stub is v0.3.0 (one minor ahead).
+      // 0.2.1; stub is v0.3.0 (one minor ahead).
       upgradeFetchOverride: makeStubFetch({
         body: {
           tag_name: "v0.3.0",
@@ -1018,6 +1018,89 @@ describe("runNext — Story 3.1 lastAttempted on AR9 dispatch action", () => {
     expect(parsed.action).toBe("dispatch");
     if (parsed.action !== "dispatch") return;
     expect(parsed.lastAttempted?.step).toBe("bmad-brainstorming");
+  });
+});
+
+// ─── v0.2.1: invoke-skill gate (matched plugin skill bypasses bmad-step-runner) ─
+
+describe("runNext — v0.2.1 invoke-skill gate", () => {
+  it("emits action: 'invoke-skill' with bmad:<step> skillName when plugin has matching skill", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      installedBmadSkills: ["bmad-brainstorming"],
+      argv: ["--step", "bmad-brainstorming"],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("invoke-skill");
+    if (result.action.action !== "invoke-skill") {
+      throw new Error("type narrowing");
+    }
+    expect(result.action.skillName).toBe("bmad:bmad-brainstorming");
+    expect(
+      result.action.runId.startsWith("2026-04-29T10-15-00-bmad-brainstorming-"),
+    ).toBe(true);
+    expect(result.action.exitCode).toBe(0);
+  });
+
+  it("forwards lastAttempted on the invoke-skill variant (symmetric with dispatch)", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      installedBmadSkills: ["bmad-brainstorming"],
+      argv: ["--step", "bmad-brainstorming"],
+    });
+    if (result.action.action !== "invoke-skill") return;
+    expect(result.action.lastAttempted).toBeDefined();
+    expect(result.action.lastAttempted?.step).toBe("bmad-brainstorming");
+    expect(result.action.lastAttempted?.attemptedAt).toBe(
+      "2026-04-29T10:15:00.000Z",
+    );
+    expect(typeof result.action.lastAttempted?.epic).toBe("number");
+    expect(typeof result.action.lastAttempted?.story).toBe("string");
+  });
+
+  it("does NOT create a staging/<runId>/dispatch-spec.json on the invoke-skill path", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      installedBmadSkills: ["bmad-brainstorming"],
+      argv: ["--step", "bmad-brainstorming"],
+    });
+    if (result.action.action !== "invoke-skill") return;
+    const stagingDir = path.join(tmp, "staging", result.action.runId);
+    let stagingExists = false;
+    try {
+      await fs.stat(stagingDir);
+      stagingExists = true;
+    } catch {
+      stagingExists = false;
+    }
+    expect(stagingExists).toBe(false);
+  });
+
+  it("falls through to action: 'dispatch' when installedBmadSkills omits the step", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      installedBmadSkills: [],
+      argv: ["--step", "bmad-brainstorming"],
+    });
+    expect(result.action.action).toBe("dispatch");
+  });
+
+  it("invoke-skill action round-trips through DispatchActionV1Schema", async () => {
+    const statePath = await writeMinimalState();
+    const result = await runNext({
+      ...commonOpts(statePath),
+      installedBmadSkills: ["bmad-brainstorming"],
+      argv: ["--step", "bmad-brainstorming"],
+    });
+    const roundTripped = JSON.parse(JSON.stringify(result.action));
+    const parsed = DispatchActionV1Schema.parse(roundTripped);
+    expect(parsed.action).toBe("invoke-skill");
+    if (parsed.action !== "invoke-skill") return;
+    expect(parsed.skillName).toBe("bmad:bmad-brainstorming");
   });
 });
 

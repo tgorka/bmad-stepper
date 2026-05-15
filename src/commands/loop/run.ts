@@ -96,8 +96,13 @@ export interface IterationRecord {
    * — any future variant requires a state-schema bump that would also
    * extend this discriminator. Keeping the type honest avoids
    * defensive default-branches in `formatExitReason` consumers.
+   *
+   * v0.2.1 — extended with `"invoke-skill"` for the new AR9 variant
+   * emitted when the BMad plugin has a matching skill for the resolved
+   * step (Layer 1 invokes the Skill tool against `bmad:<stepName>`
+   * instead of dispatching the generic `bmad-step-runner` sub-agent).
    */
-  readonly action: "dispatch" | "report" | "halt";
+  readonly action: "dispatch" | "invoke-skill" | "report" | "halt";
   /** Exit code from the per-iteration runNext invocation. */
   readonly exitCode: number;
   /** Wall-clock duration of the iteration in milliseconds (Bun.nanoseconds-derived). */
@@ -842,12 +847,12 @@ async function loadSprintStatusForLoop(): Promise<SprintStatus | null> {
 }
 
 /**
- * Extract a runId from the AR9 dispatch action when present. Only the
- * `dispatch` variant carries a `runId` — `report` and `halt` variants
- * return `null`.
+ * Extract a runId from the AR9 dispatch action when present. The
+ * `dispatch` and `invoke-skill` (v0.2.1) variants carry a `runId` —
+ * `report` and `halt` variants return `null`.
  */
 function extractRunId(action: DispatchActionV1): string | null {
-  if (action.action === "dispatch") {
+  if (action.action === "dispatch" || action.action === "invoke-skill") {
     return action.runId;
   }
   return null;
@@ -1805,7 +1810,8 @@ export async function runLoop(
       // that wire per-iteration Task→verify-and-advance will surface
       // a state advance and the detector becomes a no-op on those paths.
       if (
-        nextResult.action.action === "dispatch" &&
+        (nextResult.action.action === "dispatch" ||
+          nextResult.action.action === "invoke-skill") &&
         (opts?.runNextOverride === undefined ||
           opts?.forceNoProgressDetection === true)
       ) {

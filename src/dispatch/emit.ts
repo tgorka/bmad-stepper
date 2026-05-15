@@ -44,6 +44,13 @@ import {
  * FR54 invariant).
  *
  * Sync semantics mirror `json()` itself (Story 1.3 — `process.stdout.write`).
+ *
+ * v0.2.1 — the schema gained an `invoke-skill` variant alongside the
+ * three v0.1 variants (`dispatch`, `report`, `halt`). This function
+ * accepts the whole discriminated union, so no new helper is needed:
+ * callers construct the appropriate literal and pass it through. The
+ * schema's `.parse()` enforces the per-variant shape (e.g.,
+ * `invoke-skill` requires `skillName: string`).
  */
 export function emitDispatchAction(action: DispatchActionV1): void {
   const validated = DispatchActionV1Schema.parse(action);

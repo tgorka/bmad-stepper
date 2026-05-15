@@ -4077,3 +4077,175 @@ describe("TLM_66_VANDA: RunVerifyAndAdvanceOptions.config.telemetry threading (S
     expect(result.action.action).toBe("report");
   });
 });
+
+// ─── v0.2.1 — invoke-skill mode (skip verifier + promote, just advance state) ─
+
+describe("runVerifyAndAdvance — v0.2.1 invoke-skill mode (IS_VA_*)", () => {
+  it("IS_VA_1: --invoke-skill-mode + --last-attempted-json advances state, skips verifier+promote", async () => {
+    // Seed a minimal state where bmad-create-prd is the last successful step.
+    // The invoke-skill path does NOT read the dispatch-spec, so we do not
+    // need to seed a staging dir for this path.
+    const statePath = path.join(tmp, "state.yaml");
+    await Bun.write(
+      statePath,
+      Bun.YAML.stringify({
+        schemaVersion: 1,
+        project: { name: "stepper-test", bmadVersion: "6.5.0" },
+        lastSuccessfulStep: {
+          step: "bmad-create-prd",
+          epic: 1,
+          story: "1.0",
+          completedAt: "2026-05-13T10:00:00Z",
+        },
+        runHistory: [],
+        checkpoints: [],
+      }),
+    );
+    const stagingRoot = path.join(tmp, "staging");
+    const lockDir = path.join(tmp, "lock");
+    const runsRoot = path.join(tmp, "runs");
+
+    const lastAttempted = {
+      step: "bmad-brainstorming",
+      epic: 1,
+      story: "1.1",
+      attemptedAt: "2026-05-14T12:00:00.000Z",
+    };
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "is-30-va-1",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--invoke-skill-mode",
+        "--last-attempted-json",
+        JSON.stringify(lastAttempted),
+      ],
+      statePath,
+      stagingRoot,
+      runsRoot,
+      lockOptions: { lockDir },
+      nowIso: "2026-05-14T12:01:00.000Z",
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("report");
+    if (result.action.action !== "report") return;
+    expect(result.action.message).toContain("bmad-brainstorming");
+    expect(result.action.message).toContain("invoke-skill");
+
+    // State advanced.
+    const updated = Bun.YAML.parse(await Bun.file(statePath).text()) as {
+      lastSuccessfulStep: { step: string; epic: number; story: string };
+      lastAttempted: unknown;
+      lastFailureReason: unknown;
+      runHistory: Array<Record<string, unknown>>;
+    };
+    expect(updated.lastSuccessfulStep.step).toBe("bmad-brainstorming");
+    expect(updated.lastSuccessfulStep.epic).toBe(1);
+    expect(updated.lastSuccessfulStep.story).toBe("1.1");
+    expect(updated.lastAttempted).toBeNull();
+    expect(updated.lastFailureReason).toBeNull();
+    expect(updated.runHistory).toHaveLength(1);
+    expect(updated.runHistory[0]?.step).toBe("bmad-brainstorming");
+    expect(updated.runHistory[0]?.outcome).toBe("pass");
+    // The verifier was BYPASSED on this path — runHistory entry reflects that.
+    expect(updated.runHistory[0]?.verifierStatus).toBe("skip");
+  });
+
+  it("IS_VA_2: --invoke-skill-mode WITHOUT --last-attempted-json throws ConfigError", async () => {
+    const statePath = path.join(tmp, "state.yaml");
+    await Bun.write(
+      statePath,
+      Bun.YAML.stringify({
+        schemaVersion: 1,
+        project: { name: "stepper-test", bmadVersion: "6.5.0" },
+        runHistory: [],
+        checkpoints: [],
+      }),
+    );
+    const stagingRoot = path.join(tmp, "staging");
+    const lockDir = path.join(tmp, "lock");
+    const runsRoot = path.join(tmp, "runs");
+
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "is-30-va-2",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--invoke-skill-mode",
+      ],
+      statePath,
+      stagingRoot,
+      runsRoot,
+      lockOptions: { lockDir },
+      nowIso: "2026-05-14T12:01:00.000Z",
+    });
+
+    expect(result.action.action).toBe("halt");
+    if (result.action.action !== "halt") return;
+    expect(result.exitCode).toBe(2);
+    expect(result.action.message).toContain("--last-attempted-json");
+    expect(result.action.message).toMatch(/^.*(Run|See|Try|Check|Pass) /);
+  });
+
+  it("IS_VA_3: --invoke-skill-mode does NOT require a staging dir to exist (no dispatch-spec read)", async () => {
+    // Confirm the invoke-skill path does not throw when the staging dir
+    // for the runId is absent — the path bypasses readDispatchSpec.
+    // (story value avoids "0.X" / "1.X" YAML round-trip ambiguity: Bun.YAML
+    // unquotes strings that look like decimals starting with "0.", so we
+    // use "1.5" which survives stringify→parse as a string.)
+    const statePath = path.join(tmp, "state.yaml");
+    await Bun.write(
+      statePath,
+      Bun.YAML.stringify({
+        schemaVersion: 1,
+        project: { name: "stepper-test", bmadVersion: "6.5.0" },
+        lastSuccessfulStep: {
+          step: "bmad-create-prd",
+          epic: 1,
+          story: "1.5",
+          completedAt: "2026-05-13T10:00:00Z",
+        },
+        runHistory: [],
+        checkpoints: [],
+      }),
+    );
+    const stagingRoot = path.join(tmp, "staging-nonexistent");
+    const lockDir = path.join(tmp, "lock");
+    const runsRoot = path.join(tmp, "runs");
+
+    const lastAttempted = {
+      step: "bmad-domain-research",
+      epic: 1,
+      story: "1.5",
+      attemptedAt: "2026-05-14T12:00:00.000Z",
+    };
+    const result = await runVerifyAndAdvance({
+      argv: [
+        "--run-id",
+        "is-30-va-3",
+        "--tokens-in",
+        "0",
+        "--tokens-out",
+        "0",
+        "--invoke-skill-mode",
+        "--last-attempted-json",
+        JSON.stringify(lastAttempted),
+      ],
+      statePath,
+      stagingRoot,
+      runsRoot,
+      lockOptions: { lockDir },
+      nowIso: "2026-05-14T12:01:00.000Z",
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.action.action).toBe("report");
+  });
+});
