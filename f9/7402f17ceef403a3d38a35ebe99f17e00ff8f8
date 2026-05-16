@@ -1,0 +1,60 @@
+src/schemas/dispatch-spec.ts
+  s_b41afce893f436::t_76567bc7626f03 56,66
+src/commands/next/run.test.ts
+  s_b41afce893f436::t_cb9b2fe2930e66 783
+  s_b41afce893f436::t_76567bc7626f03 672,1022,1024
+agents/bmad-step-runner.md
+  s_b41afce893f436::t_76567bc7626f03 34
+src/commands/next/args.ts
+  s_b41afce893f436::t_76567bc7626f03 395,458,600
+src/dispatch/generate-spec.test.ts
+  s_b41afce893f436::t_76567bc7626f03 743,745
+CHANGELOG.md
+  s_b41afce893f436::t_77406176b6579e 5
+src/schemas/dispatch-protocol.test.ts
+  s_b41afce893f436::t_76567bc7626f03 277,279
+src/schemas/dispatch-protocol.ts
+  s_b41afce893f436::t_76567bc7626f03 23
+src/bmad-detect/detect-skills.test.ts
+  s_b41afce893f436::t_76567bc7626f03 245,247
+src/commands/loop/run.ts
+  s_b41afce893f436::t_76567bc7626f03 100,851
+src/bmad-detect/detect-skills.ts
+  s_b41afce893f436::t_76567bc7626f03 107,125
+src/commands/next/args.test.ts
+  s_b41afce893f436::t_76567bc7626f03 793
+src/commands/next/verify-and-advance.test.ts
+  s_b41afce893f436::t_76567bc7626f03 4081,4083
+src/dispatch/emit.test.ts
+  s_b41afce893f436::t_76567bc7626f03 99
+src/commands/next/run.ts
+  s_b41afce893f436::t_76567bc7626f03 292,2324,2497
+src/dispatch/emit.ts
+  s_b41afce893f436::t_76567bc7626f03 48
+src/schemas/dispatch-spec.test.ts
+  s_b41afce893f436::t_76567bc7626f03 69,71,84
+.claude-plugin/plugin.json
+  s_b41afce893f436::t_ebcbd6696e002a 3
+src/commands/next/verify-and-advance.ts
+  s_b41afce893f436::t_76567bc7626f03 1048
+src/dispatch/generate-spec.ts
+  s_b41afce893f436::t_76567bc7626f03 144,150,157,269
+package.json
+  s_b41afce893f436::t_969d21ed064c85 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "f97402f17ceef403a3d38a35ebe99f17e00ff8f8",
+  "prompts": {},
+  "sessions": {
+    "s_b41afce893f436": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2b314949-892b-4f27-8389-418319c1ddad",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
