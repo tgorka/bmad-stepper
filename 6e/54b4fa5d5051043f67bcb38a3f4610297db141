@@ -1,0 +1,21 @@
+src/commands/next/run.test.ts
+  s_b41afce893f436::t_33f039eb5fd0d1 682
+  s_b41afce893f436::t_ce502aec20e1a7 671-681,683-690
+  s_b41afce893f436::t_818205852e2ddb 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "6e54b4fa5d5051043f67bcb38a3f4610297db141",
+  "prompts": {},
+  "sessions": {
+    "s_b41afce893f436": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2b314949-892b-4f27-8389-418319c1ddad",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "tgorka <tomasz@gorka.org.pl>"
+    }
+  }
+}
