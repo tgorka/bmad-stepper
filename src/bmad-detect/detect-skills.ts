@@ -102,3 +102,70 @@ export async function detectBmadSkills(
     throw err;
   }
 }
+
+/**
+ * v0.2.1 — pair of absolute paths the dispatch-spec carries forward to
+ * the `bmad-step-runner` sub-agent so it can read+follow the BMad
+ * plugin's skill body + persona body instead of inventing from the
+ * generic dispatch-spec `task` text.
+ *
+ * Either field is `null` when its source file is absent:
+ *   - `skillPath`   → `<pluginDir>/skills/<stepName>/SKILL.md` exists.
+ *   - `personaPath` → `<pluginDir>/skills/bmad-agent-<persona>/SKILL.md`
+ *                     exists (the BMad persona convention).
+ */
+export interface BmadSkillReferences {
+  readonly skillPath: string | null;
+  readonly personaPath: string | null;
+}
+
+/**
+ * Resolve absolute paths to the BMad plugin's skill SKILL.md and persona
+ * SKILL.md for a given step + persona. Used by the dispatch spec
+ * generator (Story v0.2.1 enrichment) to thread the BMad context into
+ * the `bmad-step-runner` sub-agent so its output is faithful to the
+ * BMad skill's framework rather than the generic dispatch-spec `task`
+ * fallback.
+ *
+ * Returns `{ skillPath: null, personaPath: null }` (no throw) when no
+ * BMad plugin is installed, or when the specific SKILL.md files do not
+ * exist for this step / persona. Callers treat absence as "no
+ * enrichment available; sub-agent falls back to the generic task".
+ *
+ * Persona resolution: BMad stores personas as their own skill folders
+ * under the `bmad-agent-<persona>` naming convention (e.g.,
+ * `bmad-agent-analyst`, `bmad-agent-pm`, `bmad-agent-architect`). When
+ * `persona` is `undefined` OR the corresponding folder does not exist,
+ * `personaPath` is `null`.
+ */
+export async function resolveBmadSkillReferences(
+  stepName: string,
+  persona: string | undefined,
+  opts?: DetectBmadOptions,
+): Promise<BmadSkillReferences> {
+  let pluginDir: string;
+  try {
+    pluginDir = await _resolvePluginDir(opts);
+  } catch {
+    return { skillPath: null, personaPath: null };
+  }
+
+  const skillCandidate = path.join(pluginDir, "skills", stepName, "SKILL.md");
+  const personaCandidate =
+    persona !== undefined && persona !== ""
+      ? path.join(pluginDir, "skills", `bmad-agent-${persona}`, "SKILL.md")
+      : null;
+
+  const [skillExists, personaExists] = await Promise.all([
+    Bun.file(skillCandidate).exists(),
+    personaCandidate !== null
+      ? Bun.file(personaCandidate).exists()
+      : Promise.resolve(false),
+  ]);
+
+  return {
+    skillPath: skillExists ? skillCandidate : null,
+    personaPath:
+      personaCandidate !== null && personaExists ? personaCandidate : null,
+  };
+}

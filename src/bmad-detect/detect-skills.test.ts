@@ -19,7 +19,10 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { BmadNotInstalledError } from "../errors.ts";
-import { detectBmadSkills } from "./detect-skills.ts";
+import {
+  detectBmadSkills,
+  resolveBmadSkillReferences,
+} from "./detect-skills.ts";
 
 let tmpDir: string;
 
@@ -236,5 +239,118 @@ describe("detectBmadSkills — AC-2 throw path", () => {
         "Run npx bmad-method install --tools claude-code first.",
       );
     }
+  });
+});
+
+// ─── resolveBmadSkillReferences (v0.2.1) ───────────────────────────────────
+
+describe("resolveBmadSkillReferences — v0.2.1", () => {
+  it("returns the absolute SKILL.md path for an installed skill", async () => {
+    const { pluginDir } = await setupFakeBmadPlugin(tmpDir, "6.5.0.1", [
+      "bmad-brainstorming",
+    ]);
+    // setupFakeBmadPlugin creates the skill directory but not SKILL.md;
+    // write the entrypoint file so the existence check passes.
+    await Bun.write(
+      path.join(pluginDir, "skills", "bmad-brainstorming", "SKILL.md"),
+      "---\nname: bmad-brainstorming\n---\n",
+    );
+    const refs = await resolveBmadSkillReferences(
+      "bmad-brainstorming",
+      undefined,
+      { homeDir: tmpDir, projectRoot: tmpDir },
+    );
+    expect(refs.skillPath).toBe(
+      path.join(pluginDir, "skills", "bmad-brainstorming", "SKILL.md"),
+    );
+    expect(refs.personaPath).toBeNull();
+  });
+
+  it("returns null skillPath when SKILL.md is absent", async () => {
+    const { pluginDir } = await setupFakeBmadPlugin(tmpDir, "6.5.0.1", [
+      "bmad-brainstorming",
+    ]);
+    // Skill directory exists but no SKILL.md inside.
+    const refs = await resolveBmadSkillReferences(
+      "bmad-brainstorming",
+      undefined,
+      { homeDir: tmpDir, projectRoot: tmpDir },
+    );
+    // Defensive — ensure the test setup did not accidentally seed SKILL.md.
+    expect(
+      await Bun.file(
+        path.join(pluginDir, "skills", "bmad-brainstorming", "SKILL.md"),
+      ).exists(),
+    ).toBe(false);
+    expect(refs.skillPath).toBeNull();
+  });
+
+  it("returns personaPath using the bmad-agent-<persona> convention", async () => {
+    const { pluginDir } = await setupFakeBmadPlugin(tmpDir, "6.5.0.1", [
+      "bmad-brainstorming",
+      "bmad-agent-analyst",
+    ]);
+    await Bun.write(
+      path.join(pluginDir, "skills", "bmad-brainstorming", "SKILL.md"),
+      "---\nname: bmad-brainstorming\n---\n",
+    );
+    await Bun.write(
+      path.join(pluginDir, "skills", "bmad-agent-analyst", "SKILL.md"),
+      "---\nname: bmad-agent-analyst\n---\n",
+    );
+    const refs = await resolveBmadSkillReferences(
+      "bmad-brainstorming",
+      "analyst",
+      { homeDir: tmpDir, projectRoot: tmpDir },
+    );
+    expect(refs.skillPath).toBe(
+      path.join(pluginDir, "skills", "bmad-brainstorming", "SKILL.md"),
+    );
+    expect(refs.personaPath).toBe(
+      path.join(pluginDir, "skills", "bmad-agent-analyst", "SKILL.md"),
+    );
+  });
+
+  it("returns null personaPath when persona is undefined", async () => {
+    const { pluginDir } = await setupFakeBmadPlugin(tmpDir, "6.5.0.1", [
+      "bmad-brainstorming",
+    ]);
+    await Bun.write(
+      path.join(pluginDir, "skills", "bmad-brainstorming", "SKILL.md"),
+      "---\nname: bmad-brainstorming\n---\n",
+    );
+    const refs = await resolveBmadSkillReferences(
+      "bmad-brainstorming",
+      undefined,
+      { homeDir: tmpDir, projectRoot: tmpDir },
+    );
+    expect(refs.personaPath).toBeNull();
+  });
+
+  it("returns null personaPath when no matching bmad-agent-<persona> skill exists", async () => {
+    const { pluginDir } = await setupFakeBmadPlugin(tmpDir, "6.5.0.1", [
+      "bmad-brainstorming",
+    ]);
+    await Bun.write(
+      path.join(pluginDir, "skills", "bmad-brainstorming", "SKILL.md"),
+      "---\nname: bmad-brainstorming\n---\n",
+    );
+    const refs = await resolveBmadSkillReferences("bmad-brainstorming", "tea", {
+      homeDir: tmpDir,
+      projectRoot: tmpDir,
+    });
+    expect(refs.personaPath).toBeNull();
+  });
+
+  it("returns { skillPath: null, personaPath: null } when BMad is not installed (no throw)", async () => {
+    // tmpDir has no .claude/plugins/ — _resolvePluginDir throws
+    // BmadNotInstalledError; resolveBmadSkillReferences swallows it.
+    const refs = await resolveBmadSkillReferences(
+      "bmad-brainstorming",
+      "analyst",
+      { homeDir: tmpDir, projectRoot: tmpDir },
+    );
+    expect(refs.skillPath).toBeNull();
+    expect(refs.personaPath).toBeNull();
   });
 });

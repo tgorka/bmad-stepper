@@ -16,7 +16,11 @@
  * intentionally NOT re-exported here.
  */
 
-export { detectBmadSkills } from "./detect-skills.ts";
+export {
+  type BmadSkillReferences,
+  detectBmadSkills,
+  resolveBmadSkillReferences,
+} from "./detect-skills.ts";
 export {
   type BmadDetection,
   type DetectBmadOptions,

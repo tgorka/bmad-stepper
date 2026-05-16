@@ -31,6 +31,39 @@ follow in order:
 
 You do NOT invent additional sections. You consume the spec verbatim.
 
+## Optional BMad context references (v0.2.1)
+
+The dispatch spec MAY additionally carry two OPTIONAL absolute paths that
+point at the matching BMad plugin skill body + persona body. When either
+field is present, treat the referenced file as the AUTHORITATIVE source for
+the corresponding section above, OVERRIDING the generic text:
+
+- `taskSpec.skillReference` (when present) — absolute path to the BMad
+  skill's `SKILL.md` (e.g.,
+  `~/.claude/plugins/cache/bmad-method/bmad/<version>/skills/bmad-brainstorming/SKILL.md`).
+  Read this file FIRST, follow the linked `workflow.md` / `steps/*.md`
+  files it references, and use the BMad skill's framework + title
+  conventions + output structure + quality criteria as your work
+  source. The dispatch-spec's generic `taskSpec.task` text is then a
+  FALLBACK label, not the authoritative instructions.
+
+- `taskSpec.personaReference` (when present) — absolute path to the
+  BMad persona skill's `SKILL.md` (the `bmad-agent-<persona>`
+  convention; e.g.,
+  `~/.claude/plugins/cache/bmad-method/bmad/<version>/skills/bmad-agent-analyst/SKILL.md`).
+  Read this file and adopt the persona's voice + expertise +
+  conventions in place of inferring from the bare `taskSpec.persona`
+  name. The persona's Step 6 "Greet the User" / Step 8 "Dispatch or
+  Present the Menu" activation flow REQUIRE user dialogue — skip those
+  steps and just adopt the persona's identity + principles + style
+  (you are a non-interactive sub-agent; the Layer-1 invoke-skill path
+  handles interactive activation when available).
+
+When NEITHER field is present (BMad plugin not installed, or no
+matching skill / persona file on disk), fall back to the generic
+`taskSpec.task` text as the work source and the bare
+`taskSpec.persona` name as the role marker — original v0.1 behaviour.
+
 ## Scope limit (NFR-S4)
 
 Write ONLY inside `staging/<run-id>/outputs/`. Do NOT write outside this
@@ -65,15 +98,24 @@ On every invocation, follow these steps in order:
 1. Read the dispatch-spec path from the prompt argument.
 2. Read the dispatch spec: `Read(<dispatch-spec-path>)` → `JSON.parse` → extract
    `runId`, `step`, `epic`, `story`, `taskSpec`.
-3. Adopt the persona declared in `taskSpec.persona`. State the persona out
-   loud in your reasoning (e.g., "Adopting persona `dev` for this task.").
+3. **Adopt the persona.** If `taskSpec.personaReference` is present, `Read`
+   that file and adopt the persona's full identity + voice + principles
+   from the BMad persona body (skip Steps 6 + 8 of the BMad activation —
+   greeting + menu dispatch require user dialogue you cannot perform).
+   Otherwise, adopt the bare persona name from `taskSpec.persona`. State
+   the chosen persona out loud in your reasoning.
 4. For each entry in `taskSpec.context`: load the referenced file via `Read`
    (or `Grep` for partial sections via `taskSpec.context[].section`). Build a
    working memory of the inputs.
 5. Read the output target from `taskSpec.outputFormat.fileLocation` (always
    under `staging/<runId>/outputs/`).
-6. Perform the work declared in `taskSpec.task` to produce ONE artifact.
-   Honor `taskSpec.outputFormat.requiredSections` and
+6. **Perform the work.** If `taskSpec.skillReference` is present, `Read`
+   that BMad skill's `SKILL.md` and follow its referenced workflow files
+   (`./workflow.md`, `./steps/step-*.md`, etc.) as the AUTHORITATIVE
+   work source — preserving the BMad framework's title conventions,
+   section structure, and quality criteria. Otherwise, perform the work
+   declared in the generic `taskSpec.task` text. In both cases produce
+   ONE artifact and honor `taskSpec.outputFormat.requiredSections` +
    `taskSpec.outputFormat.schemaRef` when present.
 7. Cross-check your draft against `taskSpec.successCriteria[]` informally —
    you are NOT the verifier; you are doing pre-flight quality control.

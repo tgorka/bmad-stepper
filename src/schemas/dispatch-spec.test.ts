@@ -65,4 +65,49 @@ describe("DispatchSpecV1Schema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  // ─── v0.2.1 — skillReference + personaReference (both optional) ──────────
+
+  it("accepts taskSpec.skillReference when supplied (v0.2.1)", () => {
+    const parsed = DispatchSpecV1Schema.parse({
+      ...canonicalDispatchSpecV1Fixture,
+      taskSpec: {
+        ...canonicalDispatchSpecV1Fixture.taskSpec,
+        skillReference: "/abs/path/to/skills/bmad-brainstorming/SKILL.md",
+      },
+    });
+    expect(parsed.taskSpec.skillReference).toBe(
+      "/abs/path/to/skills/bmad-brainstorming/SKILL.md",
+    );
+  });
+
+  it("accepts taskSpec.personaReference when supplied (v0.2.1)", () => {
+    const parsed = DispatchSpecV1Schema.parse({
+      ...canonicalDispatchSpecV1Fixture,
+      taskSpec: {
+        ...canonicalDispatchSpecV1Fixture.taskSpec,
+        personaReference: "/abs/path/to/skills/bmad-agent-analyst/SKILL.md",
+      },
+    });
+    expect(parsed.taskSpec.personaReference).toBe(
+      "/abs/path/to/skills/bmad-agent-analyst/SKILL.md",
+    );
+  });
+
+  it("accepts the canonical fixture WITHOUT either reference (back-compat)", () => {
+    const parsed = DispatchSpecV1Schema.parse(canonicalDispatchSpecV1Fixture);
+    expect(parsed.taskSpec.skillReference).toBeUndefined();
+    expect(parsed.taskSpec.personaReference).toBeUndefined();
+  });
+
+  it("rejects when taskSpec.skillReference is a non-string (number)", () => {
+    const result = DispatchSpecV1Schema.safeParse({
+      ...canonicalDispatchSpecV1Fixture,
+      taskSpec: {
+        ...canonicalDispatchSpecV1Fixture.taskSpec,
+        skillReference: 42,
+      },
+    });
+    expect(result.success).toBe(false);
+  });
 });
