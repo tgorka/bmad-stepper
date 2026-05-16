@@ -96,7 +96,7 @@ describe.skipIf(SKIP_ON_LINUX)(
       );
     });
 
-    it("writes exactly ONE JSON line to stdout for an invoke-skill action (v0.2.1)", () => {
+    it("writes exactly ONE JSON line to stdout for an invoke-skill action (v0.2.2)", () => {
       const { stdout, stderr } = spyChannels();
       emitDispatchAction({
         action: "invoke-skill",

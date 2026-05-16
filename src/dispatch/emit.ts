@@ -45,7 +45,7 @@ import {
  *
  * Sync semantics mirror `json()` itself (Story 1.3 — `process.stdout.write`).
  *
- * v0.2.1 — the schema gained an `invoke-skill` variant alongside the
+ * v0.2.2 — the schema gained an `invoke-skill` variant alongside the
  * three v0.1 variants (`dispatch`, `report`, `halt`). This function
  * accepts the whole discriminated union, so no new helper is needed:
  * callers construct the appropriate literal and pass it through. The

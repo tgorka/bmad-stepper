@@ -669,7 +669,7 @@ async function listAllFiles(root: string): Promise<string[]> {
 
 describe("runNext — lock-free invariant (architecture line 1672 + AR8)", () => {
   it("never imports from src/lock/ — static source-content scan", async () => {
-    // v0.2.1: switched from `mock.module("../../lock/lock.ts", ...)` to a
+    // v0.2.2: switched from `mock.module("../../lock/lock.ts", ...)` to a
     // static source-content scan because Bun's `mock.module` cannot be
     // undone by `mock.restore()` and persists across the test runner's
     // module cache (Story 2.6 dev-004 carry-over). The mocked acquire()
@@ -780,7 +780,7 @@ describe("runNext — Story 6.9 --upgrade short-circuit", () => {
       // Stub a "newer than current" tag. Must stay strictly newer
       // than the plugin.json version so the "upgrade available" branch
       // triggers (latest > current). Current plugin.json version is
-      // 0.2.1; stub is v0.3.0 (one minor ahead).
+      // 0.2.2; stub is v0.3.0 (one minor ahead).
       upgradeFetchOverride: makeStubFetch({
         body: {
           tag_name: "v0.3.0",
@@ -1019,9 +1019,9 @@ describe("runNext — Story 3.1 lastAttempted on AR9 dispatch action", () => {
   });
 });
 
-// ─── v0.2.1: invoke-skill gate (matched plugin skill bypasses bmad-step-runner) ─
+// ─── v0.2.2: invoke-skill gate (matched plugin skill bypasses bmad-step-runner) ─
 
-describe("runNext — v0.2.1 invoke-skill gate", () => {
+describe("runNext — v0.2.2 invoke-skill gate", () => {
   it("emits action: 'invoke-skill' with bmad:<step> skillName when plugin has matching skill", async () => {
     const statePath = await writeMinimalState();
     const result = await runNext({

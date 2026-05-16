@@ -31,7 +31,7 @@ follow in order:
 
 You do NOT invent additional sections. You consume the spec verbatim.
 
-## Optional BMad context references (v0.2.1)
+## Optional BMad context references (v0.2.2)
 
 The dispatch spec MAY additionally carry two OPTIONAL absolute paths that
 point at the matching BMad plugin skill body + persona body. When either

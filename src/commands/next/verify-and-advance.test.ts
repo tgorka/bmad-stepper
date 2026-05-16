@@ -4078,9 +4078,9 @@ describe("TLM_66_VANDA: RunVerifyAndAdvanceOptions.config.telemetry threading (S
   });
 });
 
-// ─── v0.2.1 — invoke-skill mode (skip verifier + promote, just advance state) ─
+// ─── v0.2.2 — invoke-skill mode (skip verifier + promote, just advance state) ─
 
-describe("runVerifyAndAdvance — v0.2.1 invoke-skill mode (IS_VA_*)", () => {
+describe("runVerifyAndAdvance — v0.2.2 invoke-skill mode (IS_VA_*)", () => {
   it("IS_VA_1: --invoke-skill-mode + --last-attempted-json advances state, skips verifier+promote", async () => {
     // Seed a minimal state where bmad-create-prd is the last successful step.
     // The invoke-skill path does NOT read the dispatch-spec, so we do not

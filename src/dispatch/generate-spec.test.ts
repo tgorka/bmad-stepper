@@ -740,9 +740,9 @@ describe.skipIf(SKIP_ON_LINUX)(
   },
 );
 
-// ─── v0.2.1 — skillReference + personaReference enrichment ────────────────
+// ─── v0.2.2 — skillReference + personaReference enrichment ────────────────
 
-describe("buildDispatchSpec — v0.2.1 skillReference + personaReference", () => {
+describe("buildDispatchSpec — v0.2.2 skillReference + personaReference", () => {
   it("includes taskSpec.skillReference when supplied (non-null)", async () => {
     const result = await buildDispatchSpec({
       stepName: "dev-story",

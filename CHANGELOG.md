@@ -2,7 +2,7 @@
 
 This file is auto-managed by [Changesets](https://github.com/changesets/changesets). For release-history entries see below.
 
-## 0.2.1 — 2026-05-15
+## 0.2.2 — 2026-05-15
 
 ### feat: invoke-skill gate — bypass `bmad-step-runner` for steps with matching plugin skill
 

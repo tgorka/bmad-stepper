@@ -274,9 +274,9 @@ describe("DispatchActionV1Schema — Story 3.1 lastAttempted on dispatch variant
   });
 });
 
-// ─── v0.2.1 — invoke-skill variant ─────────────────────────────────────────
+// ─── v0.2.2 — invoke-skill variant ─────────────────────────────────────────
 
-describe("DispatchActionV1Schema — invoke-skill variant (v0.2.1)", () => {
+describe("DispatchActionV1Schema — invoke-skill variant (v0.2.2)", () => {
   const invokeSkillFixture = {
     action: "invoke-skill" as const,
     runId: "2026-05-14T12-00-00-bmad-brainstorming-abc12",
