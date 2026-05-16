@@ -24,7 +24,7 @@
  * `import.meta.main` entrypoint (covered by Story 2.8 smoke test).
  */
 
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -668,28 +668,26 @@ async function listAllFiles(root: string): Promise<string[]> {
 // ─── Lock-free invariant (mock-spy on `acquire`) ──────────────────────────
 
 describe("runNext — lock-free invariant (architecture line 1672 + AR8)", () => {
-  it("never invokes `acquire` from src/lock/lock.ts during dispatch", async () => {
-    const statePath = await writeMinimalState();
-    const acquireSpy = mock(() => Promise.resolve({}));
-    // Use Bun's mock.module to spy on the lock module. Even when
-    // mocked, the module is irrelevant to the lock-free runner — the
-    // spy assertion is sufficient.
-    mock.module("../../lock/lock.ts", () => ({
-      acquire: acquireSpy,
-      forceUnlock: mock(() => Promise.resolve()),
-      LOCK_DIR_REL: "_bmad-output/.stepper/state.yaml.lock",
-      PID_FILE_NAME: "pid",
-      HEARTBEAT_INTERVAL_MS: 5_000,
-      STALE_THRESHOLD_MS: 30_000,
-      STALE_THRESHOLD_FALLBACK_MS: 60_000,
-    }));
-
-    await runNext({
-      ...commonOpts(statePath),
-      argv: ["--step", "bmad-brainstorming"],
-    });
-
-    expect(acquireSpy).not.toHaveBeenCalled();
+  it("never imports from src/lock/ — static source-content scan", async () => {
+    // v0.2.1: switched from `mock.module("../../lock/lock.ts", ...)` to a
+    // static source-content scan because Bun's `mock.module` cannot be
+    // undone by `mock.restore()` and persists across the test runner's
+    // module cache (Story 2.6 dev-004 carry-over). The mocked acquire()
+    // returned `{}` (no `release`), which leaked into the cross-file
+    // `src/lock/integration/*.test.ts` tests in run order and broke
+    // them. The static scan covers the same invariant — the lock-free
+    // runner cannot call `acquire` if it doesn't import the module — and
+    // is cheaper besides. Mirrors the precedent in
+    // `src/state/export.test.ts` "no-lock invariant" (Test G).
+    const source = await Bun.file(path.join(import.meta.dir, "run.ts")).text();
+    // Strip comments + JSDoc so phrases like `import from "../../lock/..."`
+    // in documentation prose don't trip the regex.
+    const code = source
+      .split("\n")
+      .filter((line) => !/^\s*\*/.test(line) && !/^\s*\/\//.test(line))
+      .join("\n");
+    expect(code).not.toMatch(/from\s+["']\.\.\/\.\.\/lock\//);
+    expect(code).not.toMatch(/\bacquire\s*\(/);
   });
 });
 
