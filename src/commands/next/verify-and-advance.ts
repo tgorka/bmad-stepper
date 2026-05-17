@@ -1045,7 +1045,7 @@ export async function runVerifyAndAdvance(
       return { exitCode, action: actionResult, transcriptPaths, promotedTo };
     }
 
-    // v0.2.1 INVOKE-SKILL PATH: when args.invokeSkillMode is true (the
+    // v0.2.2 INVOKE-SKILL PATH: when args.invokeSkillMode is true (the
     // --invoke-skill-mode argv flag forwarded by Layer 1's slash-command
     // markdown), the BMad plugin skill — invoked in-thread by Layer 1
     // via the Skill tool — already wrote its canonical artifact directly.

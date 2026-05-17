@@ -289,7 +289,7 @@ export interface RunNextOptions {
    */
   readonly skillNames?: readonly string[];
   /**
-   * v0.2.1 — test seam for the invoke-skill gate. When supplied, the
+   * v0.2.2 — test seam for the invoke-skill gate. When supplied, the
    * runner skips the `detectBmadSkills()` filesystem call and uses
    * this list to decide whether the resolved next-step has a matching
    * BMad plugin skill (emit `invoke-skill` instead of the generic
@@ -2321,7 +2321,7 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       return reportWithMessage(message);
     }
 
-    // v0.2.1 — invoke-skill gate. When the BMad plugin has a matching
+    // v0.2.2 — invoke-skill gate. When the BMad plugin has a matching
     // skill for this step name (e.g., `bmad-brainstorming` resolves to
     // `<bmadPluginDir>/skills/bmad-brainstorming/SKILL.md`), bypass the
     // generic `bmad-step-runner` sub-agent: Layer 1 invokes the Skill
@@ -2494,7 +2494,7 @@ export async function runNext(opts?: RunNextOptions): Promise<NextResult> {
       nextStep.name,
     );
 
-    // v0.2.1 — resolve absolute paths to the matching BMad skill +
+    // v0.2.2 — resolve absolute paths to the matching BMad skill +
     // persona SKILL.md so the dispatch-spec carries forward enough
     // BMad context for the `bmad-step-runner` sub-agent to follow the
     // real BMad framework instead of inventing from the generic

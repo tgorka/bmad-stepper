@@ -242,9 +242,9 @@ describe("detectBmadSkills — AC-2 throw path", () => {
   });
 });
 
-// ─── resolveBmadSkillReferences (v0.2.1) ───────────────────────────────────
+// ─── resolveBmadSkillReferences (v0.2.2) ───────────────────────────────────
 
-describe("resolveBmadSkillReferences — v0.2.1", () => {
+describe("resolveBmadSkillReferences — v0.2.2", () => {
   it("returns the absolute SKILL.md path for an installed skill", async () => {
     const { pluginDir } = await setupFakeBmadPlugin(tmpDir, "6.5.0.1", [
       "bmad-brainstorming",

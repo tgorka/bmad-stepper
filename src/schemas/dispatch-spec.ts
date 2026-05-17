@@ -53,7 +53,7 @@ export const DispatchSpecV1Schema = z.object({
     successCriteria: z.array(z.string()),
     constraints: z.unknown(),
     /**
-     * v0.2.1 — optional absolute path to the matching BMad plugin skill's
+     * v0.2.2 — optional absolute path to the matching BMad plugin skill's
      * SKILL.md when one is installed. The sub-agent (`bmad-step-runner`)
      * reads this file and follows its instructions as the primary work
      * source — preserving the BMad skill's framework, title conventions,
@@ -63,7 +63,7 @@ export const DispatchSpecV1Schema = z.object({
      */
     skillReference: z.string().optional(),
     /**
-     * v0.2.1 — optional absolute path to the matching BMad persona skill's
+     * v0.2.2 — optional absolute path to the matching BMad persona skill's
      * SKILL.md (the `bmad-agent-<persona>` convention) when installed.
      * The sub-agent reads this file and adopts the persona's voice +
      * expertise — preserving the BMad persona definition instead of

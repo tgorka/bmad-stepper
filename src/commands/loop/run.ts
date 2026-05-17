@@ -97,7 +97,7 @@ export interface IterationRecord {
    * extend this discriminator. Keeping the type honest avoids
    * defensive default-branches in `formatExitReason` consumers.
    *
-   * v0.2.1 — extended with `"invoke-skill"` for the new AR9 variant
+   * v0.2.2 — extended with `"invoke-skill"` for the new AR9 variant
    * emitted when the BMad plugin has a matching skill for the resolved
    * step (Layer 1 invokes the Skill tool against `bmad:<stepName>`
    * instead of dispatching the generic `bmad-step-runner` sub-agent).
@@ -848,7 +848,7 @@ async function loadSprintStatusForLoop(): Promise<SprintStatus | null> {
 
 /**
  * Extract a runId from the AR9 dispatch action when present. The
- * `dispatch` and `invoke-skill` (v0.2.1) variants carry a `runId` —
+ * `dispatch` and `invoke-skill` (v0.2.2) variants carry a `runId` —
  * `report` and `halt` variants return `null`.
  */
 function extractRunId(action: DispatchActionV1): string | null {

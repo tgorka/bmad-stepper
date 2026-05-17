@@ -20,7 +20,7 @@
  *     `verify-and-advance.ts` via `--last-attempted-json`. The field is
  *     OPTIONAL so existing callers that emit without it continue to validate.
  *   - invoke-skill: `{ runId, skillName, exitCode: 0, lastAttempted? }` —
- *     v0.2.1 path for steps that map to a matching plugin skill
+ *     v0.2.2 path for steps that map to a matching plugin skill
  *     (`<bmadPluginDir>/skills/<stepName>/SKILL.md` exists). Layer 1
  *     invokes the Skill tool against `skillName` (the fully qualified
  *     `bmad:<stepName>` form) and the rich BMad skill body produces the

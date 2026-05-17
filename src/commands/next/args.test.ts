@@ -790,7 +790,7 @@ describe("parseNextArgs — Story 5.3 --auto-fix flag (RTF_53_ARGS_*)", () => {
   });
 });
 
-describe("parseVerifyAndAdvanceArgs — v0.2.1 --invoke-skill-mode", () => {
+describe("parseVerifyAndAdvanceArgs — v0.2.2 --invoke-skill-mode", () => {
   it("parses --invoke-skill-mode as a boolean (no value follows)", () => {
     const result = parseVerifyAndAdvanceArgs([
       "--run-id",

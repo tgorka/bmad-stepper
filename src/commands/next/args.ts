@@ -392,7 +392,7 @@ export const VerifyAndAdvanceArgsSchema = z
      */
     autoFix: z.boolean().optional(),
     /**
-     * v0.2.1 — optional `--invoke-skill-mode` boolean shorthand. When
+     * v0.2.2 — optional `--invoke-skill-mode` boolean shorthand. When
      * `true`, runVerifyAndAdvance enters the INVOKE-SKILL path BEFORE
      * the dispatch-spec read + verifier invocation: it trusts that the
      * BMad plugin skill (invoked in-thread by Layer 1 via the Skill
@@ -455,7 +455,7 @@ export function parseVerifyAndAdvanceArgs(
   // or `/bmad-loop --auto-fix`. Forces failurePolicyOverride =
   // "route-to-fixer" per architecture line 499.
   let autoFix: boolean | undefined;
-  // v0.2.1: optional --invoke-skill-mode boolean shorthand threading from
+  // v0.2.2: optional --invoke-skill-mode boolean shorthand threading from
   // the slash-command markdown when Layer 1 invoked the BMad skill via
   // the Skill tool (instead of dispatching the generic bmad-step-runner
   // sub-agent via Task). When true, runVerifyAndAdvance skips the
@@ -597,7 +597,7 @@ export function parseVerifyAndAdvanceArgs(
       continue;
     }
 
-    // v0.2.1: optional --invoke-skill-mode boolean shorthand. The flag
+    // v0.2.2: optional --invoke-skill-mode boolean shorthand. The flag
     // is a pure boolean (no value follows); it routes runVerifyAndAdvance
     // through the INVOKE-SKILL early-return path that trusts the BMad
     // skill's canonical-artifact write and just advances state.

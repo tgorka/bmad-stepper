@@ -104,7 +104,7 @@ export async function detectBmadSkills(
 }
 
 /**
- * v0.2.1 — pair of absolute paths the dispatch-spec carries forward to
+ * v0.2.2 — pair of absolute paths the dispatch-spec carries forward to
  * the `bmad-step-runner` sub-agent so it can read+follow the BMad
  * plugin's skill body + persona body instead of inventing from the
  * generic dispatch-spec `task` text.
@@ -122,7 +122,7 @@ export interface BmadSkillReferences {
 /**
  * Resolve absolute paths to the BMad plugin's skill SKILL.md and persona
  * SKILL.md for a given step + persona. Used by the dispatch spec
- * generator (Story v0.2.1 enrichment) to thread the BMad context into
+ * generator (Story v0.2.2 enrichment) to thread the BMad context into
  * the `bmad-step-runner` sub-agent so its output is faithful to the
  * BMad skill's framework rather than the generic dispatch-spec `task`
  * fallback.

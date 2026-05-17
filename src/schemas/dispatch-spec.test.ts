@@ -66,9 +66,9 @@ describe("DispatchSpecV1Schema", () => {
     expect(result.success).toBe(false);
   });
 
-  // ─── v0.2.1 — skillReference + personaReference (both optional) ──────────
+  // ─── v0.2.2 — skillReference + personaReference (both optional) ──────────
 
-  it("accepts taskSpec.skillReference when supplied (v0.2.1)", () => {
+  it("accepts taskSpec.skillReference when supplied (v0.2.2)", () => {
     const parsed = DispatchSpecV1Schema.parse({
       ...canonicalDispatchSpecV1Fixture,
       taskSpec: {
@@ -81,7 +81,7 @@ describe("DispatchSpecV1Schema", () => {
     );
   });
 
-  it("accepts taskSpec.personaReference when supplied (v0.2.1)", () => {
+  it("accepts taskSpec.personaReference when supplied (v0.2.2)", () => {
     const parsed = DispatchSpecV1Schema.parse({
       ...canonicalDispatchSpecV1Fixture,
       taskSpec: {
